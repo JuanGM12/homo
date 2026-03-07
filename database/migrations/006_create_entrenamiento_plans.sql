@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS entrenamiento_plans (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    professional_name VARCHAR(150) NOT NULL,
+    professional_email VARCHAR(150) NOT NULL,
+    subregion VARCHAR(120) NOT NULL,
+    municipality VARCHAR(120) NOT NULL,
+    editable TINYINT(1) NOT NULL DEFAULT 1,
+    payload JSON NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_entrenamiento_plans_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

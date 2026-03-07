@@ -1,0 +1,794 @@
+<?php
+/** @var array|null $record */
+/** @var array $professional */
+
+$isEdit = isset($record) && isset($record['id']);
+$role = strtolower((string) ($professional['role'] ?? ''));
+?>
+
+<section class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="/aoat">AoAT</a></li>
+            <li class="breadcrumb-item active" aria-current="page">
+                <?= $isEdit ? 'Editar AoAT' : 'Nueva AoAT' ?>
+            </li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-9">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4 p-md-5">
+                    <h1 class="h4 fw-bold mb-4"><?= $isEdit ? 'Editar AoAT' : 'Registrar nueva AoAT' ?></h1>
+
+                    <form method="post" action="/aoat/nueva">
+                        <!-- Datos del profesional (automáticos, no editables) -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label">Correo (automático)</label>
+                                <input
+                                    type="email"
+                                    class="form-control"
+                                    value="<?= htmlspecialchars($professional['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                    disabled
+                                >
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Nombre (automático)</label>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    value="<?= htmlspecialchars(trim(($professional['name'] ?? '') . ' ' . ($professional['last_name'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                    disabled
+                                >
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Rol / Profesión</label>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    value="<?= htmlspecialchars($professional['profession'] ?: ($professional['role'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    disabled
+                                >
+                            </div>
+                        </div>
+
+                        <!-- Datos básicos de la AoAT -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label">Número de la AoAT o actividad <span class="text-danger">*</span></label>
+                                <input type="text" name="aoat_number" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha de la actividad <span class="text-danger">*</span></label>
+                                <input type="date" name="activity_date" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Actividad que realizó <span class="text-danger">*</span></label>
+                                <select name="activity_type" class="form-select" required>
+                                    <option value="">Seleccione una opción</option>
+                                    <option value="Asistencia técnica">Asistencia técnica</option>
+                                    <option value="Asesoría">Asesoría</option>
+                                    <option value="Actividad">Actividad</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-8">
+                                <label class="form-label">Con quién realizó la actividad <span class="text-danger">*</span></label>
+                                <input type="text" name="activity_with" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Estado de la AoAT</label>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    value="Asignada"
+                                    disabled
+                                >
+                                <div class="form-text">
+                                    Se registra siempre como <strong>Asignada</strong>. Será ajustada posteriormente según revisión.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Lugar visitado -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label">Subregión que visitó <span class="text-danger">*</span></label>
+                                <select
+                                    name="subregion"
+                                    class="form-select"
+                                    data-subregion-select
+                                    required
+                                >
+                                    <option value="">Seleccione la subregión que visitó</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Municipio visitado <span class="text-danger">*</span></label>
+                                <select
+                                    name="municipality"
+                                    class="form-select"
+                                    data-municipality-select
+                                    required
+                                    disabled
+                                >
+                                    <option value="">Seleccione el municipio visitado</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <?php if ($role === 'abogado'): ?>
+                            <div class="mb-3">
+                                <h2 class="h6 fw-semibold mb-1">Temas de Política Pública en Salud Mental (Abogado)</h2>
+                                <p class="text-muted small mb-0">
+                                    Marca todos los módulos que trabajaste durante esta AoAT. Puedes seleccionar varias opciones.
+                                </p>
+                            </div>
+
+                            <!-- Actualización Mesa Municipal de Salud Mental y Prevención de las Adicciones -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 1">
+                                            <label class="form-check-label small">
+                                                Módulo 1: Conformación y fortalecimiento de la mesa.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 2">
+                                            <label class="form-check-label small">
+                                                Módulo 2: Secretaría técnica, reglamento y plan de acción.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 3">
+                                            <label class="form-check-label small">
+                                                Módulo 3: Convocatoria para conformar la mesa.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actualización Política Pública Municipal de Salud y Prevención de las Adicciones -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 4">
+                                            <label class="form-check-label small">
+                                                Módulo 4: Actualización de la política pública municipal de salud mental y prevención de las adicciones – ciclo agenda.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 5">
+                                            <label class="form-check-label small">
+                                                Módulo 5: Actualización de la política pública municipal de salud mental y prevención de las adicciones - ciclo formulación de la política pública de salud mental.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SAFER -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    SAFER <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 1">
+                                            <label class="form-check-label small">
+                                                Módulo 1: Socialización de la problemática pública del alcohol, generalidad estrategia SAFER, legislación actual.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 2">
+                                            <label class="form-check-label small">
+                                                Módulo 2: Socialización de la problemática pública del alcohol, generalidad estrategia SAFER, legislación actual.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 3">
+                                            <label class="form-check-label small">
+                                                Módulo 3: Legislación actual con énfasis en consumo de menores y mujeres en estado de gestación, socialización de la problemática pública del alcohol, violencias relacionadas por el alcohol.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 4">
+                                            <label class="form-check-label small">
+                                                Módulo 4: Legislación actual con énfasis en consumo de menores y mujeres en estado de gestación, socialización de la problemática pública del alcohol.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 5">
+                                            <label class="form-check-label small">
+                                                Módulo 5: Socialización de la problemática pública del alcohol, responsabilidad civil y penal.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Pregunta al final de la cualificación -->
+                            <div class="mb-4">
+                                <label class="form-label">
+                                    ¿Identifica otro caso diferente? Describa cuál
+                                </label>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                            </div>
+
+                        <?php elseif ($role === 'medico'): ?>
+                            <div class="mb-3">
+                                <h2 class="h6 fw-semibold mb-1">Temas dictados en el Hospital del municipio visitado (Médico)</h2>
+                                <p class="text-muted small mb-0">
+                                    Selecciona todos los temas que trabajaste en esta actividad. Es selección múltiple.
+                                </p>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Seleccione el/los temas que dictó en el Hospital del municipio visitado
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Abordaje del manejo de alcohol en el primer nivel de atención – Alcohol y embarazo.">
+                                            <label class="form-check-label small">
+                                                Abordaje del manejo de alcohol en el primer nivel de atención – Alcohol y embarazo.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Abordaje del manejo de tabaco en el primer nivel.">
+                                            <label class="form-check-label small">
+                                                Abordaje del manejo de tabaco en el primer nivel.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Adicciones en la baja complejidad">
+                                            <label class="form-check-label small">
+                                                Adicciones en la baja complejidad
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Conducta suicida">
+                                            <label class="form-check-label small">
+                                                Conducta suicida
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Desmonte de benzodiacepinas">
+                                            <label class="form-check-label small">
+                                                Desmonte de benzodiacepinas
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Desmonte de opioides">
+                                            <label class="form-check-label small">
+                                                Desmonte de opioides
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Epilepsia">
+                                            <label class="form-check-label small">
+                                                Epilepsia
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Intoxicaciones por medicamentos de control">
+                                            <label class="form-check-label small">
+                                                Intoxicaciones por medicamentos de control
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Manejo del dolor">
+                                            <label class="form-check-label small">
+                                                Manejo del dolor
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Paciente agitado">
+                                            <label class="form-check-label small">
+                                                Paciente agitado
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Pre Test">
+                                            <label class="form-check-label small">
+                                                Pre Test
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Post Test">
+                                            <label class="form-check-label small">
+                                                Post Test
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Afectivo Bipolar">
+                                            <label class="form-check-label small">
+                                                Trastorno Afectivo Bipolar
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno de Déficit de Atención e Hiperactividad">
+                                            <label class="form-check-label small">
+                                                Trastorno de Déficit de Atención e Hiperactividad
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Depresivo">
+                                            <label class="form-check-label small">
+                                                Trastorno Depresivo
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Psicótico">
+                                            <label class="form-check-label small">
+                                                Trastorno Psicótico
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastornos de Ansiedad">
+                                            <label class="form-check-label small">
+                                                Trastornos de Ansiedad
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastornos del sueño">
+                                            <label class="form-check-label small">
+                                                Trastornos del sueño
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Pregunta al final de la cualificación -->
+                            <div class="mb-4">
+                                <label class="form-label">
+                                    ¿Identifica otro caso diferente? Describa cuál
+                                </label>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                            </div>
+
+                        <?php elseif ($role === 'psicologo'): ?>
+                            <div class="mb-3">
+                                <h2 class="h6 fw-semibold mb-1">Cualificación de temas (Psicólogo)</h2>
+                                <p class="text-muted small mb-0">
+                                    Selecciona los temas que trabajaste en esta AoAT. Algunas preguntas son de selección múltiple y otras de selección única.
+                                </p>
+                            </div>
+
+                            <!-- Cualificación temas en prevención del suicidio -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Cualificación temas en prevención del suicidio
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 1">
+                                            <label class="form-check-label small">
+                                                Módulo 1: Evolución histórica del suicidio, aproximación conceptual de la conducta suicida, teorías explicativas de primera generación, teorías explicativas de segunda generación, factores de riesgo (biológicos, psiquiátricos, psicológicos y sociales), factores de protección, señales de alarma, ruta de atención y articulación intersectorial, notificación y seguimiento, plan de seguridad.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 2">
+                                            <label class="form-check-label small">
+                                                Módulo 2: Comunicación y suicidio como factor de riesgo y de protección, impacto del lenguaje y los mensajes, efecto Werther, efecto Papageno, principios de la comunicación responsable, recomendaciones de la OMS para medios y contextos comunitarios, pautas de lo que se debe y no se debe comunicar, aplicación del efecto Papageno en contextos comunitarios e institucionales, roles y responsabilidades de actores clave, poder de la narrativa y reducción del estigma, recursos y guías para la comunicación responsable.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 3">
+                                            <label class="form-check-label small">
+                                                Módulo 3: Concepto y alcances de la posvención, posvención como estrategia de prevención y salud pública, impacto psicosocial del suicidio, duelo por suicidio y sus particularidades, duelo y tamizajes para suicidio (RQC, SRQ, Whooley, GAD-2, Zarit, Plutchick, PHQ-9, C-SSRS), estigma y silencios, principios orientadores de la posvención, acciones de posvención en el territorio, acompañamiento a familias e instituciones, comunicación posterior a una muerte por suicidio, identificación y seguimiento de personas en riesgo, articulación con servicios de salud mental, autocuidado del profesional psicosocial.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Cualificación temas en prevención de Violencias -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Cualificación temas en prevención de Violencias
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 1">
+                                            <label class="form-check-label small">
+                                                Módulo 1: Definición, marco normativo, epidemiología, tipología, características.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 2">
+                                            <label class="form-check-label small">
+                                                Módulo 2: Violencias interpersonales, violencia familiar y de pareja, violencia comunitaria, violencia juvenil, bullying.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 3">
+                                            <label class="form-check-label small">
+                                                Módulo 3: Modelos de prevención de las violencias interpersonales (prevención universal, selectiva, indicada y de recurrencias), programas basados en la evidencia para la prevención de las violencias (modelo INSPIRE, modelo RESPETO y otros).
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Cualificación temas en prevención de Adicciones -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Cualificación temas en prevención de Adicciones
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 1">
+                                            <label class="form-check-label small">
+                                                Módulo 1: Modelos explicativos (biopsicosocial, aprendizaje y condicionamiento), neurobiología de las adicciones, determinantes sociales, factores de riesgo y de protección, prevención basada en evidencia, influencia normativa.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 2">
+                                            <label class="form-check-label small">
+                                                Módulo 2: Comprensión de las adicciones según tipo de sustancia, dependencias comportamentales (juego patológico, nomofobia, juegos electrónicos, oniomanía, adicción al trabajo, vigorexia), cigarrillos electrónicos, cannabis, patología dual.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 3">
+                                            <label class="form-check-label small">
+                                                Módulo 3: Rutas de atención, tamizajes (ASSIST, AUDIT, CRAFFT, Fagerström), intervenciones (entrevista motivacional, intervención única, mindfulness), grupos de apoyo, reducción de riesgos y daños.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Cualificación temas de Salud Mental -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Cualificación temas de Salud Mental
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado al cuidador">
+                                            <label class="form-check-label small">
+                                                Cuidado al cuidador
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado del profesional – burnout">
+                                            <label class="form-check-label small">
+                                                Cuidado del profesional – burnout
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Estigma">
+                                            <label class="form-check-label small">
+                                                Estigma
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-6 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación">
+                                            <label class="form-check-label small">
+                                                Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-6 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Primeros auxilios psicológicos e intervención en crisis">
+                                            <label class="form-check-label small">
+                                                Primeros auxilios psicológicos e intervención en crisis
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-6 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Trastornos mentales prioritarios de interés en salud pública">
+                                            <label class="form-check-label small">
+                                                Trastornos mentales prioritarios de interés en salud pública
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-6 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Proyectos (selección única) -->
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Proyectos <span class="text-muted small">(selección única)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Competencias Parentales">
+                                            <label class="form-check-label small">
+                                                Competencias Parentales
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Familias que se Cuidan">
+                                            <label class="form-check-label small">
+                                                Familias que se Cuidan
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="La Aventura de Crecer">
+                                            <label class="form-check-label small">
+                                                La Aventura de Crecer
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Veredas que se Cuidan">
+                                            <label class="form-check-label small">
+                                                Veredas que se Cuidan
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Dispositivos comunitarios">
+                                            <label class="form-check-label small">
+                                                Dispositivos comunitarios
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Presentación del programa salud para el alma">
+                                            <label class="form-check-label small">
+                                                Presentación del programa salud para el alma
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="No aplica">
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Pregunta al final de la cualificación -->
+                            <div class="mb-4">
+                                <label class="form-label">
+                                    ¿Identifica otro caso diferente? Describa cuál
+                                </label>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                            </div>
+
+                        <?php elseif ($role === 'profesional social' || $role === 'profesional_social'): ?>
+                            <div class="mb-3">
+                                <h2 class="h6 fw-semibold mb-1">Actividades realizadas (Profesional Social)</h2>
+                                <p class="text-muted small mb-0">
+                                    Selecciona la(s) actividad(es) que realizaste en esta AoAT. Es selección múltiple.
+                                </p>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label d-block">
+                                    Seleccione la actividad realizada
+                                    <span class="text-muted small">(selección múltiple)</span>
+                                </label>
+                                <div class="row">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Formación (desarrollo de capacidades)">
+                                            <label class="form-check-label small">
+                                                Formación (desarrollo de capacidades)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Espacio de articulación">
+                                            <label class="form-check-label small">
+                                                Espacio de articulación
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Actividad de apoyo">
+                                            <label class="form-check-label small">
+                                                Actividad de apoyo
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Pregunta al final de la cualificación -->
+                            <div class="mb-4">
+                                <label class="form-label">
+                                    ¿Identifica otro caso diferente? Describa cuál
+                                </label>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                            </div>
+
+                        <?php else: ?>
+                            <div class="mb-4">
+                                <p class="text-muted small mb-0">
+                                    Próximamente configuraremos las preguntas específicas para tu perfil profesional.
+                                </p>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                Guardar AoAT
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+

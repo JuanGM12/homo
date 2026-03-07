@@ -1,0 +1,15 @@
+{
+  "name": "gobantioquia/accion-en-territorio",
+  "description": "Plataforma web para el Equipo de Promoción y Prevención - Acción en Territorio",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "vlucas/phpdotenv": "^5.6",
+    "phpmailer/phpmailer": "^6.9"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "app/"
+    }
+  }
+}
