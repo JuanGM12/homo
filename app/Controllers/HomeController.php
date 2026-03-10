@@ -12,6 +12,13 @@ final class HomeController
 {
     public function index(Request $request): Response
     {
+        $tests = [
+            'violencias' => ['name' => 'Prevención de Violencias', 'color' => 'primary'],
+            'suicidios' => ['name' => 'Prevención de Suicidios', 'color' => 'danger'],
+            'adicciones' => ['name' => 'Prevención de Adicciones', 'color' => 'warning'],
+            'hospitales' => ['name' => 'Hospitales', 'color' => 'success'],
+        ];
+
         return Response::view('home/index', [
             'pageTitle' => 'Equipo de Promoción y Prevención',
             'tests' => EvaluacionesController::getTestsList(),

@@ -74,7 +74,12 @@
                     </form>
                 </div>
             </div>
-        </div>
+            <div class="mb-4">
+                <label for="password" class="form-label">Contraseña</label>
+                <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+        </form>
     </div>
 </section>
 
