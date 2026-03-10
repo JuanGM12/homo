@@ -86,4 +86,19 @@ final class PicRepository
 
         return $row ?: null;
     }
+
+    /**
+     * Registros PIC para auditoría (especialistas / coordinación).
+     *
+     * @return array<int, array<string, mixed>> 
+     */
+    public function findForAudit(): array
+    {
+        $pdo = Connection::getPdo();
+
+        $sql = 'SELECT * FROM pic_records ORDER BY created_at DESC';
+        $stmt = $pdo->query($sql);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
 }

@@ -46,13 +46,28 @@ if (!empty($record['payload'])) {
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
                                 <label for="subregion" class="form-label">Seleccione la subregión <span class="text-danger">*</span></label>
-                                <select id="subregion" name="subregion" class="form-select" required data-subregion-select>
+                                <select
+                                    id="subregion"
+                                    name="subregion"
+                                    class="form-select"
+                                    required
+                                    data-subregion-select
+                                    data-current-value="<?= htmlspecialchars((string) ($record['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                >
                                     <option value="">Seleccione la subregión</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
                                 <label for="municipality" class="form-label">Seleccione el municipio <span class="text-danger">*</span></label>
-                                <select id="municipality" name="municipality" class="form-select" required data-municipality-select disabled>
+                                <select
+                                    id="municipality"
+                                    name="municipality"
+                                    class="form-select"
+                                    required
+                                    data-municipality-select
+                                    data-current-value="<?= htmlspecialchars((string) ($record['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    disabled
+                                >
                                     <option value="">Seleccione el municipio</option>
                                 </select>
                             </div>

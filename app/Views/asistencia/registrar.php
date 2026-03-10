@@ -2,6 +2,8 @@
 /** @var array $actividad */
 /** @var string $tituloListado */
 $code = (string) ($actividad['code'] ?? '');
+$tipos = $actividad['actividad_tipos'] ?? [];
+$tiposList = is_array($tipos) ? $tipos : [];
 ?>
 <section class="py-5">
     <div class="row justify-content-center">
@@ -10,7 +12,18 @@ $code = (string) ($actividad['code'] ?? '');
 
             <div class="card border-primary border-2 rounded-4 mb-4">
                 <div class="card-body">
-                    <h2 class="h6 fw-bold mb-3"><?= htmlspecialchars($tituloListado, ENT_QUOTES, 'UTF-8') ?></h2>
+                    <?php if ($tiposList !== []): ?>
+                        <div class="mb-2 small">
+                            <span class="text-muted d-block mb-1">Tipo(s) de listado en esta actividad:</span>
+                            <div class="d-flex flex-wrap gap-1">
+                                <?php foreach ($tiposList as $tipo): ?>
+                                    <span class="badge bg-light text-dark border small text-start text-wrap" style="white-space: normal; max-width: 100%;">
+                                        <?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>
+                                    </span>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     <div class="row g-2 small">
                         <div class="col-md-4"><strong>Subregión:</strong> <?= htmlspecialchars((string) ($actividad['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                         <div class="col-md-4"><strong>Municipio:</strong> <?= htmlspecialchars((string) ($actividad['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>

@@ -29,11 +29,23 @@ final class EntrenamientoController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $records = $this->repository->findForUser((int) $user['id']);
+        $roles = $user['roles'] ?? [];
+        $isSpecialist = in_array('especialista', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+        $isAdmin = in_array('admin', $roles, true);
+
+        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+
+        if ($isAuditView) {
+            $records = $this->repository->findForAudit();
+        } else {
+            $records = $this->repository->findForUser((int) $user['id']);
+        }
 
         return Response::view('entrenamiento/index', [
             'pageTitle' => 'Plan de Entrenamiento',
             'records' => $records,
+            'isAuditView' => $isAuditView,
         ]);
     }
 
@@ -295,7 +307,18 @@ final class EntrenamientoController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $records = $this->repository->findForUser((int) $user['id']);
+        $roles = $user['roles'] ?? [];
+        $isSpecialist = in_array('especialista', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+        $isAdmin = in_array('admin', $roles, true);
+
+        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+
+        if ($isAuditView) {
+            $records = $this->repository->findForAudit();
+        } else {
+            $records = $this->repository->findForUser((int) $user['id']);
+        }
         if ($records === []) {
             Flash::set([
                 'type' => 'info',
@@ -350,7 +373,7 @@ final class EntrenamientoController
             }, $row));
         }
 
-        $csvContent = implode("\r\n", $lines) . "\r\n";
+        $csvContent = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
         $filename = 'plan_entrenamiento_' . date('Ymd_His') . '.csv';
 
         return new Response($csvContent, 200, [
@@ -362,7 +385,7 @@ final class EntrenamientoController
     private function userCanAccessModule(array $user): bool
     {
         $roles = $user['roles'] ?? [];
-        $allowed = ['psicologo', 'admin'];
+        $allowed = ['psicologo', 'admin', 'especialista', 'coordinadora', 'coordinador'];
         return (bool) array_intersect($roles, $allowed);
     }
 

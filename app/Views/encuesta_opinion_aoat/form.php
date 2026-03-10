@@ -9,7 +9,6 @@
                 Su opinión nos ayuda a mejorar la calidad de las asesorías y asistencias técnicas.
             </p>
         </div>
-        <span class="badge rounded-pill text-bg-light">Acceso libre · Sin usuario ni contraseña</span>
     </div>
 
     <?php if (empty($advisors)): ?>

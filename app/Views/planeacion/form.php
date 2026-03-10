@@ -4,85 +4,93 @@
 /** @var array<string, mixed> $professional */
 /** @var string $role */
 /** @var int $planYear */
+$shortenLabel = function (string $text, int $max = 72): string {
+    $t = trim($text);
+    if (mb_strlen($t) <= $max) {
+        return $t;
+    }
+    return mb_substr($t, 0, $max - 1, 'UTF-8') . '…';
+};
 ?>
 
-<div class="py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+<section class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="/planeacion">Planeación anual</a></li>
+            <li class="breadcrumb-item active" aria-current="page"><?= $mode === 'edit' ? 'Editar' : 'Nueva' ?></li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
         <div>
             <h1 class="h4 mb-1">
                 <?= $mode === 'edit' ? 'Editar planeación anual' : 'Nueva planeación anual' ?>
             </h1>
-            <p class="text-muted mb-0">
-                Planeación anual de capacitaciones municipales ·
-                <?= htmlspecialchars(mb_convert_case($role, MB_CASE_TITLE, 'UTF-8'), ENT_QUOTES, 'UTF-8') ?>
+            <p class="text-muted small mb-0">
+                <?= htmlspecialchars(mb_convert_case($role, MB_CASE_TITLE, 'UTF-8'), ENT_QUOTES, 'UTF-8') ?> · Año <?= (int) $planYear ?>
             </p>
         </div>
-        <div>
-            <a href="/planeacion" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i>
-                Volver
-            </a>
-        </div>
+        <a href="/planeacion" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Volver
+        </a>
     </div>
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-body">
-            <form method="post" action="<?= $mode === 'edit' ? '/planeacion/editar' : '/planeacion/nueva' ?>">
+    <div class="card border-0 app-form-card">
+        <div class="card-body p-4 p-md-5">
+            <form method="post" action="<?= $mode === 'edit' ? '/planeacion/editar' : '/planeacion/nueva' ?>" class="app-plan-form">
                 <?php if ($mode === 'edit' && $plan !== null): ?>
                     <input type="hidden" name="id" value="<?= htmlspecialchars((string) $plan['id'], ENT_QUOTES, 'UTF-8') ?>">
                 <?php endif; ?>
-
                 <input type="hidden" name="plan_year" value="<?= htmlspecialchars((string) $planYear, ENT_QUOTES, 'UTF-8') ?>">
 
-                <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <label class="form-label">Nombre del profesional</label>
-                        <input type="text"
-                               class="form-control"
-                               value="<?= htmlspecialchars((string) $professional['name'], ENT_QUOTES, 'UTF-8') ?>"
-                               disabled>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Correo electrónico</label>
-                        <input type="email"
-                               class="form-control"
-                               value="<?= htmlspecialchars((string) $professional['email'], ENT_QUOTES, 'UTF-8') ?>"
-                               disabled>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Rol</label>
-                        <input type="text"
-                               class="form-control"
-                               value="<?= htmlspecialchars((string) $role, ENT_QUOTES, 'UTF-8') ?>"
-                               disabled>
+                <div class="app-form-section mb-4">
+                    <h2 class="h6 fw-semibold text-secondary mb-3">Datos del profesional</h2>
+                    <div class="row g-3 app-form-fields">
+                        <div class="col-md-4">
+                            <label class="form-label">Nombre</label>
+                            <input type="text" class="form-control" value="<?= htmlspecialchars((string) $professional['name'], ENT_QUOTES, 'UTF-8') ?>" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Correo</label>
+                            <input type="email" class="form-control" value="<?= htmlspecialchars((string) $professional['email'], ENT_QUOTES, 'UTF-8') ?>" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Rol</label>
+                            <input type="text" class="form-control" value="<?= htmlspecialchars((string) $role, ENT_QUOTES, 'UTF-8') ?>" disabled>
+                        </div>
                     </div>
                 </div>
 
-                <div class="row g-3 mb-4">
-                    <div class="col-md-6">
-                        <label for="subregion" class="form-label">Seleccione la subregión que visitó *</label>
-                        <select
-                            id="subregion"
-                            name="subregion"
-                            class="form-select"
-                            required
-                            data-subregion-select
-                        >
-                            <option value="">Seleccione la subregión que visitó</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label for="municipality" class="form-label">Seleccione el municipio visitado *</label>
-                        <select
-                            id="municipality"
-                            name="municipality"
-                            class="form-select"
-                            required
-                            data-municipality-select
-                            disabled
-                        >
-                            <option value="">Seleccione el municipio visitado</option>
-                        </select>
+                        <div class="app-form-section mb-4">
+                    <h2 class="h6 fw-semibold text-secondary mb-3">Ubicación</h2>
+                    <div class="row g-3 app-form-fields">
+                        <div class="col-md-6">
+                            <label for="subregion" class="form-label">Subregión visitada <span class="text-danger">*</span></label>
+                            <select
+                                id="subregion"
+                                name="subregion"
+                                class="form-select"
+                                required
+                                data-subregion-select
+                                data-current-value="<?= htmlspecialchars((string) ($plan['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                            >
+                                <option value="">Seleccione la subregión</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="municipality" class="form-label">Municipio visitado <span class="text-danger">*</span></label>
+                            <select
+                                id="municipality"
+                                name="municipality"
+                                class="form-select"
+                                required
+                                data-municipality-select
+                                data-current-value="<?= htmlspecialchars((string) ($plan['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                disabled
+                            >
+                                <option value="">Seleccione el municipio</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -180,85 +188,83 @@
                 }
                 ?>
 
-                <div class="accordion" id="monthsAccordion">
-                    <?php foreach ($months as $key => $label): ?>
-                        <?php
-                        $monthData = $existingPayload[$key] ?? null;
-                        $selectedTopics = $monthData['topics'] ?? [];
-                        $population = $monthData['population'] ?? '';
-                        ?>
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="heading-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>">
-                                <button class="accordion-button<?= $key !== 'enero' ? ' collapsed' : '' ?>" type="button"
-                                        data-bs-toggle="collapse"
-                                        data-bs-target="#collapse-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
-                                        aria-expanded="<?= $key === 'enero' ? 'true' : 'false' ?>"
-                                        aria-controls="collapse-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
-                                </button>
-                            </h2>
-                            <div id="collapse-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
-                                 class="accordion-collapse collapse<?= $key === 'enero' ? ' show' : '' ?>"
-                                 aria-labelledby="heading-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
-                                 data-bs-parent="#monthsAccordion">
-                                <div class="accordion-body">
-                                    <div class="mb-3">
-                                        <label class="form-label">
-                                            Seleccione los temas / módulos de interés a desarrollar durante el mes
-                                            (selección múltiple) *
-                                        </label>
-                                        <div class="row">
-                                            <?php foreach ($topicOptions as $topic): ?>
-                                                <?php
-                                                $id = $key . '_tema_' . md5($topic);
-                                                $isChecked = in_array($topic, $selectedTopics ?? [], true);
-                                                ?>
-                                                <div class="col-md-6">
-                                                    <div class="form-check mb-1">
-                                                        <input
-                                                            class="form-check-input"
-                                                            type="checkbox"
-                                                            name="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>_temas[]"
-                                                            id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>"
-                                                            value="<?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>"
-                                                            <?= $isChecked ? 'checked' : '' ?>
-                                                        >
-                                                        <label class="form-check-label" for="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>">
-                                                            <?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>
-                                                        </label>
+                <div class="app-form-section">
+                    <h2 class="h6 fw-semibold text-secondary mb-3">Temas y población por mes</h2>
+                    <p class="text-muted small mb-3">
+                        Puedes diligenciar solo los meses que ya tengas definidos. Para cada mes que uses,
+                        selecciona al menos un tema y describe la población objetivo.
+                    </p>
+                    <div class="accordion app-accordion-plan" id="monthsAccordion">
+                        <?php foreach ($months as $key => $label): ?>
+                            <?php
+                            $monthData = $existingPayload[$key] ?? null;
+                            $selectedTopics = $monthData['topics'] ?? [];
+                            $population = $monthData['population'] ?? '';
+                            ?>
+                            <div class="accordion-item app-accordion-item">
+                                <h2 class="accordion-header" id="heading-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>">
+                                    <button class="accordion-button<?= $key !== 'enero' ? ' collapsed' : '' ?>" type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#collapse-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
+                                            aria-expanded="<?= $key === 'enero' ? 'true' : 'false' ?>"
+                                            aria-controls="collapse-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>">
+                                        <span class="fw-semibold"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span>
+                                    </button>
+                                </h2>
+                                <div id="collapse-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
+                                     class="accordion-collapse collapse<?= $key === 'enero' ? ' show' : '' ?>"
+                                     aria-labelledby="heading-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
+                                     data-bs-parent="#monthsAccordion">
+                                    <div class="accordion-body">
+                                        <div class="app-form-question mb-4">
+                                            <label class="form-label small text-secondary mb-2">
+                                                Temas / módulos a desarrollar (selección múltiple)
+                                            </label>
+                                            <div class="row g-2">
+                                                <?php foreach ($topicOptions as $topic): ?>
+                                                    <?php
+                                                    $id = $key . '_tema_' . md5($topic);
+                                                    $isChecked = in_array($topic, $selectedTopics ?? [], true);
+                                                    ?>
+                                                    <div class="col-md-6">
+                                                        <div class="form-check app-form-check-option">
+                                                            <input class="form-check-input" type="checkbox"
+                                                                   name="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>_temas[]"
+                                                                   id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>"
+                                                                   value="<?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>"
+                                                                   <?= $isChecked ? 'checked' : '' ?>>
+                                                            <label class="form-check-label" for="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>" title="<?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <?= htmlspecialchars($shortenLabel($topic), ENT_QUOTES, 'UTF-8') ?>
+                                                            </label>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            <?php endforeach; ?>
+                                                <?php endforeach; ?>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">
-                                            Población objetivo (describe a quién se dirigirán las capacitaciones) *
-                                        </label>
-                                        <textarea
-                                            class="form-control"
-                                            name="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>_poblacion"
-                                            rows="2"
-                                            required
-                                        ><?= htmlspecialchars((string) $population, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                        <div>
+                                            <label class="form-label small">Población objetivo</label>
+                                            <textarea
+                                                class="form-control"
+                                                name="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>_poblacion"
+                                                rows="2"
+                                                placeholder="A quién se dirigirán las capacitaciones"
+                                            ><?= htmlspecialchars((string) $population, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
 
-                <div class="mt-4 d-flex justify-content-end gap-2">
-                    <a href="/planeacion" class="btn btn-outline-secondary">
-                        Cancelar
-                    </a>
+                <div class="app-form-submit d-flex justify-content-end gap-2">
+                    <a href="/planeacion" class="btn btn-outline-secondary">Cancelar</a>
                     <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check2-circle me-1"></i>
-                        Guardar planeación
+                        <i class="bi bi-check2-circle me-1"></i> Guardar planeación
                     </button>
                 </div>
             </form>
         </div>
     </div>
-</div>
+</section>
 

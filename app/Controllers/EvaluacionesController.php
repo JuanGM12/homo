@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\TestResponseRepository;
+use App\Services\Auth;
 use App\Services\Flash;
 
 final class EvaluacionesController
@@ -143,9 +144,10 @@ final class EvaluacionesController
         20 => 'C',
     ];
 
-    public function index(Request $request): Response
+    /** @return array<string, array{name: string, color: string}> */
+    public static function getTestsList(): array
     {
-        $tests = [
+        return [
             'violencias' => [
                 'name' => 'Prevención de Violencias',
                 'color' => 'primary',
@@ -163,10 +165,44 @@ final class EvaluacionesController
                 'color' => 'success',
             ],
         ];
+    }
+
+    public function index(Request $request): Response
+    {
+        $user = Auth::user();
+        $tests = self::getTestsList();
+
+        $roles = $user['roles'] ?? [];
+        $canSeeAll = $user && (in_array('admin', $roles, true) || in_array('coordinador', $roles, true) || in_array('coordinadora', $roles, true));
+
+        $filters = [
+            'test_key' => (string) $request->input('test_key', ''),
+            'phase' => (string) $request->input('phase', ''),
+            'document_number' => trim((string) $request->input('document_number', '')),
+            'subregion' => trim((string) $request->input('subregion', '')),
+            'municipality' => trim((string) $request->input('municipality', '')),
+            'date_from' => (string) $request->input('date_from', ''),
+            'date_to' => (string) $request->input('date_to', ''),
+        ];
+
+        // Si no es admin/coordinador, fuerza a ver solo sus propios registros (por documento asociado)
+        if (!$canSeeAll && $user && !empty($user['document_number'])) {
+            $filters['document_number'] = (string) $user['document_number'];
+        }
+
+        $records = [];
+        if ($user) {
+            $repo = new TestResponseRepository();
+            $records = $repo->search($filters);
+        }
 
         return Response::view('evaluaciones/index', [
             'pageTitle' => 'Evaluaciones - Test',
             'tests' => $tests,
+            'filters' => $filters,
+            'records' => $records,
+            'currentUser' => $user,
+            'canSeeAll' => (bool) $canSeeAll,
         ]);
     }
 
@@ -1214,9 +1250,36 @@ final class EvaluacionesController
     {
         $config = $this->configFor($testKey, $phase);
 
+        $currentUser = Auth::user();
+        $prefill = [
+            'document_number' => '',
+            'first_name' => '',
+            'last_name' => '',
+            'subregion' => '',
+            'municipality' => '',
+        ];
+
+        if ($currentUser !== null) {
+            $fullName = trim((string) ($currentUser['name'] ?? ''));
+            $firstName = '';
+            $lastName = '';
+            if ($fullName !== '') {
+                $parts = preg_split('/\s+/', $fullName) ?: [];
+                if (count($parts) > 0) {
+                    $firstName = (string) array_shift($parts);
+                    $lastName = trim(implode(' ', $parts));
+                }
+            }
+
+            $prefill['document_number'] = (string) ($currentUser['document_number'] ?? '');
+            $prefill['first_name'] = $firstName;
+            $prefill['last_name'] = $lastName;
+        }
+
         return Response::view('evaluaciones/form', [
             'pageTitle' => $config['title'],
             'config' => $config,
+            'prefill' => $prefill,
         ]);
     }
 

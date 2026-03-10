@@ -98,5 +98,35 @@ final class TrainingPlanRepository
 
         return $row ?: null;
     }
+
+    /**
+     * Registros de planeación para auditoría por rol profesional.
+     *
+     * @param string[] $professionalRoles
+     * @return array<int, array<string, mixed>>
+     */
+    public function findForAudit(array $professionalRoles = []): array
+    {
+        $pdo = Connection::getPdo();
+
+        if ($professionalRoles === []) {
+            $stmt = $pdo->query(
+                'SELECT * FROM training_plans ORDER BY plan_year DESC, created_at DESC'
+            );
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($professionalRoles), '?'));
+        $sql = sprintf(
+            'SELECT * FROM training_plans WHERE professional_role IN (%s) ORDER BY plan_year DESC, created_at DESC',
+            $placeholders
+        );
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($professionalRoles);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
 }
 

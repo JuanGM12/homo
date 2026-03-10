@@ -236,7 +236,7 @@ final class AsistenciaController
             ]));
         }
 
-        $csv = implode("\r\n", $lines) . "\r\n";
+        $csv = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
         $filename = 'asistencia_' . $actividad['code'] . '_' . date('Ymd') . '.csv';
 
         return new Response($csv, 200, [

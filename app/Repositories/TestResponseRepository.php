@@ -98,5 +98,75 @@ final class TestResponseRepository
 
         return $row === false ? null : $row;
     }
+
+    /**
+     * Consulta respuestas de test con filtros opcionales.
+     *
+     * Filtros soportados (todas las claves son opcionales):
+     *  - test_key: string
+     *  - phase: 'pre'|'post'
+     *  - document_number: string
+     *  - subregion: string
+     *  - municipality: string
+     *  - date_from: 'Y-m-d'
+     *  - date_to: 'Y-m-d'
+     *
+     * @param array<string,mixed> $filters
+     * @return array<int,array<string,mixed>>
+     */
+    public function search(array $filters): array
+    {
+        $pdo = Connection::getPdo();
+
+        $sql = 'SELECT * FROM test_responses';
+        $where = [];
+        $params = [];
+
+        if (!empty($filters['test_key'])) {
+            $where[] = 'test_key = :test_key';
+            $params[':test_key'] = $filters['test_key'];
+        }
+
+        if (!empty($filters['phase']) && in_array($filters['phase'], ['pre', 'post'], true)) {
+            $where[] = 'phase = :phase';
+            $params[':phase'] = $filters['phase'];
+        }
+
+        if (!empty($filters['document_number'])) {
+            $where[] = 'document_number = :document_number';
+            $params[':document_number'] = $filters['document_number'];
+        }
+
+        if (!empty($filters['subregion'])) {
+            $where[] = 'subregion = :subregion';
+            $params[':subregion'] = $filters['subregion'];
+        }
+
+        if (!empty($filters['municipality'])) {
+            $where[] = 'municipality = :municipality';
+            $params[':municipality'] = $filters['municipality'];
+        }
+
+        if (!empty($filters['date_from'])) {
+            $where[] = 'DATE(created_at) >= :date_from';
+            $params[':date_from'] = $filters['date_from'];
+        }
+
+        if (!empty($filters['date_to'])) {
+            $where[] = 'DATE(created_at) <= :date_to';
+            $params[':date_to'] = $filters['date_to'];
+        }
+
+        if ($where !== []) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+
+        $sql .= ' ORDER BY created_at DESC, id DESC LIMIT 500';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 

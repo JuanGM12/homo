@@ -61,13 +61,34 @@
                             <input type="date" name="activity_date" id="activity_date" class="form-control" required>
                         </div>
                         <div class="col-12">
-                            <label for="actividad_tipos" class="form-label">Tipo de Listado (Actividad) <span class="text-danger">*</span></label>
-                            <select name="actividad_tipos[]" id="actividad_tipos" class="form-select" multiple required data-select2>
-                                <?php foreach ($tiposActividad as $tipo): ?>
-                                    <option value="<?= htmlspecialchars($tipo, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($tipo, ENT_QUOTES, 'UTF-8') ?></option>
+                            <label class="form-label">Tipo de Listado (Actividad) <span class="text-danger">*</span></label>
+                            <input
+                                type="text"
+                                class="form-control form-control-sm mb-2"
+                                placeholder="Escribe para filtrar los tipos de listado…"
+                                data-actividad-search
+                            >
+                            <div class="border rounded-3 p-2 bg-light" style="max-height: 220px; overflow-y: auto;" data-actividad-options>
+                                <?php foreach ($tiposActividad as $index => $tipo): ?>
+                                    <?php $id = 'actividad_tipo_' . $index; ?>
+                                    <div class="form-check mb-1">
+                                        <input
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            name="actividad_tipos[]"
+                                            id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>"
+                                            value="<?= htmlspecialchars($tipo, ENT_QUOTES, 'UTF-8') ?>"
+                                        >
+                                        <label class="form-check-label small" for="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars($tipo, ENT_QUOTES, 'UTF-8') ?>
+                                        </label>
+                                    </div>
                                 <?php endforeach; ?>
-                            </select>
-                            <small class="text-muted">Puede seleccionar más de un tipo. Busque o desplácese en la lista.</small>
+                            </div>
+                            <small class="text-muted d-block mt-1">
+                                Haz clic en cada casilla para seleccionar uno o varios tipos de listado. Usa el buscador de arriba para filtrar las opciones.
+                                No es necesario usar la tecla Shift.
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -83,10 +104,6 @@
     </div>
     <?php endif; ?>
 </section>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
-<script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var subregionSelect = document.querySelector('[data-subregion-select]');
@@ -115,8 +132,18 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    if (typeof jQuery !== 'undefined' && document.querySelector('[data-select2]')) {
-        jQuery('#actividad_tipos').select2({ theme: 'bootstrap-5', width: '100%', placeholder: 'Seleccione uno o más tipos de listado...' });
+    // Filtro simple para la lista de tipos de actividad
+    var searchInput = document.querySelector('[data-actividad-search]');
+    var optionsContainer = document.querySelector('[data-actividad-options]');
+    if (searchInput && optionsContainer) {
+        searchInput.addEventListener('input', function () {
+            var term = searchInput.value.trim().toLowerCase();
+            var items = optionsContainer.querySelectorAll('.form-check');
+            items.forEach(function (item) {
+                var label = item.textContent || '';
+                item.style.display = term === '' || label.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+            });
+        });
     }
 });
 </script>

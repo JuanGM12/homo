@@ -1,6 +1,14 @@
 <?php
 /** @var array $config */
+/** @var array $prefill */
 $isPre = $config['phase'] === 'pre';
+$prefill = $prefill ?? [
+    'document_number' => '',
+    'first_name' => '',
+    'last_name' => '',
+    'subregion' => '',
+    'municipality' => '',
+];
 ?>
 
 <section class="mb-4">
@@ -15,7 +23,7 @@ $isPre = $config['phase'] === 'pre';
 
     <div class="row justify-content-center">
         <div class="col-lg-10 col-xl-9">
-            <div class="card border-0 shadow-sm rounded-4">
+            <div class="card border-0 app-form-card">
                 <div class="card-body p-4 p-md-5">
                     <div class="d-flex justify-content-between align-items-start gap-3 mb-4 flex-wrap">
                         <div>
@@ -42,7 +50,7 @@ $isPre = $config['phase'] === 'pre';
                         <input type="hidden" name="test_key" value="<?= htmlspecialchars($config['key'], ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="phase" value="<?= htmlspecialchars($config['phase'], ENT_QUOTES, 'UTF-8') ?>">
 
-                        <div class="row g-3 mb-3">
+                        <div class="row g-3 mb-4 app-form-fields">
                             <div class="col-md-6">
                                 <label class="form-label">Número de documento <span class="text-danger">*</span></label>
                                 <input
@@ -52,25 +60,51 @@ $isPre = $config['phase'] === 'pre';
                                         inputmode="numeric"
                                         oninput="this.value = this.value.replace(/[^0-9]/g, '');"
                                         required
+                                        value="<?= htmlspecialchars((string) ($prefill['document_number'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                 >
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Nombres <span class="text-danger">*</span></label>
-                                <input type="text" name="first_name" class="form-control" required>
+                                <input
+                                    type="text"
+                                    name="first_name"
+                                    class="form-control"
+                                    required
+                                    value="<?= htmlspecialchars((string) ($prefill['first_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                >
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Apellidos <span class="text-danger">*</span></label>
-                                <input type="text" name="last_name" class="form-control" required>
+                                <input
+                                    type="text"
+                                    name="last_name"
+                                    class="form-control"
+                                    required
+                                    value="<?= htmlspecialchars((string) ($prefill['last_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                >
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Subregión <span class="text-danger">*</span></label>
-                                <select name="subregion" class="form-select" required data-subregion-select>
+                                <select
+                                    name="subregion"
+                                    class="form-select"
+                                    required
+                                    data-subregion-select
+                                    data-current-value="<?= htmlspecialchars((string) ($prefill['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                >
                                     <option value="">Seleccione la subregión de pertenencia</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Municipio <span class="text-danger">*</span></label>
-                                <select name="municipality" class="form-select" required data-municipality-select disabled>
+                                <select
+                                    name="municipality"
+                                    class="form-select"
+                                    required
+                                    data-municipality-select
+                                    data-current-value="<?= htmlspecialchars((string) ($prefill['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    disabled
+                                >
                                     <option value="">Seleccione el municipio de pertenencia</option>
                                 </select>
                             </div>
@@ -82,17 +116,18 @@ $isPre = $config['phase'] === 'pre';
                             <?php endif; ?>
                         </div>
 
-                        <hr class="my-4">
+                        <hr class="my-4 app-form-divider">
 
-                        <div class="mb-3">
+                        <div class="mb-4 app-form-section-title">
                             <h2 class="h6 fw-semibold mb-1">Preguntas del test</h2>
                             <p class="text-muted small mb-0">
                                 Responda marcando la opción que considere correcta en cada caso.
                             </p>
                         </div>
 
+                        <div class="app-form-questions">
                         <?php if ($config['key'] === 'violencias'): ?>
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     1. Un programa de prevención que está dirigido exclusivamente a mujeres gestantes y a familias en
                                     situación de vulnerabilidad, identificadas a partir de factores de riesgo como la pobreza y el bajo
@@ -119,7 +154,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     2. Dentro del Modelo Ecológico de la OMS para el estudio de la violencia, el factor de riesgo que
                                     abarca las normas culturales que legitiman el dominio masculino sobre mujeres y niños, así como las
@@ -145,7 +180,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     3. En el marco estratégico INSPIRE de la OMS/OPS para la prevención de la violencia contra la niñez,
                                     la letra “P” corresponde al componente:
@@ -170,7 +205,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     4. El enfoque de la salud pública para la prevención de la violencia se estructura en cuatro pasos
                                     fundamentales. ¿Cuál de estos pasos se centra específicamente en la acción de diseñar, implementar y
@@ -196,7 +231,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     5. Las violencias interpersonales se caracterizan principalmente por:
                                 </p>
@@ -220,7 +255,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     6. La violencia comunitaria se diferencia de otras formas de violencia porque:
                                 </p>
@@ -244,7 +279,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     7. ¿Cuál de las siguientes afirmaciones describe de manera más precisa el bullying?
                                 </p>
@@ -268,7 +303,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     8. En relación con la violencia intrafamiliar, es correcto afirmar que:
                                 </p>
@@ -292,7 +327,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     9. La violencia de pareja se sostiene frecuentemente por:
                                 </p>
@@ -316,7 +351,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
                         <?php elseif ($config['key'] === 'suicidios'): ?>
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     1. María, 17 años, consulta por ánimo bajo, sentimientos de desconexión con sus pares y la percepción
                                     persistente de que “no aporta nada a su familia”. Su maestra refiere que ha perdido interés por
@@ -344,7 +379,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     2. En relación con los intentos de suicidio, ¿Cuál de las siguientes afirmaciones se ajusta mejor a la
                                     evidencia y al enfoque preventivo en salud mental?
@@ -369,7 +404,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     3. Desde el enfoque de crisis suicida, ¿Cuál de las siguientes formulaciones refleja una comprensión
                                     adecuada de su naturaleza y manejo?
@@ -394,7 +429,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     4. En el marco de la posvención tras una muerte por suicidio, ¿cuál de las siguientes acciones es más
                                     consistente con las buenas prácticas?
@@ -419,7 +454,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     5. ¿Cuál de las siguientes acciones corresponde a la prevención universal del suicidio?
                                 </p>
@@ -443,7 +478,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     6. Luis, 24 años, perdió recientemente su empleo y ha tenido conflictos continuos con su pareja. En
                                     consulta describe una intensa sensación de estar “acorralado” entre responsabilidades económicas y
@@ -471,7 +506,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     7. Una estrategia de prevención universal del suicidio es:
                                 </p>
@@ -495,7 +530,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     8. Una adolescente de 17 años consulta por “no ver sentido a su vida”, dice sentirse constantemente
                                     desesperanzada y expresa que “todo le da igual”. No refiere un plan concreto. ¿Cuál actitud es correcta
@@ -521,7 +556,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     9. Una estrategia de prevención selectiva del suicidio se orienta mejor hacia:
                                 </p>
@@ -545,7 +580,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     10. ¿Cuál de las siguientes acciones describe mejor una intervención indicada en la prevención del
                                     suicidio?
@@ -570,7 +605,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     11. ¿Cuál de las siguientes combinaciones de instrumentos corresponde de manera más adecuada a
                                     tamizajes útiles para la detección del riesgo suicida?
@@ -595,7 +630,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     12. En relación con la comunicación sobre suicidio y sus efectos en la población, ¿cuál de las
                                     siguientes afirmaciones describe de manera más precisa la diferencia entre el Efecto Werther y el
@@ -621,7 +656,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
                         <?php elseif ($config['key'] === 'adicciones'): ?>
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     1. El consumo de sustancias psicoactivas de Andrés tiene su origen posiblemente en:
                                 </p>
@@ -645,7 +680,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
                         <?php elseif ($config['key'] === 'hospitales' && $config['phase'] === 'pre'): ?>
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     1. Llega a urgencias un joven de 22 años con antecedente de epilepsia, debido a que se le acabó la
                                     medicación y requiere reformulación, durante la atención en triage presenta pérdida súbita del tono
@@ -672,7 +707,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     2. Si se identifica un consumo riesgoso de alcohol, ¿Qué intervención inicial puede ofrecer un
                                     profesional en primer nivel de atención?
@@ -697,7 +732,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     3. Una mujer de 30 años fuma un paquete diario desde hace 10 años. Tras un abordaje inicial, expresa
                                     que en algún momento quisiera dejar de fumar. ¿Qué estrategia breve puede ofrecer el profesional del
@@ -723,7 +758,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     4. En urgencias llega un paciente claramente alterado, gritando, con postura tensa, gestos bruscos y
                                     desorientación. ¿Cuál es la primera estrategia recomendada para calmar la situación?
@@ -748,7 +783,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     5. Una mujer de 20 años acude acompañada al servicio de urgencias debido a ingesta de 4 tabletas de
                                     ibuprofeno con intencionalidad suicida. Se encuentra emocionalmente desbordada, reconoce malestar
@@ -776,7 +811,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     6. Un hombre de 60 años con diagnóstico de cáncer de estómago en tratamiento paliativo consulta por
                                     dolor agudo muy intenso, descrito como 8/10 en la escala análoga del dolor. Su familiar informa que el
@@ -805,7 +840,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     7. Paciente con síntomas depresivos leves, funcionalidad conservada y sin riesgo suicida. ¿Cuál es el
                                     manejo más adecuado?
@@ -830,7 +865,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     8. En un paciente con diagnóstico de ansiedad leve, ¿Cuál es la primera línea de manejo en la baja
                                     complejidad?
@@ -855,7 +890,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     9. Niño de 8 años con inatención e hiperactividad que afectan su rendimiento escolar y la convivencia
                                     familiar. ¿Cuál criterio es indispensable para el diagnóstico?
@@ -880,7 +915,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     10. Paciente de 22 años con alucinaciones auditivas, ideas delirantes y deterioro funcional desde hace
                                     un mes. ¿Cuál es la conducta inicial más adecuada?
@@ -905,7 +940,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     11. ¿Qué conducta debe evitarse ante sospecha de trastorno bipolar?
                                 </p>
@@ -929,7 +964,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     12. ¿Cuál es la primera línea de manejo del insomnio?
                                 </p>
@@ -953,7 +988,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     13. Paciente de 28 años consulta por ansiedad y tristeza. Durante la entrevista expresa que “a veces
                                     piensa que no valdría la pena seguir viviendo”, sin plan ni intento previo. Niega consumo de sustancias.
@@ -979,7 +1014,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     14. Paciente de 40 años, con ideación suicida y plan poco estructurado. Es valorado en el servicio de
                                     urgencias, durante la evaluación se identifica red de apoyo familiar activa y disposición a buscar
@@ -1005,7 +1040,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     15. ¿Cuál es la herramienta de tamizaje que permite evaluar el riesgo de consumo de múltiples sustancias
                                     psicoactivas?
@@ -1030,7 +1065,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     16. ¿Cuál es una velocidad de reducción gradual recomendada para pacientes con uso prolongado (≥1 año)
                                     de opioides?
@@ -1055,7 +1090,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     17. Según la guía ASAM, ¿Cuál es el ritmo de reducción de dosis inicial recomendado para el desmonte de
                                     benzodiacepinas en un paciente con dependencia física?
@@ -1080,7 +1115,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     18. Paciente de 62 años es llevado a urgencias por su familia por somnolencia marcada, dificultad para
                                     articular palabras y marcha inestable. Tiene antecedente de ansiedad crónica y se encuentra en
@@ -1107,7 +1142,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     19. Paciente de 42 años es llevado a urgencias por la policía tras presentar conducta alterada en vía
                                     pública. A la llegada se muestra irritable, con aumento del tono de voz, inquietud motora y dificultad
@@ -1135,7 +1170,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     20. Durante una consulta en atención primaria, un paciente de 24 años expresa que en semanas recientes
                                     ha tenido pensamientos de hacerse daño, pero aclara que no tiene un plan definido. Un profesional en
@@ -1162,7 +1197,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     2. Desde la oferta de la Secretaría de salud e Inclusión Social el programa de intervención que mejor
                                     puede beneficiar a la familia de Andrés es:
@@ -1187,7 +1222,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     3. Desde los criterios diagnósticos del DSM previo a la versión 5.0 el consumo de sustancias
                                     psicoactivas del adolescente Andrés corresponde a:
@@ -1212,7 +1247,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     4. ¿Cuál norma implementa la estrategia Nacional de Alcohol y el Sistema Nacional de Atención al
                                     consumo de sustancias psicoactivas?
@@ -1237,7 +1272,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     5. Según lo establecido por la política, ¿Cuál de las siguientes combinaciones refleja de manera más
                                     completa y coherente el carácter transversal de la Reducción de Riesgos y Daños dentro del sistema de
@@ -1263,7 +1298,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     6. En una consulta del centro de escucha, un hombre de 38 años refiere que “sale a tomar con amigos
                                     todos los fines de semana” y admite “beber bastante”. No hay signos físicos graves. ¿Cuál sería la
@@ -1289,7 +1324,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     7. Si se identifica un consumo riesgoso de alcohol, ¿Qué intervención inicial puede ofrecer un
                                     profesional en atención primaria de salud mental?
@@ -1314,7 +1349,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     8. La estrategia internacional SAFER propende por las siguientes intervenciones, excepto.
                                 </p>
@@ -1338,7 +1373,7 @@ $isPre = $config['phase'] === 'pre';
                                 <?php endforeach; ?>
                             </div>
 
-                            <div class="mb-4">
+                            <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     9. En la Sentencia C-127 de  2023, la Corte Constitucional se pronunció sobre la relación con el porte
                                     y consumo de sustancias psicoactivas en parques y espacios públicos. ¿Cuál fue la decisión principal
@@ -1368,9 +1403,10 @@ $isPre = $config['phase'] === 'pre';
                                 Pronto configuraremos las preguntas específicas para este test.
                             </div>
                         <?php endif; ?>
+                        </div>
 
-                        <div class="d-flex justify-content-end mt-4">
-                            <button type="submit" class="btn btn-primary">
+                        <div class="app-form-submit">
+                            <button type="submit" class="btn btn-primary btn-lg px-4">
                                 Enviar respuestas
                             </button>
                         </div>

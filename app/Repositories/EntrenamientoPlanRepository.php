@@ -90,4 +90,19 @@ final class EntrenamientoPlanRepository
 
         return $row ?: null;
     }
+
+    /**
+     * Planes de entrenamiento para auditoría (especialistas / coordinación).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function findForAudit(): array
+    {
+        $pdo = Connection::getPdo();
+
+        $sql = 'SELECT * FROM entrenamiento_plans ORDER BY created_at DESC';
+        $stmt = $pdo->query($sql);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
 }

@@ -99,7 +99,7 @@ final class ProfileController
         ];
 
         if ($passwordToSave !== null) {
-            $updateSql .= ', password = :password';
+            $updateSql .= ', password = :password, requires_password_change = 0';
             $params[':password'] = $passwordToSave;
         }
 
@@ -111,6 +111,9 @@ final class ProfileController
         // Actualizar datos en sesión
         $_SESSION['user']['name'] = $name;
         $_SESSION['user']['email'] = $email;
+        if ($passwordToSave !== null) {
+            $_SESSION['user']['must_change_password'] = false;
+        }
 
         Flash::set([
             'type' => 'success',

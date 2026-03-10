@@ -23,6 +23,10 @@ final class App
         $this->router->get('/login', [\App\Controllers\AuthController::class, 'showLoginForm'])->name('login');
         $this->router->post('/login', [\App\Controllers\AuthController::class, 'login']);
         $this->router->post('/logout', [\App\Controllers\AuthController::class, 'logout'])->middleware('auth');
+        $this->router->get('/recuperar-clave', [\App\Controllers\AuthController::class, 'showForgotPasswordForm']);
+        $this->router->post('/recuperar-clave', [\App\Controllers\AuthController::class, 'handleForgotPassword']);
+        $this->router->get('/restablecer-clave', [\App\Controllers\AuthController::class, 'showResetPasswordForm']);
+        $this->router->post('/restablecer-clave', [\App\Controllers\AuthController::class, 'handleResetPassword']);
 
         // Módulo 1: Evaluaciones - Test (acceso libre)
         $this->router->get('/evaluaciones', [\App\Controllers\EvaluacionesController::class, 'index']);
@@ -64,13 +68,19 @@ final class App
         $this->router->get('/aoat', [\App\Controllers\AoatController::class, 'index'])->middleware('auth');
         $this->router->get('/aoat/nueva', [\App\Controllers\AoatController::class, 'create'])->middleware('auth');
         $this->router->post('/aoat/nueva', [\App\Controllers\AoatController::class, 'store'])->middleware('auth');
+        $this->router->get('/aoat/editar', [\App\Controllers\AoatController::class, 'edit'])->middleware('auth');
+        $this->router->post('/aoat/editar', [\App\Controllers\AoatController::class, 'update'])->middleware('auth');
+        $this->router->post('/aoat/cambiar-estado', [\App\Controllers\AoatController::class, 'updateState'])->middleware('auth');
         $this->router->get('/aoat/reportes', [\App\Controllers\AoatController::class, 'reportForm'])->middleware('auth');
         $this->router->post('/aoat/reportes/enviar', [\App\Controllers\AoatController::class, 'sendWeeklyReport'])->middleware('auth');
+        $this->router->get('/aoat/exportar', [\App\Controllers\AoatController::class, 'export'])->middleware('auth');
 
         // Módulo 3: Planeación anual de capacitaciones (requiere autenticación y rol específico)
         $this->router->get('/planeacion', [\App\Controllers\PlaneacionController::class, 'index'])->middleware('auth');
         $this->router->get('/planeacion/nueva', [\App\Controllers\PlaneacionController::class, 'create'])->middleware('auth');
         $this->router->post('/planeacion/nueva', [\App\Controllers\PlaneacionController::class, 'store'])->middleware('auth');
+        $this->router->get('/planeacion/editar', [\App\Controllers\PlaneacionController::class, 'edit'])->middleware('auth');
+        $this->router->post('/planeacion/editar', [\App\Controllers\PlaneacionController::class, 'update'])->middleware('auth');
         $this->router->get('/planeacion/exportar', [\App\Controllers\PlaneacionController::class, 'export'])->middleware('auth');
 
         // Módulo 4: Plan de Entrenamiento (solo Psicólogos)

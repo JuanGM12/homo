@@ -20,7 +20,7 @@ $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' .
 
     <div class="row g-4">
         <div class="col-lg-5">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-header bg-primary text-white rounded-top-4 py-3">
                     <h2 class="h6 mb-0">Información de la Actividad</h2>
                 </div>
@@ -31,7 +31,20 @@ $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' .
                     <p class="mb-2"><strong>Municipio:</strong> <?= htmlspecialchars((string) ($actividad['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></p>
                     <p class="mb-2"><strong>Lugar:</strong> <?= htmlspecialchars((string) ($actividad['lugar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></p>
                     <p class="mb-2"><strong>Asesor:</strong> <?= htmlspecialchars((string) ($actividad['advisor_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></p>
-                    <p class="mb-2"><strong>Tipo de Listado:</strong><br><small><?= htmlspecialchars(implode('; ', $tiposList), ENT_QUOTES, 'UTF-8') ?></small></p>
+                    <div class="mb-2">
+                        <strong>Tipo de Listado:</strong>
+                        <?php if ($tiposList !== []): ?>
+                            <div class="mt-1">
+                                <?php foreach ($tiposList as $tipo): ?>
+                                    <div class="badge bg-light text-dark border small d-block text-start mb-1 text-wrap" style="white-space: normal;">
+                                        <?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <span class="text-muted small d-block mt-1">Sin tipos de listado registrados.</span>
+                        <?php endif; ?>
+                    </div>
                     <p class="mb-3"><strong>Estado:</strong> <span class="badge rounded-pill <?= ($actividad['status'] ?? '') === 'Activo' ? 'text-bg-success' : 'text-bg-warning' ?>"><?= htmlspecialchars((string) ($actividad['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span></p>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <label class="mb-0 small">Cambiar estado:</label>

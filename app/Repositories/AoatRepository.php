@@ -89,6 +89,35 @@ final class AoatRepository
     }
 
     /**
+     * Registros de AoAT para auditoría (especialistas / coordinación).
+     * Si se suministra un arreglo de roles profesionales, se filtra por ellos;
+     * de lo contrario, se devuelven todos los registros.
+     *
+     * @param string[] $professionalRoles
+     * @return array<int, array<string, mixed>>
+     */
+    public function findForAudit(array $professionalRoles = []): array
+    {
+        $pdo = Connection::getPdo();
+
+        if ($professionalRoles === []) {
+            $stmt = $pdo->query('SELECT * FROM aoat_records ORDER BY created_at DESC, id DESC');
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($professionalRoles), '?'));
+        $sql = sprintf(
+            'SELECT * FROM aoat_records WHERE professional_role IN (%s) ORDER BY created_at DESC, id DESC',
+            $placeholders
+        );
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($professionalRoles);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
      * Obtiene registros de AoAT para reportes, filtrando por rol profesional y rango de fechas
      * con base en la fecha de la actividad almacenada en el payload (activity_date).
      */

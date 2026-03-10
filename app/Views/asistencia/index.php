@@ -82,10 +82,10 @@
                     <?php foreach ($records as $row): ?>
                         <?php
                         $tipos = $row['actividad_tipos'] ?? [];
-                        $tiposStr = is_array($tipos) ? implode('; ', array_slice($tipos, 0, 2)) : (string) $tipos;
-                        if (is_array($tipos) && count($tipos) > 2) {
-                            $tiposStr .= '…';
-                        }
+                        $tiposList = is_array($tipos) ? $tipos : [];
+                        // Mostramos máximo 3 badges por fila para no saturar la tabla.
+                        $tiposPreview = array_slice($tiposList, 0, 3);
+                        $hasMoreTipos = is_array($tipos) && count($tipos) > 3;
                         ?>
                         <tr>
                             <td><span class="text-primary fw-medium"><?= htmlspecialchars((string) ($row['code'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span></td>
@@ -93,7 +93,26 @@
                             <td><?= htmlspecialchars((string) ($row['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string) ($row['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string) ($row['lugar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td class="small"><?= htmlspecialchars($tiposStr, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="small">
+                                <?php if ($tiposPreview !== []): ?>
+                                    <div class="d-flex flex-column gap-1">
+                                        <?php foreach ($tiposPreview as $tipo): ?>
+                                            <span
+                                                class="badge bg-light text-dark border text-start text-wrap"
+                                                style="white-space: normal; max-width: 100%;"
+                                                title="<?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>"
+                                            >
+                                                <?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>
+                                            </span>
+                                        <?php endforeach; ?>
+                                        <?php if ($hasMoreTipos): ?>
+                                            <span class="text-muted small">…y otros tipos</span>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="text-muted">—</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= htmlspecialchars((string) ($row['advisor_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= (int) ($row['asistentes_count'] ?? 0) ?></td>
                             <td>

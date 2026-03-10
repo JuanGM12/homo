@@ -14,7 +14,7 @@ use App\Services\Flash;
 final class EncuestaOpinionAoatController
 {
     /** Roles que pueden consultar y exportar encuestas (no permiten editar respuestas). */
-    private const ROLES_CONSULTA_EXPORT = ['admin', 'coordinadora', 'especialista'];
+    private const ROLES_CONSULTA_EXPORT = ['admin', 'coordinadora', 'coordinador', 'especialista'];
 
     public function form(Request $request): Response
     {
@@ -154,7 +154,7 @@ final class EncuestaOpinionAoatController
             ]));
         }
 
-        $csvContent = implode("\r\n", $lines) . "\r\n";
+        $csvContent = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
         $filename = 'encuesta_opinion_aoat_' . date('Ymd_His') . '.csv';
 
         return new Response($csvContent, 200, [

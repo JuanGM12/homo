@@ -24,11 +24,91 @@ final class AoatController
         }
 
         $repo = new AoatRepository();
-        $records = $repo->findForUser((int) $user['id']);
+        $roles = $user['roles'] ?? [];
+
+        $isSpecialist = in_array('especialista', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+        $isAdmin = in_array('admin', $roles, true);
+
+        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+
+        $search = trim((string) $request->input('q', ''));
+        $stateFilter = trim((string) $request->input('state', ''));
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+
+        if ($isAuditView) {
+            // Vista de auditoría: especialistas, coordinadora y admin.
+            // Regla de asignación según perfil principal del usuario.
+            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
+            $auditRoles = [];
+
+            if ($isAdmin || $isCoordinator) {
+                // Admin y coordinadora pueden ver todos los registros.
+                $auditRoles = [];
+            } elseif ($isSpecialist) {
+                if ($primaryRole === 'medico') {
+                    $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'abogado') {
+                    $auditRoles = ['abogado'];
+                } elseif ($primaryRole === 'psicologo') {
+                    // Psicólogo especialista audita a Psicólogos y Profesional Social
+                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
+                }
+            }
+
+            $records = $repo->findForAudit($auditRoles);
+        } else {
+            // Vista de profesional: solo sus propios registros.
+            $records = $repo->findForUser((int) $user['id']);
+        }
+
+        // Filtros en memoria (suficiente para el volumen esperado)
+        if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+                if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
+                    return false;
+                }
+
+                // Filtro por rango de fechas (usamos created_at, formato YYYY-MM-DD HH:MM:SS)
+                $created = (string) ($row['created_at'] ?? '');
+                $createdDate = $created !== '' ? substr($created, 0, 10) : '';
+
+                if ($fromDate !== '' && $createdDate !== '' && $createdDate < $fromDate) {
+                    return false;
+                }
+
+                if ($toDate !== '' && $createdDate !== '' && $createdDate > $toDate) {
+                    return false;
+                }
+
+                if ($search === '') {
+                    return true;
+                }
+
+                $haystack = implode(' ', [
+                    (string) ($row['professional_name'] ?? ''),
+                    (string) ($row['professional_last_name'] ?? ''),
+                    (string) ($row['subregion'] ?? ''),
+                    (string) ($row['municipality'] ?? ''),
+                    (string) ($row['id'] ?? ''),
+                ]);
+
+                return stripos($haystack, $search) !== false;
+            }));
+        }
+
+        // Respuesta parcial para AJAX: solo filas de la tabla
+        if ((string) $request->input('partial', '') === 'rows') {
+            $html = $this->renderAoatRowsPartial($records, $isAuditView, $user);
+
+            return Response::json(['html' => $html]);
+        }
 
         return Response::view('aoat/index', [
             'pageTitle' => 'AoAT - Mis registros',
             'records' => $records,
+            'isAuditView' => $isAuditView,
         ]);
     }
 
@@ -85,10 +165,10 @@ final class AoatController
         $subregion = trim((string) $request->input('subregion', ''));
         $municipality = trim((string) $request->input('municipality', ''));
 
+        // Validamos únicamente los campos que la persona diligencia en el formulario.
+        // Los datos del profesional provienen de la sesión y, si por alguna razón están incompletos,
+        // no deben bloquear el registro de la AoAT.
         if (
-            $professionalName === '' ||
-            $professionalLastName === '' ||
-            $profession === '' ||
             $aoatNumber === '' ||
             $activityDate === '' ||
             $activityType === '' ||
@@ -245,11 +325,405 @@ final class AoatController
         return Response::redirect('/aoat/reportes');
     }
 
+    public function export(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (!$this->userCanAccessAoat($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $repo = new AoatRepository();
+        $roles = $user['roles'] ?? [];
+
+        $isSpecialist = in_array('especialista', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true);
+        $isAdmin = in_array('admin', $roles, true);
+
+        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+
+        $search = trim((string) $request->input('q', ''));
+        $stateFilter = trim((string) $request->input('state', ''));
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+
+        if ($isAuditView) {
+            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
+            $auditRoles = [];
+
+            if ($isAdmin || $isCoordinator) {
+                $auditRoles = [];
+            } elseif ($isSpecialist) {
+                if ($primaryRole === 'medico') {
+                    $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'abogado') {
+                    $auditRoles = ['abogado'];
+                } elseif ($primaryRole === 'psicologo') {
+                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
+                }
+            }
+
+            $records = $repo->findForAudit($auditRoles);
+        } else {
+            $records = $repo->findForUser((int) $user['id']);
+        }
+
+        if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+                if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
+                    return false;
+                }
+
+                $created = (string) ($row['created_at'] ?? '');
+                $createdDate = $created !== '' ? substr($created, 0, 10) : '';
+
+                if ($fromDate !== '' && $createdDate !== '' && $createdDate < $fromDate) {
+                    return false;
+                }
+
+                if ($toDate !== '' && $createdDate !== '' && $createdDate > $toDate) {
+                    return false;
+                }
+
+                if ($search === '') {
+                    return true;
+                }
+
+                $haystack = implode(' ', [
+                    (string) ($row['professional_name'] ?? ''),
+                    (string) ($row['professional_last_name'] ?? ''),
+                    (string) ($row['subregion'] ?? ''),
+                    (string) ($row['municipality'] ?? ''),
+                    (string) ($row['id'] ?? ''),
+                ]);
+
+                return stripos($haystack, $search) !== false;
+            }));
+        }
+
+        if ($records === []) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin registros para exportar',
+                'message' => 'No hay registros de AoAT para exportar con los filtros actuales.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $lines = [];
+        $lines[] = implode(';', [
+            'ID',
+            'Fecha registro',
+            'Profesional',
+            'Subregión',
+            'Municipio',
+            'Estado AoAT',
+            'Motivo auditoría',
+            'Observación auditoría',
+        ]);
+
+        foreach ($records as $row) {
+            $professionalFullName = trim(((string) ($row['professional_name'] ?? '')) . ' ' . ((string) ($row['professional_last_name'] ?? '')));
+            $line = [
+                (string) ($row['id'] ?? ''),
+                (string) ($row['created_at'] ?? ''),
+                $professionalFullName,
+                (string) ($row['subregion'] ?? ''),
+                (string) ($row['municipality'] ?? ''),
+                (string) ($row['state'] ?? ''),
+                (string) ($row['audit_motive'] ?? ''),
+                (string) ($row['audit_observation'] ?? ''),
+            ];
+
+            $lines[] = implode(';', array_map(static function (string $value): string {
+                $escaped = str_replace('"', '""', $value);
+                return '"' . $escaped . '"';
+            }, $line));
+        }
+
+        $csvContent = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
+        $filename = 'aoat_registros_' . date('Ymd_His') . '.csv';
+
+        return new Response($csvContent, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function edit(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (!$this->userCanAccessAoat($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return Response::redirect('/aoat');
+        }
+
+        $repo = new AoatRepository();
+        $record = $repo->findById($id);
+
+        if ($record === null || (int) $record['user_id'] !== (int) $user['id']) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No autorizado',
+                'message' => 'No puedes editar este registro de AoAT.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if (($record['state'] ?? '') === 'Aprobada') {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Edición no permitida',
+                'message' => 'Este registro ya fue aprobado por el especialista y no puede modificarse.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $professional = [
+            'id' => (int) $user['id'],
+            'name' => (string) ($user['name'] ?? ''),
+            'last_name' => (string) ($user['last_name'] ?? ''),
+            'email' => (string) ($user['email'] ?? ''),
+            'role' => (string) ($user['role'] ?? ''),
+            'profession' => (string) ($user['profession'] ?? ''),
+        ];
+
+        return Response::view('aoat/form', [
+            'pageTitle' => 'Editar AoAT',
+            'mode' => 'edit',
+            'record' => $record,
+            'professional' => $professional,
+        ]);
+    }
+
+    public function update(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (!$this->userCanAccessAoat($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return Response::redirect('/aoat');
+        }
+
+        $repo = new AoatRepository();
+        $record = $repo->findById($id);
+
+        if ($record === null || (int) $record['user_id'] !== (int) $user['id']) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No autorizado',
+                'message' => 'No puedes editar este registro de AoAT.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if (($record['state'] ?? '') === 'Aprobada') {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Edición no permitida',
+                'message' => 'Este registro ya fue aprobado por el especialista y no puede modificarse.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        // Datos propios del registro de la AoAT
+        $aoatNumber = trim((string) $request->input('aoat_number', ''));
+        $activityDate = trim((string) $request->input('activity_date', ''));
+        $activityType = trim((string) $request->input('activity_type', ''));
+        $activityWith = trim((string) $request->input('activity_with', ''));
+        $subregion = trim((string) $request->input('subregion', ''));
+        $municipality = trim((string) $request->input('municipality', ''));
+
+        if (
+            $aoatNumber === '' ||
+            $activityDate === '' ||
+            $activityType === '' ||
+            $activityWith === '' ||
+            $subregion === '' ||
+            $municipality === ''
+        ) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Campos obligatorios incompletos',
+                'message' => 'Por favor completa todos los campos requeridos.',
+            ]);
+
+            return Response::redirect('/aoat/editar?id=' . $id);
+        }
+
+        $payload = $this->buildPayload($request);
+
+        try {
+            $repo->update($id, [
+                'subregion' => $subregion,
+                'municipality' => $municipality,
+                'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            ]);
+        } catch (\PDOException $e) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No fue posible actualizar la AoAT',
+                'message' => 'Ocurrió un problema al actualizar la asesoría/asistencia técnica. Intenta nuevamente en unos minutos.',
+            ]);
+
+            return Response::redirect('/aoat/editar?id=' . $id);
+        }
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'AoAT actualizada',
+            'message' => 'El registro de AoAT se ha actualizado correctamente.',
+        ]);
+
+        return Response::redirect('/aoat');
+    }
+
+    /**
+     * Cambio de estado por parte de especialistas / coordinación.
+     * Solo permite transiciones:
+     *  - Asignada -> Aprobada
+     *  - Asignada -> Devuelta (requiere motivo y observación, y envía correo).
+     */
+    public function updateState(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+
+        $roles = $user['roles'] ?? [];
+        $canAudit = in_array('especialista', $roles, true) || in_array('coordinadora', $roles, true) || in_array('admin', $roles, true);
+        if (!$canAudit) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        $newState = (string) $request->input('state', '');
+        $observation = trim((string) $request->input('observation', ''));
+        $motive = trim((string) $request->input('motive', ''));
+
+        if ($id <= 0 || !in_array($newState, ['Aprobada', 'Devuelta'], true)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Datos no válidos',
+                'message' => 'No fue posible actualizar el estado de la AoAT.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $repo = new AoatRepository();
+        $record = $repo->findById($id);
+        if ($record === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Registro no encontrado',
+                'message' => 'La AoAT indicada no existe.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if (($record['state'] ?? '') !== 'Asignada') {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Estado no válido',
+                'message' => 'Solo puedes cambiar registros en estado "Asignada".',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if ($newState === 'Devuelta') {
+            $allowedMotives = ['Sin Cargar en AoAT', 'Sin cargar en Drive'];
+            if ($observation === '' || !in_array($motive, $allowedMotives, true)) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Información requerida',
+                    'message' => 'Para devolver una AoAT debes indicar el motivo y una observación.',
+                ]);
+
+                return Response::redirect('/aoat');
+            }
+
+            $repo->update($id, [
+                'state' => 'Devuelta',
+                'audit_observation' => $observation,
+                'audit_motive' => $motive,
+            ]);
+
+            // Notificar al profesional
+            $toEmail = (string) ($record['professional_email'] ?? '');
+            $toName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
+            $mailer = new Mailer();
+            $mailer->sendAoatReturnedNotification($toEmail, $toName, $observation, $motive, $id);
+
+            Flash::set([
+                'type' => 'success',
+                'title' => 'AoAT devuelta',
+                'message' => 'El estado de la AoAT se actualizó a "Devuelta" y se notificó al profesional.',
+            ]);
+        } else {
+            // Aprobada
+            $repo->update($id, [
+                'state' => 'Aprobada',
+                'audit_observation' => null,
+                'audit_motive' => null,
+            ]);
+
+            Flash::set([
+                'type' => 'success',
+                'title' => 'AoAT aprobada',
+                'message' => 'La AoAT ha sido aprobada. El registro queda cerrado para nuevas modificaciones.',
+            ]);
+        }
+
+        return Response::redirect('/aoat');
+    }
+
     private function userCanAccessAoat(array $user): bool
     {
         $roles = $user['roles'] ?? [];
-        $allowed = ['abogado', 'medico', 'psicologo', 'profesional social', 'profesional_social', 'admin'];
+        $allowed = ['abogado', 'medico', 'psicologo', 'profesional social', 'profesional_social', 'admin', 'especialista', 'coordinadora', 'coordinador'];
         return (bool) array_intersect($allowed, $roles);
+    }
+
+    /**
+     * Renderiza solo las filas de la tabla de AoAT (para AJAX).
+     *
+     * @param array<int, array<string, mixed>> $records
+     */
+    private function renderAoatRowsPartial(array $records, bool $isAuditView, array $user): string
+    {
+        $isAuditViewLocal = $isAuditView;
+        $currentUser = $user;
+
+        ob_start();
+        /** @var array<int, array<string, mixed>> $records */
+        $isAudit = $isAuditViewLocal;
+        $currentUserLocal = $currentUser;
+        require __DIR__ . '/../Views/aoat/_rows.php';
+        return (string) ob_get_clean();
     }
 
     private function buildPayload(Request $request): array

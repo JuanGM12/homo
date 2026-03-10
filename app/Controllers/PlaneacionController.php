@@ -30,11 +30,77 @@ final class PlaneacionController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $records = $this->repository->findForUser((int) $user['id']);
+        $roles = $user['roles'] ?? [];
+        $isSpecialist = in_array('especialista', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+        $isAdmin = in_array('admin', $roles, true);
+
+        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+
+        $search = trim((string) $request->input('q', ''));
+        $stateFilter = trim((string) $request->input('state', ''));
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+
+        if ($isAuditView) {
+            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
+            $auditRoles = [];
+
+            if ($isAdmin || $isCoordinator) {
+                $auditRoles = [];
+            } elseif ($isSpecialist) {
+                if ($primaryRole === 'medico') {
+                    $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'abogado') {
+                    $auditRoles = ['abogado'];
+                } elseif ($primaryRole === 'psicologo') {
+                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
+                }
+            }
+
+            $records = $this->repository->findForAudit($auditRoles);
+        } else {
+            $records = $this->repository->findForUser((int) $user['id']);
+        }
+
+        if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+                if ($stateFilter !== '') {
+                    $isEditable = !empty($row['editable']);
+                    $state = $isEditable ? 'Editable' : 'Aprobada';
+                    if ($state !== $stateFilter) {
+                        return false;
+                    }
+                }
+
+                $created = (string) ($row['created_at'] ?? '');
+                $createdDate = $created !== '' ? substr($created, 0, 10) : '';
+
+                if ($fromDate !== '' && $createdDate !== '' && $createdDate < $fromDate) {
+                    return false;
+                }
+                if ($toDate !== '' && $createdDate !== '' && $createdDate > $toDate) {
+                    return false;
+                }
+
+                if ($search === '') {
+                    return true;
+                }
+
+                $haystack = implode(' ', [
+                    (string) ($row['subregion'] ?? ''),
+                    (string) ($row['municipality'] ?? ''),
+                    (string) ($row['plan_year'] ?? ''),
+                ]);
+
+                return stripos($haystack, $search) !== false;
+            }));
+        }
 
         return Response::view('planeacion/index', [
             'pageTitle' => 'Planeación anual de capacitaciones',
             'records' => $records,
+            'isAuditView' => $isAuditView,
         ]);
     }
 
@@ -93,40 +159,8 @@ final class PlaneacionController
             $errors[] = 'Debes seleccionar el municipio.';
         }
 
-        $months = [
-            'enero' => 'Enero',
-            'febrero' => 'Febrero',
-            'marzo' => 'Marzo',
-            'abril' => 'Abril',
-            'mayo' => 'Mayo',
-            'junio' => 'Junio',
-            'julio' => 'Julio',
-            'agosto' => 'Agosto',
-            'septiembre' => 'Septiembre',
-            'octubre' => 'Octubre',
-            'noviembre' => 'Noviembre',
-            'diciembre' => 'Diciembre',
-        ];
-
-        $payload = [];
-
-        foreach ($months as $key => $label) {
-            /** @var array<int, string> $topics */
-            $topics = $request->input($key . '_temas', []);
-            $topics = is_array($topics) ? array_values(array_filter(array_map('strval', $topics))) : [];
-
-            $population = trim((string) $request->input($key . '_poblacion'));
-
-            if (empty($topics) || $population === '') {
-                $errors[] = "Debes seleccionar al menos un tema y definir la población objetivo para {$label}.";
-            }
-
-            $payload[$key] = [
-                'label' => $label,
-                'topics' => $topics,
-                'population' => $population,
-            ];
-        }
+        [$payload, $monthErrors] = $this->buildPlanPayloadFromRequest($request);
+        $errors = array_merge($errors, $monthErrors);
 
         if (!empty($errors)) {
             Flash::set([
@@ -170,7 +204,33 @@ final class PlaneacionController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $records = $this->repository->findForUser((int) $user['id']);
+        $roles = $user['roles'] ?? [];
+        $isSpecialist = in_array('especialista', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+        $isAdmin = in_array('admin', $roles, true);
+
+        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+
+        if ($isAuditView) {
+            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
+            $auditRoles = [];
+
+            if ($isAdmin || $isCoordinator) {
+                $auditRoles = [];
+            } elseif ($isSpecialist) {
+                if ($primaryRole === 'medico') {
+                    $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'abogado') {
+                    $auditRoles = ['abogado'];
+                } elseif ($primaryRole === 'psicologo') {
+                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
+                }
+            }
+
+            $records = $this->repository->findForAudit($auditRoles);
+        } else {
+            $records = $this->repository->findForUser((int) $user['id']);
+        }
 
         if ($records === []) {
             Flash::set([
@@ -243,7 +303,7 @@ final class PlaneacionController
             }
         }
 
-        $csvContent = implode("\r\n", $lines) . "\r\n";
+        $csvContent = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
 
         $filename = sprintf('planeacion_capacitaciones_%s.csv', date('Ymd_His'));
 
@@ -257,12 +317,203 @@ final class PlaneacionController
         );
     }
 
+    public function edit(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+
+        if (!$this->userCanAccessModule($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return Response::redirect('/planeacion');
+        }
+
+        $plan = $this->repository->findById($id);
+        if (!$plan || (int) $plan['user_id'] !== (int) $user['id']) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No autorizado',
+                'message' => 'No puedes editar esta planeación.',
+            ]);
+
+            return Response::redirect('/planeacion');
+        }
+
+        if (empty($plan['editable'])) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Edición no permitida',
+                'message' => 'Esta planeación ya fue aprobada por el especialista y no puede modificarse.',
+            ]);
+
+            return Response::redirect('/planeacion');
+        }
+
+        $professional = [
+            'id' => $user['id'],
+            'name' => $user['name'],
+            'email' => $user['email'],
+        ];
+
+        return Response::view('planeacion/form', [
+            'pageTitle' => 'Editar planeación anual',
+            'mode' => 'edit',
+            'plan' => $plan,
+            'professional' => $professional,
+            'role' => (string) ($user['role'] ?? (($user['roles'] ?? [])[0] ?? '')),
+            'planYear' => (int) ($plan['plan_year'] ?? date('Y')),
+        ]);
+    }
+
+    public function update(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+
+        if (!$this->userCanAccessModule($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return Response::redirect('/planeacion');
+        }
+
+        $plan = $this->repository->findById($id);
+        if (!$plan || (int) $plan['user_id'] !== (int) $user['id']) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No autorizado',
+                'message' => 'No puedes editar esta planeación.',
+            ]);
+
+            return Response::redirect('/planeacion');
+        }
+
+        if (empty($plan['editable'])) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Edición no permitida',
+                'message' => 'Esta planeación ya fue aprobada por el especialista y no puede modificarse.',
+            ]);
+
+            return Response::redirect('/planeacion');
+        }
+
+        $subregion = trim((string) $request->input('subregion'));
+        $municipality = trim((string) $request->input('municipality'));
+        $planYear = (int) ($request->input('plan_year') ?? ($plan['plan_year'] ?? date('Y')));
+
+        $errors = [];
+
+        if ($subregion === '') {
+            $errors[] = 'Debes seleccionar la subregión.';
+        }
+
+        if ($municipality === '') {
+            $errors[] = 'Debes seleccionar el municipio.';
+        }
+
+        [$payload, $monthErrors] = $this->buildPlanPayloadFromRequest($request);
+        $errors = array_merge($errors, $monthErrors);
+
+        if (!empty($errors)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Revisa la planeación',
+                'message' => implode("\n", $errors),
+            ]);
+
+            return Response::redirect('/planeacion/editar?id=' . $id);
+        }
+
+        $this->repository->update($id, [
+            'subregion' => $subregion,
+            'municipality' => $municipality,
+            'plan_year' => $planYear,
+            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        ]);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Planeación actualizada',
+            'message' => 'La planeación anual de capacitaciones se ha actualizado correctamente.',
+        ]);
+
+        return Response::redirect('/planeacion');
+    }
+
     private function userCanAccessModule(array $user): bool
     {
         $roles = $user['roles'] ?? [];
-        $allowed = ['abogado', 'medico', 'psicologo', 'admin'];
+        $allowed = ['abogado', 'Medico', 'medico', 'psicologo', 'admin', 'especialista', 'coordinadora', 'coordinador'];
 
         return (bool) array_intersect($roles, $allowed);
+    }
+
+    /**
+     * Construye el payload de meses a partir del Request y devuelve
+     * [payload, erroresDeValidación].
+     *
+     * @return array{0: array<string, array<string, mixed>>, 1: string[]}
+     */
+    private function buildPlanPayloadFromRequest(Request $request): array
+    {
+        $months = [
+            'enero' => 'Enero',
+            'febrero' => 'Febrero',
+            'marzo' => 'Marzo',
+            'abril' => 'Abril',
+            'mayo' => 'Mayo',
+            'junio' => 'Junio',
+            'julio' => 'Julio',
+            'agosto' => 'Agosto',
+            'septiembre' => 'Septiembre',
+            'octubre' => 'Octubre',
+            'noviembre' => 'Noviembre',
+            'diciembre' => 'Diciembre',
+        ];
+
+        $payload = [];
+        $errors = [];
+        $filledMonths = 0;
+
+        foreach ($months as $key => $label) {
+            /** @var array<int, string>|string $rawTopics */
+            $rawTopics = $request->input($key . '_temas', []);
+            $topics = is_array($rawTopics) ? array_values(array_filter(array_map('strval', $rawTopics))) : [];
+
+            $population = trim((string) $request->input($key . '_poblacion', ''));
+
+            $hasAnyData = !empty($topics) || $population !== '';
+
+            if ($hasAnyData) {
+                if (empty($topics) || $population === '') {
+                    $errors[] = "Si vas a diligenciar {$label}, debes seleccionar al menos un tema y definir la población objetivo.";
+                } else {
+                    $filledMonths++;
+                }
+
+                $payload[$key] = [
+                    'label' => $label,
+                    'topics' => $topics,
+                    'population' => $population,
+                ];
+            }
+        }
+
+        if ($filledMonths === 0) {
+            $errors[] = 'Debes diligenciar al menos un mes con temas y población objetivo para guardar la planeación.';
+        }
+
+        return [$payload, $errors];
     }
 }
 

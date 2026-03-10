@@ -4,6 +4,25 @@
 
 $isEdit = isset($record) && isset($record['id']);
 $role = strtolower((string) ($professional['role'] ?? ''));
+
+$oldPayload = [];
+if ($isEdit && isset($record['payload'])) {
+    $decoded = json_decode((string) $record['payload'], true);
+    if (is_array($decoded)) {
+        $oldPayload = $decoded;
+    }
+}
+
+$prevSuicidio = isset($oldPayload['prev_suicidio']) && is_array($oldPayload['prev_suicidio']) ? $oldPayload['prev_suicidio'] : [];
+$prevViolencias = isset($oldPayload['prev_violencias']) && is_array($oldPayload['prev_violencias']) ? $oldPayload['prev_violencias'] : [];
+$prevAdicciones = isset($oldPayload['prev_adicciones']) && is_array($oldPayload['prev_adicciones']) ? $oldPayload['prev_adicciones'] : [];
+$saludMental = isset($oldPayload['salud_mental']) && is_array($oldPayload['salud_mental']) ? $oldPayload['salud_mental'] : [];
+$proyectoSeleccionado = isset($oldPayload['proyecto']) ? (string) $oldPayload['proyecto'] : '';
+$mesaSaludMental = isset($oldPayload['mesa_salud_mental']) && is_array($oldPayload['mesa_salud_mental']) ? $oldPayload['mesa_salud_mental'] : [];
+$ppmsmypaSel = isset($oldPayload['ppmsmypa']) && is_array($oldPayload['ppmsmypa']) ? $oldPayload['ppmsmypa'] : [];
+$saferSel = isset($oldPayload['safer']) && is_array($oldPayload['safer']) ? $oldPayload['safer'] : [];
+$temasHospital = isset($oldPayload['temas_hospital']) && is_array($oldPayload['temas_hospital']) ? $oldPayload['temas_hospital'] : [];
+$actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayload['actividad_social']) ? $oldPayload['actividad_social'] : [];
 ?>
 
 <section class="mb-4">
@@ -22,7 +41,10 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h4 fw-bold mb-4"><?= $isEdit ? 'Editar AoAT' : 'Registrar nueva AoAT' ?></h1>
 
-                    <form method="post" action="/aoat/nueva">
+                    <form method="post" action="<?= $isEdit ? '/aoat/editar' : '/aoat/nueva' ?>">
+                        <?php if ($isEdit && isset($record['id'])): ?>
+                            <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
+                        <?php endif; ?>
                         <!-- Datos del profesional (automáticos, no editables) -->
                         <div class="row g-3 mb-4">
                             <div class="col-md-4">
@@ -58,19 +80,32 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                         <div class="row g-3 mb-4">
                             <div class="col-md-4">
                                 <label class="form-label">Número de la AoAT o actividad <span class="text-danger">*</span></label>
-                                <input type="text" name="aoat_number" class="form-control" required>
+                                <input
+                                    type="text"
+                                    name="aoat_number"
+                                    class="form-control"
+                                    value="<?= htmlspecialchars((string) ($oldPayload['aoat_number'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    required
+                                >
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Fecha de la actividad <span class="text-danger">*</span></label>
-                                <input type="date" name="activity_date" class="form-control" required>
+                                <input
+                                    type="date"
+                                    name="activity_date"
+                                    class="form-control"
+                                    value="<?= htmlspecialchars((string) ($oldPayload['activity_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    required
+                                >
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Actividad que realizó <span class="text-danger">*</span></label>
+                                <?php $activityType = (string) ($oldPayload['activity_type'] ?? ''); ?>
                                 <select name="activity_type" class="form-select" required>
                                     <option value="">Seleccione una opción</option>
-                                    <option value="Asistencia técnica">Asistencia técnica</option>
-                                    <option value="Asesoría">Asesoría</option>
-                                    <option value="Actividad">Actividad</option>
+                                    <option value="Asistencia técnica" <?= $activityType === 'Asistencia técnica' ? 'selected' : '' ?>>Asistencia técnica</option>
+                                    <option value="Asesoría" <?= $activityType === 'Asesoría' ? 'selected' : '' ?>>Asesoría</option>
+                                    <option value="Actividad" <?= $activityType === 'Actividad' ? 'selected' : '' ?>>Actividad</option>
                                 </select>
                             </div>
                         </div>
@@ -78,7 +113,13 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                         <div class="row g-3 mb-4">
                             <div class="col-md-8">
                                 <label class="form-label">Con quién realizó la actividad <span class="text-danger">*</span></label>
-                                <input type="text" name="activity_with" class="form-control" required>
+                                <input
+                                    type="text"
+                                    name="activity_with"
+                                    class="form-control"
+                                    value="<?= htmlspecialchars((string) ($oldPayload['activity_with'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    required
+                                >
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Estado de la AoAT</label>
@@ -102,6 +143,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     name="subregion"
                                     class="form-select"
                                     data-subregion-select
+                                    data-current-value="<?= htmlspecialchars((string) ($record['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
                                 >
                                     <option value="">Seleccione la subregión que visitó</option>
@@ -113,6 +155,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     name="municipality"
                                     class="form-select"
                                     data-municipality-select
+                                    data-current-value="<?= htmlspecialchars((string) ($record['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
                                     disabled
                                 >
@@ -140,7 +183,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 1">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 1" <?= in_array('Módulo 1', $mesaSaludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 1: Conformación y fortalecimiento de la mesa.
                                             </label>
@@ -148,7 +191,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 2">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 2" <?= in_array('Módulo 2', $mesaSaludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 2: Secretaría técnica, reglamento y plan de acción.
                                             </label>
@@ -156,7 +199,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 3">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 3" <?= in_array('Módulo 3', $mesaSaludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 3: Convocatoria para conformar la mesa.
                                             </label>
@@ -164,7 +207,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="No aplica" <?= in_array('No aplica', $mesaSaludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -182,7 +225,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-6">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 4">
+                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 4" <?= in_array('Módulo 4', $ppmsmypaSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 4: Actualización de la política pública municipal de salud mental y prevención de las adicciones – ciclo agenda.
                                             </label>
@@ -190,7 +233,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-6">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 5">
+                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 5" <?= in_array('Módulo 5', $ppmsmypaSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 5: Actualización de la política pública municipal de salud mental y prevención de las adicciones - ciclo formulación de la política pública de salud mental.
                                             </label>
@@ -198,7 +241,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="No aplica" <?= in_array('No aplica', $ppmsmypaSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -215,7 +258,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 1">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 1" <?= in_array('Módulo 1', $saferSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 1: Socialización de la problemática pública del alcohol, generalidad estrategia SAFER, legislación actual.
                                             </label>
@@ -223,7 +266,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 2">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 2" <?= in_array('Módulo 2', $saferSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 2: Socialización de la problemática pública del alcohol, generalidad estrategia SAFER, legislación actual.
                                             </label>
@@ -231,7 +274,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 3">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 3" <?= in_array('Módulo 3', $saferSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 3: Legislación actual con énfasis en consumo de menores y mujeres en estado de gestación, socialización de la problemática pública del alcohol, violencias relacionadas por el alcohol.
                                             </label>
@@ -239,7 +282,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 4">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 4" <?= in_array('Módulo 4', $saferSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 4: Legislación actual con énfasis en consumo de menores y mujeres en estado de gestación, socialización de la problemática pública del alcohol.
                                             </label>
@@ -247,7 +290,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 5">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 5" <?= in_array('Módulo 5', $saferSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 5: Socialización de la problemática pública del alcohol, responsabilidad civil y penal.
                                             </label>
@@ -255,7 +298,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="safer[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="safer[]" value="No aplica" <?= in_array('No aplica', $saferSel, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -288,7 +331,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Abordaje del manejo de alcohol en el primer nivel de atención – Alcohol y embarazo.">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Abordaje del manejo de alcohol en el primer nivel de atención – Alcohol y embarazo." <?= in_array('Abordaje del manejo de alcohol en el primer nivel de atención – Alcohol y embarazo.', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Abordaje del manejo de alcohol en el primer nivel de atención – Alcohol y embarazo.
                                             </label>
@@ -296,7 +339,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Abordaje del manejo de tabaco en el primer nivel.">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Abordaje del manejo de tabaco en el primer nivel." <?= in_array('Abordaje del manejo de tabaco en el primer nivel.', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Abordaje del manejo de tabaco en el primer nivel.
                                             </label>
@@ -304,7 +347,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Adicciones en la baja complejidad">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Adicciones en la baja complejidad" <?= in_array('Adicciones en la baja complejidad', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Adicciones en la baja complejidad
                                             </label>
@@ -313,7 +356,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Conducta suicida">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Conducta suicida" <?= in_array('Conducta suicida', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Conducta suicida
                                             </label>
@@ -321,7 +364,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Desmonte de benzodiacepinas">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Desmonte de benzodiacepinas" <?= in_array('Desmonte de benzodiacepinas', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Desmonte de benzodiacepinas
                                             </label>
@@ -329,7 +372,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Desmonte de opioides">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Desmonte de opioides" <?= in_array('Desmonte de opioides', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Desmonte de opioides
                                             </label>
@@ -338,7 +381,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Epilepsia">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Epilepsia" <?= in_array('Epilepsia', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Epilepsia
                                             </label>
@@ -346,7 +389,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Intoxicaciones por medicamentos de control">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Intoxicaciones por medicamentos de control" <?= in_array('Intoxicaciones por medicamentos de control', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Intoxicaciones por medicamentos de control
                                             </label>
@@ -354,7 +397,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Manejo del dolor">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Manejo del dolor" <?= in_array('Manejo del dolor', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Manejo del dolor
                                             </label>
@@ -363,7 +406,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Paciente agitado">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Paciente agitado" <?= in_array('Paciente agitado', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Paciente agitado
                                             </label>
@@ -371,7 +414,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Pre Test">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Pre Test" <?= in_array('Pre Test', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Pre Test
                                             </label>
@@ -379,7 +422,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Post Test">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Post Test" <?= in_array('Post Test', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Post Test
                                             </label>
@@ -388,7 +431,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Afectivo Bipolar">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Afectivo Bipolar" <?= in_array('Trastorno Afectivo Bipolar', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastorno Afectivo Bipolar
                                             </label>
@@ -396,7 +439,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno de Déficit de Atención e Hiperactividad">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno de Déficit de Atención e Hiperactividad" <?= in_array('Trastorno de Déficit de Atención e Hiperactividad', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastorno de Déficit de Atención e Hiperactividad
                                             </label>
@@ -404,7 +447,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Depresivo">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Depresivo" <?= in_array('Trastorno Depresivo', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastorno Depresivo
                                             </label>
@@ -413,7 +456,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Psicótico">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastorno Psicótico" <?= in_array('Trastorno Psicótico', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastorno Psicótico
                                             </label>
@@ -421,7 +464,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastornos de Ansiedad">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastornos de Ansiedad" <?= in_array('Trastornos de Ansiedad', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastornos de Ansiedad
                                             </label>
@@ -429,7 +472,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastornos del sueño">
+                                            <input class="form-check-input" type="checkbox" name="temas_hospital[]" value="Trastornos del sueño" <?= in_array('Trastornos del sueño', $temasHospital, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastornos del sueño
                                             </label>
@@ -463,7 +506,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-12">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 1">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 1" <?= in_array('Módulo 1', $prevSuicidio, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 1: Evolución histórica del suicidio, aproximación conceptual de la conducta suicida, teorías explicativas de primera generación, teorías explicativas de segunda generación, factores de riesgo (biológicos, psiquiátricos, psicológicos y sociales), factores de protección, señales de alarma, ruta de atención y articulación intersectorial, notificación y seguimiento, plan de seguridad.
                                             </label>
@@ -471,7 +514,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 2">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 2" <?= in_array('Módulo 2', $prevSuicidio, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 2: Comunicación y suicidio como factor de riesgo y de protección, impacto del lenguaje y los mensajes, efecto Werther, efecto Papageno, principios de la comunicación responsable, recomendaciones de la OMS para medios y contextos comunitarios, pautas de lo que se debe y no se debe comunicar, aplicación del efecto Papageno en contextos comunitarios e institucionales, roles y responsabilidades de actores clave, poder de la narrativa y reducción del estigma, recursos y guías para la comunicación responsable.
                                             </label>
@@ -479,7 +522,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 3">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 3" <?= in_array('Módulo 3', $prevSuicidio, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 3: Concepto y alcances de la posvención, posvención como estrategia de prevención y salud pública, impacto psicosocial del suicidio, duelo por suicidio y sus particularidades, duelo y tamizajes para suicidio (RQC, SRQ, Whooley, GAD-2, Zarit, Plutchick, PHQ-9, C-SSRS), estigma y silencios, principios orientadores de la posvención, acciones de posvención en el territorio, acompañamiento a familias e instituciones, comunicación posterior a una muerte por suicidio, identificación y seguimiento de personas en riesgo, articulación con servicios de salud mental, autocuidado del profesional psicosocial.
                                             </label>
@@ -487,7 +530,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="No aplica" <?= in_array('No aplica', $prevSuicidio, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -505,7 +548,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-12">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 1">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 1" <?= in_array('Módulo 1', $prevViolencias, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 1: Definición, marco normativo, epidemiología, tipología, características.
                                             </label>
@@ -513,7 +556,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 2">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 2" <?= in_array('Módulo 2', $prevViolencias, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 2: Violencias interpersonales, violencia familiar y de pareja, violencia comunitaria, violencia juvenil, bullying.
                                             </label>
@@ -521,7 +564,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 3">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 3" <?= in_array('Módulo 3', $prevViolencias, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 3: Modelos de prevención de las violencias interpersonales (prevención universal, selectiva, indicada y de recurrencias), programas basados en la evidencia para la prevención de las violencias (modelo INSPIRE, modelo RESPETO y otros).
                                             </label>
@@ -529,7 +572,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="No aplica" <?= in_array('No aplica', $prevViolencias, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -547,7 +590,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-12">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 1">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 1" <?= in_array('Módulo 1', $prevAdicciones, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 1: Modelos explicativos (biopsicosocial, aprendizaje y condicionamiento), neurobiología de las adicciones, determinantes sociales, factores de riesgo y de protección, prevención basada en evidencia, influencia normativa.
                                             </label>
@@ -555,7 +598,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 2">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 2" <?= in_array('Módulo 2', $prevAdicciones, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 2: Comprensión de las adicciones según tipo de sustancia, dependencias comportamentales (juego patológico, nomofobia, juegos electrónicos, oniomanía, adicción al trabajo, vigorexia), cigarrillos electrónicos, cannabis, patología dual.
                                             </label>
@@ -563,7 +606,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 3">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 3" <?= in_array('Módulo 3', $prevAdicciones, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 3: Rutas de atención, tamizajes (ASSIST, AUDIT, CRAFFT, Fagerström), intervenciones (entrevista motivacional, intervención única, mindfulness), grupos de apoyo, reducción de riesgos y daños.
                                             </label>
@@ -571,7 +614,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-12 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="No aplica" <?= in_array('No aplica', $prevAdicciones, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -589,7 +632,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado al cuidador">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado al cuidador" <?= in_array('Cuidado al cuidador', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Cuidado al cuidador
                                             </label>
@@ -597,7 +640,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado del profesional – burnout">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado del profesional – burnout" <?= in_array('Cuidado del profesional – burnout', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Cuidado del profesional – burnout
                                             </label>
@@ -605,7 +648,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Estigma">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Estigma" <?= in_array('Estigma', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Estigma
                                             </label>
@@ -614,7 +657,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-6 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación" <?= in_array('Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación
                                             </label>
@@ -622,7 +665,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-6 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Primeros auxilios psicológicos e intervención en crisis">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Primeros auxilios psicológicos e intervención en crisis" <?= in_array('Primeros auxilios psicológicos e intervención en crisis', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Primeros auxilios psicológicos e intervención en crisis
                                             </label>
@@ -631,7 +674,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-6 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Trastornos mentales prioritarios de interés en salud pública">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Trastornos mentales prioritarios de interés en salud pública" <?= in_array('Trastornos mentales prioritarios de interés en salud pública', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Trastornos mentales prioritarios de interés en salud pública
                                             </label>
@@ -639,7 +682,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-6 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="No aplica">
+                                            <input class="form-check-input" type="checkbox" name="salud_mental[]" value="No aplica" <?= in_array('No aplica', $saludMental, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -656,7 +699,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="Competencias Parentales">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Competencias Parentales" <?= $proyectoSeleccionado === 'Competencias Parentales' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Competencias Parentales
                                             </label>
@@ -664,7 +707,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="Familias que se Cuidan">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Familias que se Cuidan" <?= $proyectoSeleccionado === 'Familias que se Cuidan' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Familias que se Cuidan
                                             </label>
@@ -672,7 +715,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="La Aventura de Crecer">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="La Aventura de Crecer" <?= $proyectoSeleccionado === 'La Aventura de Crecer' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 La Aventura de Crecer
                                             </label>
@@ -681,7 +724,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="Veredas que se Cuidan">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Veredas que se Cuidan" <?= $proyectoSeleccionado === 'Veredas que se Cuidan' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Veredas que se Cuidan
                                             </label>
@@ -689,7 +732,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="Dispositivos comunitarios">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Dispositivos comunitarios" <?= $proyectoSeleccionado === 'Dispositivos comunitarios' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Dispositivos comunitarios
                                             </label>
@@ -697,7 +740,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="Presentación del programa salud para el alma">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Presentación del programa salud para el alma" <?= $proyectoSeleccionado === 'Presentación del programa salud para el alma' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Presentación del programa salud para el alma
                                             </label>
@@ -706,7 +749,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
 
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="No aplica">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="No aplica" <?= $proyectoSeleccionado === 'No aplica' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 No aplica
                                             </label>
@@ -739,7 +782,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                 <div class="row">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Formación (desarrollo de capacidades)">
+                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Formación (desarrollo de capacidades)" <?= in_array('Formación (desarrollo de capacidades)', $actividadSocial, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Formación (desarrollo de capacidades)
                                             </label>
@@ -747,7 +790,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Espacio de articulación">
+                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Espacio de articulación" <?= in_array('Espacio de articulación', $actividadSocial, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Espacio de articulación
                                             </label>
@@ -755,7 +798,7 @@ $role = strtolower((string) ($professional['role'] ?? ''));
                                     </div>
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Actividad de apoyo">
+                                            <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Actividad de apoyo" <?= in_array('Actividad de apoyo', $actividadSocial, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Actividad de apoyo
                                             </label>

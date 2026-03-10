@@ -25,14 +25,20 @@ if (Config::isDev()) {
     error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
 }
 
-// Configuración de sesión
+// Configuración de sesión (secure = true solo con HTTPS para que la cookie se guarde en HTTP/incógnito)
+$sessionSecure = Config::env('SESSION_SECURE');
+if ($sessionSecure === null || $sessionSecure === '') {
+    $sessionSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== '' && $_SERVER['HTTPS'] !== 'off';
+} else {
+    $sessionSecure = filter_var($sessionSecure, FILTER_VALIDATE_BOOLEAN);
+}
 session_name((string) Config::env('SESSION_NAME', 'accion_territorio'));
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
     'domain' => '',
-    'secure' => (bool) Config::env('SESSION_SECURE', false),
-    'httponly' => (bool) Config::env('SESSION_HTTP_ONLY', true),
+    'secure' => $sessionSecure,
+    'httponly' => filter_var(Config::env('SESSION_HTTP_ONLY', true), FILTER_VALIDATE_BOOLEAN),
     'samesite' => (string) Config::env('SESSION_SAME_SITE', 'Lax'),
 ]);
 session_start();
