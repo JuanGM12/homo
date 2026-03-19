@@ -414,9 +414,20 @@ final class EvaluacionesController
         }
 
         $repo = new TestResponseRepository();
-        $exists = $repo->existsForPerson($testKey, 'pre', $documentNumber);
+        $pre = $repo->findByPerson($testKey, 'pre', $documentNumber);
+        $exists = $pre !== null;
 
-        return Response::json(['ok' => true, 'exists' => $exists]);
+        return Response::json([
+            'ok' => true,
+            'exists' => $exists,
+            'pre' => $exists ? [
+                'first_name' => (string) ($pre['first_name'] ?? ''),
+                'last_name' => (string) ($pre['last_name'] ?? ''),
+                'subregion' => (string) ($pre['subregion'] ?? ''),
+                'municipality' => (string) ($pre['municipality'] ?? ''),
+                'profession' => (string) ($pre['profession'] ?? ''),
+            ] : null,
+        ]);
     }
 
     private function storePreHospitales(Request $request): Response
@@ -1260,20 +1271,7 @@ final class EvaluacionesController
         ];
 
         if ($currentUser !== null) {
-            $fullName = trim((string) ($currentUser['name'] ?? ''));
-            $firstName = '';
-            $lastName = '';
-            if ($fullName !== '') {
-                $parts = preg_split('/\s+/', $fullName) ?: [];
-                if (count($parts) > 0) {
-                    $firstName = (string) array_shift($parts);
-                    $lastName = trim(implode(' ', $parts));
-                }
-            }
-
             $prefill['document_number'] = (string) ($currentUser['document_number'] ?? '');
-            $prefill['first_name'] = $firstName;
-            $prefill['last_name'] = $lastName;
         }
 
         return Response::view('evaluaciones/form', [

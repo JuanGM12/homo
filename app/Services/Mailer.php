@@ -83,7 +83,12 @@ final class Mailer
     /**
      * Envía un reporte semanal de AoAT a la coordinadora.
      */
-    public function sendAoatWeeklyReport(string $htmlBody, string $subject = 'Reporte semanal AoAT'): void
+    public function sendAoatWeeklyReport(
+        string $htmlBody,
+        string $subject = 'Reporte semanal AoAT',
+        ?string $pdfBinary = null,
+        ?string $pdfFilename = null
+    ): void
     {
         $toEmail = (string) Config::env('AOAT_COORDINATOR_EMAIL', '');
         $toName = (string) Config::env('AOAT_COORDINATOR_NAME', 'Coordinadora Acción en Territorio');
@@ -94,11 +99,31 @@ final class Mailer
 
         try {
             $this->mailer->clearAllRecipients();
+            $this->mailer->clearAttachments();
             $this->mailer->addAddress($toEmail, $toName);
 
             $this->mailer->isHTML(true);
             $this->mailer->Subject = $subject;
+
+            $logoHomo = dirname(__DIR__, 2) . '/public/assets/img/logoHomo.png';
+            $logoAntioquia = dirname(__DIR__, 2) . '/public/assets/img/logoAntioquia.png';
+            if (is_readable($logoHomo)) {
+                $this->mailer->addEmbeddedImage($logoHomo, 'logo_homo');
+            }
+            if (is_readable($logoAntioquia)) {
+                $this->mailer->addEmbeddedImage($logoAntioquia, 'logo_antioquia');
+            }
+
             $this->mailer->Body = $htmlBody;
+
+            if ($pdfBinary !== null && $pdfBinary !== '') {
+                $this->mailer->addStringAttachment(
+                    $pdfBinary,
+                    $pdfFilename ?: ('reporte_semanal_aoat_' . date('Ymd_His') . '.pdf'),
+                    PHPMailer::ENCODING_BASE64,
+                    'application/pdf'
+                );
+            }
 
             $this->mailer->send();
         } catch (Exception $e) {

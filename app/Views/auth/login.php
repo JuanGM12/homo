@@ -7,14 +7,17 @@
                 <div class="auth-hero-content">
                     <div class="auth-hero-logo mb-3">
                         <span class="auth-hero-logo-mark">
-                            <i class="bi bi-heart-pulse-fill"></i>
+                            <img src="/assets/img/logoHomo.png" alt="Logo HOMO" class="auth-logo-homo">
                         </span>
                         <span class="auth-hero-logo-text">
                             Acción en Territorio
                         </span>
                     </div>
+                    <div class="auth-hero-logo-gob mb-3">
+                        <img src="/assets/img/logoAntioquia.png" alt="Gobernación de Antioquia" class="auth-logo-antioquia">
+                    </div>
                     <h1 class="auth-hero-title mb-3">
-                        Bienvenido al módulo de gestión
+                        Equipo de Promoción y Prevención
                     </h1>
                     <p class="auth-hero-subtitle mb-0">
                         Registra acciones en territorio, planea tus actividades y realiza el seguimiento clínico en un solo lugar, de forma segura.
@@ -28,9 +31,7 @@
                 <div class="card-body p-4 p-md-5">
                     <div class="text-center mb-4">
                         <div class="auth-card-logo mb-3">
-                            <span class="avatar-circle avatar-circle-lg bg-primary-subtle text-primary">
-                                <i class="bi bi-heart-pulse-fill"></i>
-                            </span>
+                            <img src="/assets/img/logoHomo.png" alt="Logo HOMO" class="auth-card-logo-homo">
                         </div>
                         <h2 class="h4 fw-semibold mb-1">Iniciar sesión</h2>
                         <p class="text-muted small mb-0">
@@ -48,8 +49,7 @@
                                 name="email"
                                 required
                                 autofocus
-                                autocomplete="email"
-                            >
+                                autocomplete="email">
                         </div>
                         <div class="mb-2">
                             <label for="password" class="form-label d-flex justify-content-between align-items-center">
@@ -61,8 +61,7 @@
                                 id="password"
                                 name="password"
                                 required
-                                autocomplete="current-password"
-                            >
+                                autocomplete="current-password">
                         </div>
                         <div class="mb-4 d-flex justify-content-end">
                             <a href="/recuperar-clave" class="auth-link-small">¿Olvidaste tu contraseña?</a>
@@ -74,12 +73,5 @@
                     </form>
                 </div>
             </div>
-            <div class="mb-4">
-                <label for="password" class="form-label">Contraseña</label>
-                <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn btn-primary w-100">Ingresar</button>
-        </form>
-    </div>
+        </div>
 </section>
-

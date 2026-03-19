@@ -52,14 +52,18 @@
                             </div>
                         </div>
 
-                        <div class="alert alert-warning border-0 small">
-                            El reporte se enviará automáticamente al correo definido en la configuración
-                            (<code>AOAT_COORDINATOR_EMAIL</code>). Asegúrate de que los datos de correo estén correctamente
-                            configurados en el servidor.
+                        <div class="alert alert-info border-0 small">
+                            Puedes descargar el reporte semanal en PDF con identidad institucional
+                            o enviarlo directamente al correo de coordinación
+                            (<code>AOAT_COORDINATOR_EMAIL</code>).
                         </div>
 
-                        <div class="d-flex justify-content-end">
-                            <button type="submit" class="btn btn-primary">
+                        <div class="d-flex justify-content-end flex-wrap gap-2">
+                            <button type="submit" name="action" value="pdf" class="btn btn-outline-primary">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>
+                                Descargar PDF
+                            </button>
+                            <button type="submit" name="action" value="email" class="btn btn-primary">
                                 <i class="bi bi-envelope-check me-1"></i>
                                 Generar y enviar reporte
                             </button>

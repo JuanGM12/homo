@@ -10,6 +10,8 @@ use App\Repositories\AoatRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\Mailer;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 final class AoatController
 {
@@ -233,7 +235,7 @@ final class AoatController
         if ($user === null) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanAccessAoat($user)) {
+        if (!$this->userCanGenerateWeeklyReport($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -254,7 +256,7 @@ final class AoatController
         if ($user === null) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanAccessAoat($user)) {
+        if (!$this->userCanGenerateWeeklyReport($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -291,35 +293,35 @@ final class AoatController
             return Response::redirect('/aoat/reportes');
         }
 
-        $repo = new AoatRepository();
+        $action = trim((string) $request->input('action', 'email'));
+        $reportData = $this->buildWeeklyReportData($fromDate, $toDate);
+        $subject = sprintf('Reporte semanal AoAT (%s a %s)', $fromDate, $toDate);
 
-        // Cargamos por rol según los nombres que estamos usando en la base de datos
-        $psychRows = $repo->findByRoleAndDateRange('psicologo', $fromDate, $toDate);
-        $socialRows = $repo->findByRoleAndDateRange('profesional social', $fromDate, $toDate);
-        $medicRows = $repo->findByRoleAndDateRange('medico', $fromDate, $toDate);
-        $lawRows = $repo->findByRoleAndDateRange('abogado', $fromDate, $toDate);
+        if ($action === 'pdf') {
+            $pdfBinary = $this->renderWeeklyReportPdf($fromDate, $toDate, $reportData);
+            $filename = 'reporte_semanal_aoat_' . $fromDate . '_a_' . $toDate . '.pdf';
 
-        $htmlSections = [];
-        $htmlSections[] = $this->buildReportTableHtml('Psicólogos', $psychRows);
-        $htmlSections[] = $this->buildReportTableHtml('Profesionales Sociales', $socialRows);
-        $htmlSections[] = $this->buildReportTableHtml('Médicos', $medicRows);
-        $htmlSections[] = $this->buildReportTableHtml('Abogados', $lawRows);
+            return new Response($pdfBinary, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
+        }
 
-        $htmlBody = sprintf(
-            '<p>Reporte semanal de AoAT desde el %s hasta el %s.</p>%s<p>Este reporte fue generado automáticamente desde la plataforma Acción en Territorio.</p>',
-            htmlspecialchars($fromDate, ENT_QUOTES, 'UTF-8'),
-            htmlspecialchars($toDate, ENT_QUOTES, 'UTF-8'),
-            implode('', $htmlSections)
-        );
+        $htmlForEmail = $this->buildWeeklyReportHtml($fromDate, $toDate, $reportData, false);
+        $pdfBinary = $this->renderWeeklyReportPdf($fromDate, $toDate, $reportData);
 
         $mailer = new Mailer();
-        $subject = sprintf('Reporte semanal AoAT (%s a %s)', $fromDate, $toDate);
-        $mailer->sendAoatWeeklyReport($htmlBody, $subject);
+        $mailer->sendAoatWeeklyReport(
+            $htmlForEmail,
+            $subject,
+            $pdfBinary,
+            'reporte_semanal_aoat_' . $fromDate . '_a_' . $toDate . '.pdf'
+        );
 
         Flash::set([
             'type' => 'success',
             'title' => 'Reporte enviado',
-            'message' => 'El reporte semanal se ha generado y enviado al correo de la coordinación (si la configuración de correo es correcta).',
+            'message' => 'El reporte semanal fue enviado al correo de coordinación con el PDF adjunto.',
         ]);
 
         return Response::redirect('/aoat/reportes');
@@ -708,6 +710,14 @@ final class AoatController
         return (bool) array_intersect($allowed, $roles);
     }
 
+    private function userCanGenerateWeeklyReport(array $user): bool
+    {
+        $roles = $user['roles'] ?? [];
+        return in_array('admin', $roles, true)
+            || in_array('coordinadora', $roles, true)
+            || in_array('coordinador', $roles, true);
+    }
+
     /**
      * Renderiza solo las filas de la tabla de AoAT (para AJAX).
      *
@@ -742,70 +752,186 @@ final class AoatController
         return $payload;
     }
 
-    private function buildReportTableHtml(string $title, array $rows): string
+    /**
+     * @return array<int,array{title:string,rows:array}>
+     */
+    private function buildWeeklyReportData(string $fromDate, string $toDate): array
     {
-        if ($rows === []) {
-            return sprintf('<h2 style="font-size:16px;margin-top:24px;">%s</h2><p>No se encontraron registros en el rango de fechas.</p>', htmlspecialchars($title, ENT_QUOTES, 'UTF-8'));
+        $repo = new AoatRepository();
+
+        return [
+            [
+                'title' => 'Psicólogos',
+                'rows' => $repo->findByRoleAndDateRange('psicologo', $fromDate, $toDate),
+            ],
+            [
+                'title' => 'Profesionales Sociales',
+                'rows' => $repo->findByRoleAndDateRange('profesional social', $fromDate, $toDate),
+            ],
+            [
+                'title' => 'Médicos',
+                'rows' => $repo->findByRoleAndDateRange('medico', $fromDate, $toDate),
+            ],
+            [
+                'title' => 'Abogados',
+                'rows' => $repo->findByRoleAndDateRange('abogado', $fromDate, $toDate),
+            ],
+        ];
+    }
+
+    /**
+     * @param array<int,array{title:string,rows:array}> $reportData
+     */
+    private function buildWeeklyReportHtml(string $fromDate, string $toDate, array $reportData, bool $forPdf): string
+    {
+        $logoHomo = dirname(__DIR__, 2) . '/public/assets/img/logoHomo.png';
+        $logoAntioquia = dirname(__DIR__, 2) . '/public/assets/img/logoAntioquia.png';
+
+        $logoHomoSrc = $forPdf ? $this->toImageDataUri($logoHomo) : 'cid:logo_homo';
+        $logoAntioquiaSrc = $forPdf ? $this->toImageDataUri($logoAntioquia) : 'cid:logo_antioquia';
+
+        $totalRows = 0;
+        foreach ($reportData as $section) {
+            $totalRows += count($section['rows'] ?? []);
         }
 
-        $header = sprintf('<h2 style="font-size:16px;margin-top:24px;">%s</h2>', htmlspecialchars($title, ENT_QUOTES, 'UTF-8'));
+        $html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte semanal AoAT</title>';
+        $html .= '<style>
+            body{font-family:DejaVu Sans,Arial,sans-serif;color:#2a5543;font-size:12px;margin:0;padding:0;background:#ffffff;}
+            .page{padding:18px 20px;}
+            .header{border:1px solid #9ac6eb;border-radius:10px;padding:12px;background:#e5d9cc;}
+            .header-top{width:100%;border-collapse:collapse;}
+            .header-top td{vertical-align:middle;}
+            .logo-homo{height:54px;}
+            .logo-ant{height:54px;}
+            .title{font-size:18px;font-weight:700;color:#4160a4;margin:4px 0 2px;}
+            .subtitle{font-size:12px;color:#2a5543;margin:0;}
+            .meta{margin-top:10px;font-size:11px;color:#2a5543;}
+            .summary{margin-top:12px;padding:8px 10px;border:1px solid #9ac6eb;border-radius:8px;background:#fff;}
+            .summary strong{color:#4160a4;}
+            .section{margin-top:16px;}
+            .section h2{font-size:14px;color:#4160a4;margin:0 0 8px;padding:6px 8px;background:#9ac6eb;border-radius:6px;}
+            table{width:100%;border-collapse:collapse;}
+            th,td{border:1px solid #d8e8f5;padding:5px 6px;vertical-align:top;}
+            th{background:#f4eee7;color:#2a5543;font-weight:700;font-size:11px;}
+            td{font-size:11px;color:#2a5543;}
+            .empty{padding:10px;border:1px dashed #9ac6eb;border-radius:6px;background:#fff;color:#4160a4;}
+            .footer{margin-top:14px;font-size:10px;color:#5b6d8f;}
+        </style></head><body><div class="page">';
 
-        $table = '<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:16px;"><thead><tr>'
-            . '<th>Fecha de la actividad</th>'
-            . '<th>Profesional</th>'
-            . '<th>Actividad que realizó</th>'
-            . '<th>ROL</th>'
-            . '<th>Acciones</th>'
-            . '<th>Subregión</th>'
-            . '<th>Municipio</th>'
-            . '</tr></thead><tbody>';
+        $html .= '<div class="header"><table class="header-top"><tr>';
+        $html .= '<td style="width:30%;"><img src="' . htmlspecialchars($logoAntioquiaSrc, ENT_QUOTES, 'UTF-8') . '" alt="Gobernación de Antioquia" class="logo-ant"></td>';
+        $html .= '<td style="width:40%;text-align:center;"><p class="title">Reporte semanal AoAT</p><p class="subtitle">Acción en Territorio · Equipo de Promoción y Prevención</p></td>';
+        $html .= '<td style="width:30%;text-align:right;"><img src="' . htmlspecialchars($logoHomoSrc, ENT_QUOTES, 'UTF-8') . '" alt="HOMO" class="logo-homo"></td>';
+        $html .= '</tr></table>';
+        $html .= '<p class="meta">Rango de fechas: <strong>' . htmlspecialchars($fromDate, ENT_QUOTES, 'UTF-8') . '</strong> a <strong>' . htmlspecialchars($toDate, ENT_QUOTES, 'UTF-8') . '</strong></p>';
+        $html .= '<div class="summary">Total de registros AoAT en el periodo: <strong>' . $totalRows . '</strong></div></div>';
 
-        foreach ($rows as $row) {
-            $payload = [];
-            if (isset($row['payload']) && $row['payload'] !== null) {
-                $decoded = json_decode((string) $row['payload'], true);
-                if (is_array($decoded)) {
-                    $payload = $decoded;
-                }
+        foreach ($reportData as $section) {
+            $title = (string) ($section['title'] ?? '');
+            $rows = $section['rows'] ?? [];
+            $html .= '<div class="section"><h2>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h2>';
+
+            if ($rows === []) {
+                $html .= '<div class="empty">No se encontraron registros en el rango de fechas.</div></div>';
+                continue;
             }
 
-            $activityDate = (string) ($row['activity_date_json'] ?? '');
-            $formattedDate = $activityDate;
-            if ($activityDate !== '') {
-                try {
-                    $dt = new \DateTimeImmutable($activityDate);
-                    $formattedDate = $dt->format('d/m/Y');
-                } catch (\Exception) {
-                    // dejamos el valor original
+            $html .= '<table><thead><tr>'
+                . '<th>Fecha actividad</th>'
+                . '<th>Profesional</th>'
+                . '<th>Actividad</th>'
+                . '<th>Rol</th>'
+                . '<th>Acciones</th>'
+                . '<th>Subregión</th>'
+                . '<th>Municipio</th>'
+                . '</tr></thead><tbody>';
+
+            foreach ($rows as $row) {
+                $payload = [];
+                if (isset($row['payload']) && $row['payload'] !== null) {
+                    $decoded = json_decode((string) $row['payload'], true);
+                    if (is_array($decoded)) {
+                        $payload = $decoded;
+                    }
                 }
+
+                $activityDate = (string) ($row['activity_date_json'] ?? '');
+                $formattedDate = $activityDate;
+                if ($activityDate !== '') {
+                    try {
+                        $dt = new \DateTimeImmutable($activityDate);
+                        $formattedDate = $dt->format('d/m/Y');
+                    } catch (\Exception) {
+                    }
+                }
+
+                $professionalFullName = trim((string) ($row['professional_name'] ?? '') . ' ' . (string) ($row['professional_last_name'] ?? ''));
+                $activityType = (string) ($row['activity_type_json'] ?? '');
+                $role = (string) ($row['professional_role'] ?? '');
+                $roleLabel = ucwords(str_replace('_', ' ', $role));
+                $actions = $this->buildActionsSummary($role, $payload);
+                $subregion = (string) ($row['subregion'] ?? '');
+                $municipality = (string) ($row['municipality'] ?? '');
+
+                $html .= '<tr>'
+                    . '<td>' . htmlspecialchars($formattedDate, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($professionalFullName, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($activityType, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($actions, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($subregion, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($municipality, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '</tr>';
             }
 
-            $professionalFullName = trim((string) ($row['professional_name'] ?? '') . ' ' . (string) ($row['professional_last_name'] ?? ''));
-            $activityType = (string) ($row['activity_type_json'] ?? '');
-
-            $role = (string) ($row['professional_role'] ?? '');
-            $roleLabel = ucwords(str_replace('_', ' ', $role));
-
-            $actions = $this->buildActionsSummary($role, $payload);
-
-            $subregion = (string) ($row['subregion'] ?? '');
-            $municipality = (string) ($row['municipality'] ?? '');
-
-            $table .= sprintf(
-                '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
-                htmlspecialchars($formattedDate, ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($professionalFullName, ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($activityType, ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($actions, ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($subregion, ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($municipality, ENT_QUOTES, 'UTF-8')
-            );
+            $html .= '</tbody></table></div>';
         }
 
-        $table .= '</tbody></table>';
+        $html .= '<p class="footer">Documento generado automáticamente desde la plataforma Acción en Territorio.</p>';
+        $html .= '</div></body></html>';
 
-        return $header . $table;
+        return $html;
+    }
+
+    private function toImageDataUri(string $path): string
+    {
+        if (!is_readable($path)) {
+            return '';
+        }
+
+        $binary = file_get_contents($path);
+        if ($binary === false) {
+            return '';
+        }
+
+        $mime = 'image/png';
+        if (function_exists('mime_content_type')) {
+            $detected = mime_content_type($path);
+            if (is_string($detected) && $detected !== '') {
+                $mime = $detected;
+            }
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($binary);
+    }
+
+    /**
+     * @param array<int,array{title:string,rows:array}> $reportData
+     */
+    private function renderWeeklyReportPdf(string $fromDate, string $toDate, array $reportData): string
+    {
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $options->set('isHtml5ParserEnabled', true);
+
+        $dompdf = new Dompdf($options);
+        $html = $this->buildWeeklyReportHtml($fromDate, $toDate, $reportData, true);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        return $dompdf->output();
     }
 
     private function buildActionsSummary(string $role, array $payload): string

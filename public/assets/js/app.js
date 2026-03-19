@@ -88,6 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     postForms.forEach((form) => {
         const docInput = form.querySelector('input[name="document_number"]');
+        const firstNameInput = form.querySelector('input[name="first_name"]');
+        const lastNameInput = form.querySelector('input[name="last_name"]');
+        const subregionSelect = form.querySelector('select[name="subregion"]');
+        const municipalitySelect = form.querySelector('select[name="municipality"]');
+        const professionInput = form.querySelector('input[name="profession"]');
         const submitButton = form.querySelector('button[type="submit"]');
         let preExists = false;
 
@@ -143,12 +148,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 .then((data) => {
                     if (!data.exists) {
                         preExists = false;
+                        if (firstNameInput) firstNameInput.value = '';
+                        if (lastNameInput) lastNameInput.value = '';
+                        if (subregionSelect) subregionSelect.value = '';
+                        if (municipalitySelect) municipalitySelect.value = '';
+                        if (professionInput) professionInput.value = '';
                         if (submitButton) {
                             submitButton.disabled = true;
                         }
                         showPreRequiredAlert();
                     } else {
                         preExists = true;
+                        const pre = data.pre || {};
+                        if (firstNameInput && pre.first_name) firstNameInput.value = pre.first_name;
+                        if (lastNameInput && pre.last_name) lastNameInput.value = pre.last_name;
+                        if (professionInput && pre.profession) professionInput.value = pre.profession;
+
+                        // Intentar rellenar subregión/municipio igual al PRE
+                        if (subregionSelect && pre.subregion) {
+                            subregionSelect.value = pre.subregion;
+                            subregionSelect.dispatchEvent(new Event('change'));
+                        }
+                        if (municipalitySelect && pre.municipality) {
+                            setTimeout(() => {
+                                municipalitySelect.value = pre.municipality;
+                            }, 50);
+                        }
+
                         if (submitButton) {
                             submitButton.disabled = false;
                         }

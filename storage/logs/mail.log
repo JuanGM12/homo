@@ -1,1 +1,2 @@
 [2026-03-10 12:37:54] context=password_reset to=juandipa2112@gmail.com error="SMTP Error: Could not connect to SMTP host." extra={}
+[2026-03-19 07:25:20] context=aoat_weekly_report to=juandipa2112@gmail.com error="SMTP Error: Could not connect to SMTP host. Failed to connect to server" extra={"subject":"Reporte semanal AoAT (2026-03-12 a 2026-03-19)"}

@@ -18,8 +18,9 @@ final class UserRepository
         $params = [];
 
         if (!empty($filters['query'])) {
-            $where[] = '(u.name LIKE :q OR u.email LIKE :q)';
-            $params[':q'] = '%' . $filters['query'] . '%';
+            $where[] = '(u.name LIKE :q_name OR u.email LIKE :q_email)';
+            $params[':q_name'] = '%' . $filters['query'] . '%';
+            $params[':q_email'] = '%' . $filters['query'] . '%';
         }
 
         if (!empty($filters['role'])) {

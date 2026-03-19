@@ -9,8 +9,9 @@ $userId = $user['id'] ?? null;
 $userRoles = $user['roles'] ?? [];
 $isAudit = (bool) ($isAuditView ?? false);
 $isSpecialist = in_array('especialista', $userRoles ?? [], true);
-$isCoordinator = in_array('coordinadora', $userRoles ?? [], true);
+$isCoordinator = in_array('coordinadora', $userRoles ?? [], true) || in_array('coordinador', $userRoles ?? [], true);
 $isAdmin = in_array('admin', $userRoles ?? [], true);
+$canUseWeeklyReport = $isAdmin || $isCoordinator;
 $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
 ?>
 
@@ -31,11 +32,14 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
                     <i class="bi bi-download me-1"></i>
                     Exportar CSV
                 </a>
-            <?php else: ?>
+            <?php endif; ?>
+            <?php if ($canUseWeeklyReport): ?>
                 <a href="/aoat/reportes" class="btn btn-outline-secondary">
                     <i class="bi bi-file-earmark-spreadsheet me-1"></i>
                     Reporte semanal
                 </a>
+            <?php endif; ?>
+            <?php if (!$isAudit): ?>
                 <a href="/aoat/nueva" class="btn btn-primary">
                     <i class="bi bi-plus-circle me-1"></i>
                     Nueva AoAT
