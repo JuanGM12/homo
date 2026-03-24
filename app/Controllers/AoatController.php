@@ -10,6 +10,7 @@ use App\Repositories\AoatRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\Mailer;
+use App\Services\PdfImageHelper;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
@@ -32,7 +33,8 @@ final class AoatController
         $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
         $isAdmin = in_array('admin', $roles, true);
 
-        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
@@ -63,6 +65,10 @@ final class AoatController
         } else {
             // Vista de profesional: solo sus propios registros.
             $records = $repo->findForUser((int) $user['id']);
+        }
+
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
         // Filtros en memoria (suficiente para el volumen esperado)
@@ -182,6 +188,27 @@ final class AoatController
                 'type' => 'error',
                 'title' => 'Campos obligatorios incompletos',
                 'message' => 'Por favor completa todos los campos requeridos.',
+            ]);
+
+            return Response::redirect('/aoat/nueva');
+        }
+
+        if (!$this->isActivityDateYear2026OrLater($activityDate)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Fecha de la actividad no válida',
+                'message' => 'La fecha de la actividad no puede ser anterior al 1 de enero de 2026.',
+            ]);
+
+            return Response::redirect('/aoat/nueva');
+        }
+
+        $qualError = $this->validateAoatQualificationSections($request, $user);
+        if ($qualError !== null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Cualificación incompleta',
+                'message' => $qualError,
             ]);
 
             return Response::redirect('/aoat/nueva');
@@ -341,10 +368,11 @@ final class AoatController
         $roles = $user['roles'] ?? [];
 
         $isSpecialist = in_array('especialista', $roles, true);
-        $isCoordinator = in_array('coordinadora', $roles, true);
+        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
         $isAdmin = in_array('admin', $roles, true);
 
-        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
@@ -370,6 +398,10 @@ final class AoatController
             $records = $repo->findForAudit($auditRoles);
         } else {
             $records = $repo->findForUser((int) $user['id']);
+        }
+
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
         if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
@@ -493,6 +525,16 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
+        if (($record['state'] ?? '') === 'Realizado') {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'En revisión del especialista',
+                'message' => 'Este registro está en estado "Realizado" a la espera de aprobación. No puedes editarlo hasta que el especialista lo apruebe o lo devuelva nuevamente.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
         $professional = [
             'id' => (int) $user['id'],
             'name' => (string) ($user['name'] ?? ''),
@@ -548,6 +590,16 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
+        if (($record['state'] ?? '') === 'Realizado') {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'En revisión del especialista',
+                'message' => 'No puedes editar un registro en estado "Realizado" hasta que el especialista lo apruebe o lo devuelva.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
         // Datos propios del registro de la AoAT
         $aoatNumber = trim((string) $request->input('aoat_number', ''));
         $activityDate = trim((string) $request->input('activity_date', ''));
@@ -568,6 +620,27 @@ final class AoatController
                 'type' => 'error',
                 'title' => 'Campos obligatorios incompletos',
                 'message' => 'Por favor completa todos los campos requeridos.',
+            ]);
+
+            return Response::redirect('/aoat/editar?id=' . $id);
+        }
+
+        if (!$this->isActivityDateYear2026OrLater($activityDate)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Fecha de la actividad no válida',
+                'message' => 'La fecha de la actividad no puede ser anterior al 1 de enero de 2026.',
+            ]);
+
+            return Response::redirect('/aoat/editar?id=' . $id);
+        }
+
+        $qualError = $this->validateAoatQualificationSections($request, $user);
+        if ($qualError !== null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Cualificación incompleta',
+                'message' => $qualError,
             ]);
 
             return Response::redirect('/aoat/editar?id=' . $id);
@@ -602,9 +675,9 @@ final class AoatController
 
     /**
      * Cambio de estado por parte de especialistas / coordinación.
-     * Solo permite transiciones:
-     *  - Asignada -> Aprobada
-     *  - Asignada -> Devuelta (requiere motivo y observación, y envía correo).
+     * Transiciones:
+     *  - Asignada → Aprobada | Devuelta (Devuelta envía correo al profesional, fuera de la petición HTTP).
+     *  - Realizado → Aprobada (tras ajustes del profesional).
      */
     public function updateState(Request $request): Response
     {
@@ -614,7 +687,10 @@ final class AoatController
         }
 
         $roles = $user['roles'] ?? [];
-        $canAudit = in_array('especialista', $roles, true) || in_array('coordinadora', $roles, true) || in_array('admin', $roles, true);
+        $canAudit = in_array('especialista', $roles, true)
+            || in_array('coordinadora', $roles, true)
+            || in_array('coordinador', $roles, true)
+            || in_array('admin', $roles, true);
         if (!$canAudit) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
@@ -646,17 +722,30 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
-        if (($record['state'] ?? '') !== 'Asignada') {
+        // No auditar el propio registro
+        if ((int) ($record['user_id'] ?? 0) === (int) ($user['id'] ?? 0)) {
             Flash::set([
                 'type' => 'error',
-                'title' => 'Estado no válido',
-                'message' => 'Solo puedes cambiar registros en estado "Asignada".',
+                'title' => 'Acción no permitida',
+                'message' => 'No puedes auditar tus propios registros de AoAT.',
             ]);
 
             return Response::redirect('/aoat');
         }
 
+        $current = (string) ($record['state'] ?? '');
+
         if ($newState === 'Devuelta') {
+            if ($current !== 'Asignada') {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Estado no válido',
+                    'message' => 'Solo se puede devolver una AoAT que esté en estado "Asignada".',
+                ]);
+
+                return Response::redirect('/aoat');
+            }
+
             $allowedMotives = ['Sin Cargar en AoAT', 'Sin cargar en Drive'];
             if ($observation === '' || !in_array($motive, $allowedMotives, true)) {
                 Flash::set([
@@ -674,19 +763,25 @@ final class AoatController
                 'audit_motive' => $motive,
             ]);
 
-            // Notificar al profesional
             $toEmail = (string) ($record['professional_email'] ?? '');
             $toName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
-            $mailer = new Mailer();
-            $mailer->sendAoatReturnedNotification($toEmail, $toName, $observation, $motive, $id);
+            Mailer::scheduleAoatReturnedNotification($toEmail, $toName, $observation, $motive, $id);
 
             Flash::set([
                 'type' => 'success',
                 'title' => 'AoAT devuelta',
-                'message' => 'El estado de la AoAT se actualizó a "Devuelta" y se notificó al profesional.',
+                'message' => 'El estado se actualizó a "Devuelta". El profesional recibirá un correo con la notificación en breve.',
             ]);
-        } else {
-            // Aprobada
+
+            return Response::redirect('/aoat');
+        }
+
+        // Aprobada
+        if ($newState !== 'Aprobada') {
+            return Response::redirect('/aoat');
+        }
+
+        if ($current === 'Asignada') {
             $repo->update($id, [
                 'state' => 'Aprobada',
                 'audit_observation' => null,
@@ -698,7 +793,80 @@ final class AoatController
                 'title' => 'AoAT aprobada',
                 'message' => 'La AoAT ha sido aprobada. El registro queda cerrado para nuevas modificaciones.',
             ]);
+
+            return Response::redirect('/aoat');
         }
+
+        if ($current === 'Realizado') {
+            $repo->update($id, [
+                'state' => 'Aprobada',
+                'audit_observation' => null,
+                'audit_motive' => null,
+            ]);
+
+            Flash::set([
+                'type' => 'success',
+                'title' => 'AoAT aprobada',
+                'message' => 'Se aprobó el registro tras la revisión de los ajustes realizados por el profesional.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        Flash::set([
+            'type' => 'error',
+            'title' => 'Estado no válido',
+            'message' => 'No puedes aprobar desde el estado actual. Si fue devuelta, el profesional debe marcarla como "Realizado" antes.',
+        ]);
+
+        return Response::redirect('/aoat');
+    }
+
+    /**
+     * El profesional marca su AoAT como "Realizado" tras los ajustes solicitados (solo desde "Devuelta").
+     */
+    public function markAsRealizado(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return Response::redirect('/aoat');
+        }
+
+        $repo = new AoatRepository();
+        $record = $repo->findById($id);
+
+        if ($record === null || (int) $record['user_id'] !== (int) ($user['id'] ?? 0)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No autorizado',
+                'message' => 'No puedes modificar este registro.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if (($record['state'] ?? '') !== 'Devuelta') {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Estado no válido',
+                'message' => 'Solo puedes marcar como "Realizado" cuando la AoAT está en estado "Devuelta".',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $repo->update($id, ['state' => 'Realizado']);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Estado actualizado',
+            'message' => 'Marcaste la AoAT como "Realizado". El especialista podrá revisarla y aprobarla.',
+        ]);
 
         return Response::redirect('/aoat');
     }
@@ -719,6 +887,18 @@ final class AoatController
     }
 
     /**
+     * Seguimiento AoAT: la fecha de la actividad no puede ser anterior a 2026.
+     */
+    private function isActivityDateYear2026OrLater(string $dateYmd): bool
+    {
+        if ($dateYmd === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateYmd)) {
+            return false;
+        }
+
+        return $dateYmd >= '2026-01-01';
+    }
+
+    /**
      * Renderiza solo las filas de la tabla de AoAT (para AJAX).
      *
      * @param array<int, array<string, mixed>> $records
@@ -734,6 +914,108 @@ final class AoatController
         $currentUserLocal = $currentUser;
         require __DIR__ . '/../Views/aoat/_rows.php';
         return (string) ob_get_clean();
+    }
+
+    /**
+     * Rol principal del profesional (misma lógica que app/Views/aoat/form.php).
+     */
+    private function primaryProfessionalRole(array $user): string
+    {
+        $r = strtolower(trim((string) ($user['role'] ?? '')));
+        if ($r === 'profesional_social') {
+            return 'profesional social';
+        }
+
+        return $r;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function inputStringArray(Request $request, string $key): array
+    {
+        $v = $request->input($key);
+        if (is_array($v)) {
+            return array_values(array_filter(array_map('trim', $v), static fn (string $s): bool => $s !== ''));
+        }
+        if (is_string($v) && trim($v) !== '') {
+            return [trim($v)];
+        }
+
+        return [];
+    }
+
+    /**
+     * Valida que cada bloque de cualificación del formulario AoAT tenga al menos una respuesta (según perfil).
+     * Debe alinearse con las secciones mostradas en cada rama de form.php.
+     */
+    private function validateAoatQualificationSections(Request $request, array $user): ?string
+    {
+        $role = $this->primaryProfessionalRole($user);
+
+        if ($role === 'abogado') {
+            if ($this->inputStringArray($request, 'mesa_salud_mental') === []) {
+                return 'Debes marcar al menos una opción en «Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones».';
+            }
+            if ($this->inputStringArray($request, 'ppmsmypa') === []) {
+                return 'Debes marcar al menos una opción en «Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)».';
+            }
+            if ($this->inputStringArray($request, 'safer') === []) {
+                return 'Debes marcar al menos una opción en «SAFER».';
+            }
+
+            return null;
+        }
+
+        if ($role === 'medico') {
+            if ($this->inputStringArray($request, 'temas_hospital') === []) {
+                return 'Debes seleccionar al menos un tema dictado en el Hospital del municipio visitado.';
+            }
+
+            return null;
+        }
+
+        if ($role === 'psicologo') {
+            if ($this->inputStringArray($request, 'prev_suicidio') === []) {
+                return 'Debes marcar al menos una opción en «Cualificación temas en prevención del suicidio».';
+            }
+            if ($this->inputStringArray($request, 'prev_violencias') === []) {
+                return 'Debes marcar al menos una opción en «Cualificación temas en prevención de Violencias».';
+            }
+            if ($this->inputStringArray($request, 'prev_adicciones') === []) {
+                return 'Debes marcar al menos una opción en «Cualificación temas en prevención de Adicciones».';
+            }
+            if ($this->inputStringArray($request, 'salud_mental') === []) {
+                return 'Debes marcar al menos una opción en «Cualificación temas de Salud Mental».';
+            }
+
+            $allowedProyectos = [
+                'Competencias Parentales',
+                'Familias que se Cuidan',
+                'La Aventura de Crecer',
+                'Veredas que se Cuidan',
+                'Dispositivos comunitarios',
+                'Presentación del programa salud para el alma',
+                'No aplica',
+            ];
+            $proyecto = trim((string) $request->input('proyecto', ''));
+            if ($proyecto === '' || !in_array($proyecto, $allowedProyectos, true)) {
+                return 'Debes seleccionar una opción en «Proyectos».';
+            }
+
+            return null;
+        }
+
+        if ($role === 'profesional social') {
+            if ($this->inputStringArray($request, 'actividad_social') === []) {
+                return 'Debes marcar al menos una opción en «Seleccione la actividad realizada».';
+            }
+
+            return null;
+        }
+
+        // Otros perfiles (p. ej. admin): no muestran bloques de cualificación en el formulario.
+        return null;
     }
 
     private function buildPayload(Request $request): array
@@ -787,8 +1069,8 @@ final class AoatController
         $logoHomo = dirname(__DIR__, 2) . '/public/assets/img/logoHomo.png';
         $logoAntioquia = dirname(__DIR__, 2) . '/public/assets/img/logoAntioquia.png';
 
-        $logoHomoSrc = $forPdf ? $this->toImageDataUri($logoHomo) : 'cid:logo_homo';
-        $logoAntioquiaSrc = $forPdf ? $this->toImageDataUri($logoAntioquia) : 'cid:logo_antioquia';
+        $logoHomoSrc = $forPdf ? PdfImageHelper::imageDataUri($logoHomo) : 'cid:logo_homo';
+        $logoAntioquiaSrc = $forPdf ? PdfImageHelper::imageDataUri($logoAntioquia) : 'cid:logo_antioquia';
 
         $totalRows = 0;
         foreach ($reportData as $section) {
@@ -892,28 +1174,6 @@ final class AoatController
         $html .= '</div></body></html>';
 
         return $html;
-    }
-
-    private function toImageDataUri(string $path): string
-    {
-        if (!is_readable($path)) {
-            return '';
-        }
-
-        $binary = file_get_contents($path);
-        if ($binary === false) {
-            return '';
-        }
-
-        $mime = 'image/png';
-        if (function_exists('mime_content_type')) {
-            $detected = mime_content_type($path);
-            if (is_string($detected) && $detected !== '') {
-                $mime = $detected;
-            }
-        }
-
-        return 'data:' . $mime . ';base64,' . base64_encode($binary);
     }
 
     /**

@@ -18,9 +18,15 @@ final class UserRepository
         $params = [];
 
         if (!empty($filters['query'])) {
-            $where[] = '(u.name LIKE :q_name OR u.email LIKE :q_email)';
+            $where[] = '(u.name LIKE :q_name OR u.email LIKE :q_email OR u.document_number LIKE :q_doc)';
             $params[':q_name'] = '%' . $filters['query'] . '%';
             $params[':q_email'] = '%' . $filters['query'] . '%';
+            $params[':q_doc'] = '%' . $filters['query'] . '%';
+        }
+
+        if (!empty($filters['document'])) {
+            $where[] = 'u.document_number LIKE :filter_document';
+            $params[':filter_document'] = '%' . $filters['document'] . '%';
         }
 
         if (!empty($filters['role'])) {
@@ -48,7 +54,7 @@ final class UserRepository
             LEFT JOIN roles r ON r.id = ur.role_id
             $whereSql
             GROUP BY u.id
-            ORDER BY u.created_at DESC, u.id DESC
+            ORDER BY u.created_at ASC, u.id ASC
         ";
 
         $stmt = $pdo->prepare($sql);
@@ -89,11 +95,12 @@ final class UserRepository
 
         try {
             $stmt = $pdo->prepare(
-                'INSERT INTO users (name, email, password, active) VALUES (:name, :email, :password, :active)'
+                'INSERT INTO users (name, email, document_number, password, active) VALUES (:name, :email, :document_number, :password, :active)'
             );
             $stmt->execute([
                 ':name' => $data['name'],
                 ':email' => $data['email'],
+                ':document_number' => $data['document_number'] !== '' ? $data['document_number'] : null,
                 ':password' => $data['password'],
                 ':active' => (int) $data['active'],
             ]);
@@ -119,11 +126,12 @@ final class UserRepository
         $pdo->beginTransaction();
 
         try {
-            $set = ['name = :name', 'email = :email', 'active = :active'];
+            $set = ['name = :name', 'email = :email', 'document_number = :document_number', 'active = :active'];
             $params = [
                 ':id' => $id,
                 ':name' => $data['name'],
                 ':email' => $data['email'],
+                ':document_number' => ($data['document_number'] ?? '') !== '' ? $data['document_number'] : null,
                 ':active' => (int) $data['active'],
             ];
 

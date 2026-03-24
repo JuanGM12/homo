@@ -10,6 +10,7 @@ use App\Repositories\AsistenciaRepository;
 use App\Repositories\UserRepository;
 use App\Services\Auth;
 use App\Services\Flash;
+use App\Services\PdfImageHelper;
 
 final class AsistenciaController
 {
@@ -62,6 +63,10 @@ final class AsistenciaController
             'advisor_user_id' => $request->input('advisor_user_id') !== '' ? (int) $request->input('advisor_user_id') : null,
             'status' => trim((string) $request->input('status', '')),
         ];
+
+        if (!Auth::canViewAllModuleRecords($user)) {
+            $filters['advisor_user_id'] = (int) $user['id'];
+        }
 
         $records = $this->repo->findWithFilters(array_filter($filters));
         $advisors = $this->userRepo->findNonAdminAdvisors();
@@ -500,6 +505,20 @@ final class AsistenciaController
 
     private function buildPdfHtml(array $actividad, array $asistentes): string
     {
+        $esc = static function (string $s): string {
+            return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        };
+
+        $base = dirname(__DIR__, 2) . '/public/assets/img';
+        $logoAntSrc = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
+        $logoHomoSrc = PdfImageHelper::imageDataUri($base . '/logoHomo.png');
+        $logoAntHtml = $logoAntSrc !== ''
+            ? '<img src="' . $esc($logoAntSrc) . '" alt="Gobernación de Antioquia" style="height:48px;width:auto;">'
+            : '';
+        $logoHomoHtml = $logoHomoSrc !== ''
+            ? '<img src="' . $esc($logoHomoSrc) . '" alt="HOMO" style="height:48px;width:auto;">'
+            : '';
+
         $tipos = $actividad['actividad_tipos'] ?? [];
         $tiposStr = is_array($tipos) ? implode('; ', $tipos) : (string) $tipos;
         $rows = '';
@@ -508,6 +527,18 @@ final class AsistenciaController
             $grupoStr = is_array($grupo) ? implode(', ', $grupo) : (string) $grupo;
             $rows .= '<tr><td>' . ($i + 1) . '</td><td>' . htmlspecialchars($a['document_number'] ?? '') . '</td><td>' . htmlspecialchars($a['full_name'] ?? '') . '</td><td>' . htmlspecialchars($a['entity'] ?? '') . '</td><td>' . htmlspecialchars($a['cargo'] ?? '') . '</td><td>' . htmlspecialchars($a['phone'] ?? '') . '</td><td>' . htmlspecialchars($a['email'] ?? '') . '</td><td>' . htmlspecialchars($a['zone'] ?? '') . '</td><td>' . htmlspecialchars($a['sex'] ?? '') . '</td><td>' . ($a['age'] !== null ? (int) $a['age'] : '') . '</td><td>' . htmlspecialchars($a['etnia'] ?? '') . '</td><td>' . htmlspecialchars($grupoStr) . '</td><td>' . htmlspecialchars($a['registered_at'] ?? '') . '</td></tr>';
         }
-        return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Asistencia ' . htmlspecialchars($actividad['code']) . '</title><style>table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5}</style></head><body><h1>Listado de Asistencia - ' . htmlspecialchars($actividad['code']) . '</h1><p><strong>Fecha:</strong> ' . htmlspecialchars($actividad['activity_date'] ?? '') . ' | <strong>Lugar:</strong> ' . htmlspecialchars($actividad['lugar'] ?? '') . ' | <strong>Asesor:</strong> ' . htmlspecialchars($actividad['advisor_name'] ?? '') . '</p><p><strong>Tipo(s) de listado:</strong> ' . htmlspecialchars($tiposStr) . '</p><table><thead><tr><th>#</th><th>Documento</th><th>Nombres</th><th>Entidad</th><th>Cargo</th><th>Teléfono</th><th>Correo</th><th>Zona</th><th>Sexo</th><th>Edad</th><th>Etnia</th><th>Grupo pobl.</th><th>Registro</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>';
+
+        $header = '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;"><tr>'
+            . '<td style="width:28%;vertical-align:middle;">' . $logoAntHtml . '</td>'
+            . '<td style="width:44%;text-align:center;vertical-align:middle;"><span style="font-size:12px;color:#0f5132;font-weight:600;">Acción en Territorio</span></td>'
+            . '<td style="width:28%;text-align:right;vertical-align:middle;">' . $logoHomoHtml . '</td>'
+            . '</tr></table>';
+
+        return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Asistencia ' . htmlspecialchars($actividad['code']) . '</title><style>body{font-family:system-ui,sans-serif;margin:16px;}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5}</style></head><body>'
+            . $header
+            . '<h1 style="font-size:18px;margin:0 0 8px;">Listado de Asistencia - ' . $esc((string) ($actividad['code'] ?? '')) . '</h1>'
+            . '<p><strong>Fecha:</strong> ' . $esc((string) ($actividad['activity_date'] ?? '')) . ' | <strong>Lugar:</strong> ' . $esc((string) ($actividad['lugar'] ?? '')) . ' | <strong>Asesor:</strong> ' . $esc((string) ($actividad['advisor_name'] ?? '')) . '</p>'
+            . '<p><strong>Tipo(s) de listado:</strong> ' . $esc($tiposStr) . '</p>'
+            . '<table><thead><tr><th>#</th><th>Documento</th><th>Nombres</th><th>Entidad</th><th>Cargo</th><th>Teléfono</th><th>Correo</th><th>Zona</th><th>Sexo</th><th>Edad</th><th>Etnia</th><th>Grupo pobl.</th><th>Registro</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>';
     }
 }

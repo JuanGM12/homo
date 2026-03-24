@@ -8,7 +8,11 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\TestResponseRepository;
 use App\Services\Auth;
+use App\Services\EvaluacionesReportService;
 use App\Services\Flash;
+use App\Services\PdfImageHelper;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 final class EvaluacionesController
 {
@@ -167,14 +171,391 @@ final class EvaluacionesController
         ];
     }
 
+    /**
+     * Temáticas visibles según rol (visitantes no autenticados: todas).
+     * Admin y coordinación: todas las temáticas.
+     * Psicólogo: violencias, suicidios, adicciones.
+     * Médico: hospitales.
+     * Abogado: ninguna (no aplica PRE/POST).
+     */
+    public static function getTestsListForUser(?array $user): array
+    {
+        $full = self::getTestsList();
+        if ($user === null) {
+            return $full;
+        }
+
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+        if (in_array('admin', $roles, true)) {
+            return $full;
+        }
+        if (in_array('coordinador', $roles, true) || in_array('coordinadora', $roles, true)) {
+            return $full;
+        }
+        if (in_array('abogado', $roles, true)) {
+            return [];
+        }
+
+        $keys = [];
+        if (in_array('psicologo', $roles, true)) {
+            array_push($keys, 'violencias', 'suicidios', 'adicciones');
+        }
+        if (in_array('medico', $roles, true)) {
+            $keys[] = 'hospitales';
+        }
+        $keys = array_unique($keys);
+        if ($keys === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($keys as $k) {
+            if (isset($full[$k])) {
+                $out[$k] = $full[$k];
+            }
+        }
+
+        return $out;
+    }
+
+    /** Admin y coordinación ven el menú completo de temáticas (sin filtrar por rol operativo). */
+    public static function userHasFullEvaluacionesTestMenu(?array $user): bool
+    {
+        if ($user === null) {
+            return true;
+        }
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+
+        return in_array('admin', $roles, true)
+            || in_array('coordinador', $roles, true)
+            || in_array('coordinadora', $roles, true);
+    }
+
+    public static function userMayAccessTestKey(?array $user, string $testKey): bool
+    {
+        $allowed = self::getTestsListForUser($user);
+
+        return isset($allowed[$testKey]);
+    }
+
+    /** Perfil abogado (sin admin): no aplica módulo PRE/POST. */
+    public static function userIsBlockedFromEvaluaciones(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+        if (in_array('admin', $roles, true)) {
+            return false;
+        }
+
+        return in_array('abogado', $roles, true)
+            || in_array('especialista', $roles, true);
+    }
+
+    /** Mostrar enlace "Evaluaciones · Test" en el menú lateral. */
+    public static function userMaySeeEvaluacionesNav(?array $user): bool
+    {
+        if ($user === null) {
+            return true;
+        }
+        if (self::userIsBlockedFromEvaluaciones($user)) {
+            return false;
+        }
+
+        return self::getTestsListForUser($user) !== [];
+    }
+
+    /**
+     * Letra de la opción correcta según temática y fase (misma clave que al guardar el test).
+     */
+    public static function correctLetterForQuestion(string $testKey, string $phase, int $questionNumber): ?string
+    {
+        $phase = strtolower($phase);
+        $map = match ($testKey) {
+            'violencias' => $phase === 'pre' ? self::PRE_VIOLENCIAS_CORRECT : self::POST_VIOLENCIAS_CORRECT,
+            'suicidios' => $phase === 'pre' ? self::PRE_SUICIDIOS_CORRECT : self::POST_SUICIDIOS_CORRECT,
+            'adicciones' => $phase === 'pre' ? self::PRE_ADICCIONES_CORRECT : self::POST_ADICCIONES_CORRECT,
+            'hospitales' => $phase === 'pre' ? self::PRE_HOSPITALES_CORRECT : self::POST_HOSPITALES_CORRECT,
+            default => [],
+        };
+        if ($map === []) {
+            return null;
+        }
+
+        return $map[$questionNumber] ?? null;
+    }
+
+    /**
+     * Detalle de respuestas de un intento (PRE o POST) para seguimiento / errores.
+     */
+    public function showDetail(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'Indica un registro de evaluación válido.',
+            ]);
+
+            return Response::redirect('/evaluaciones');
+        }
+
+        $repo = new TestResponseRepository();
+        $response = $repo->findById($id);
+        if ($response === null) {
+            return Response::view('errors/404', ['pageTitle' => 'No encontrado'], 404);
+        }
+
+        $canSeeAll = Auth::canViewAllModuleRecords($user);
+        $responseDoc = trim((string) ($response['document_number'] ?? ''));
+        $userDoc = trim((string) ($user['document_number'] ?? ''));
+        if (!$canSeeAll && ($responseDoc === '' || $responseDoc !== $userDoc)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        if (self::userIsBlockedFromEvaluaciones($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $testKey = (string) ($response['test_key'] ?? '');
+        if (!self::userMayAccessTestKey($user, $testKey)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $phase = (string) ($response['phase'] ?? '');
+
+        $answers = $repo->findAnswersByResponseId($id);
+        $answerRows = [];
+        foreach ($answers as $a) {
+            $q = (int) ($a['question_number'] ?? 0);
+            $selected = strtoupper((string) ($a['selected_option'] ?? ''));
+            $correct = self::correctLetterForQuestion($testKey, $phase, $q);
+            $answerRows[] = [
+                'question_number' => $q,
+                'selected' => $selected,
+                'correct' => $correct,
+                'is_correct' => (int) ($a['is_correct'] ?? 0),
+            ];
+        }
+
+        $tests = self::getTestsList();
+
+        return Response::view('evaluaciones/detalle', [
+            'pageTitle' => 'Detalle de evaluación',
+            'response' => $response,
+            'answerRows' => $answerRows,
+            'tests' => $tests,
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $user = Auth::user();
-        $tests = self::getTestsList();
+        if ($user !== null && self::userIsBlockedFromEvaluaciones($user)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin acceso',
+                'message' => 'Los tests PRE/POST no están disponibles para tu perfil.',
+            ]);
 
-        $roles = $user['roles'] ?? [];
-        $canSeeAll = $user && (in_array('admin', $roles, true) || in_array('coordinador', $roles, true) || in_array('coordinadora', $roles, true));
+            return Response::redirect('/');
+        }
 
+        $testsForUi = self::getTestsListForUser($user);
+        if (
+            $user !== null
+            && $testsForUi === []
+            && !self::userHasFullEvaluacionesTestMenu($user)
+        ) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin temáticas asignadas',
+                'message' => 'Tu perfil no tiene temáticas de evaluación PRE/POST asignadas.',
+            ]);
+
+            return Response::redirect('/');
+        }
+
+        $testsFull = self::getTestsList();
+
+        $canSeeAll = $user !== null && Auth::canViewAllModuleRecords($user);
+
+        $filters = $this->collectEvaluacionFiltersFromRequest($request, $user, $canSeeAll);
+        $filters = $this->applyEvaluacionSearchScope($filters, $user);
+
+        $records = [];
+        $comparisonRows = [];
+        $impactSummary = ['global' => null, 'by_municipality' => []];
+        $exportQuery = '';
+
+        if ($user) {
+            if (!$canSeeAll && empty($user['document_number'])) {
+                $records = [];
+            } else {
+                $repo = new TestResponseRepository();
+                // Vista comparativa PRE/POST: no filtrar por fase; traer ambas para agrupar por persona
+                $searchFilters = $filters;
+                unset($searchFilters['phase']);
+                $searchFilters['limit'] = 8000;
+                $records = $repo->search($searchFilters);
+                $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
+                $impactSummary = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
+            }
+
+            $exportFilters = $filters;
+            unset($exportFilters['phase']);
+            $exportQuery = http_build_query(array_filter(
+                $exportFilters,
+                static fn (mixed $v): bool => $v !== null && $v !== ''
+            ));
+        }
+
+        return Response::view('evaluaciones/index', [
+            'pageTitle' => 'Evaluaciones - Test',
+            'tests' => $testsForUi,
+            'filters' => $filters,
+            'records' => $records,
+            'comparisonRows' => $comparisonRows,
+            'impactSummary' => $impactSummary,
+            'exportQuery' => $exportQuery,
+            'currentUser' => $user,
+            'canSeeAll' => (bool) $canSeeAll,
+        ]);
+    }
+
+    /**
+     * Exportación CSV (Excel) con los mismos filtros que el listado comparativo.
+     */
+    public function exportCsv(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (self::userIsBlockedFromEvaluaciones($user)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin acceso',
+                'message' => 'Los tests PRE/POST no están disponibles para tu perfil.',
+            ]);
+
+            return Response::redirect('/');
+        }
+        if (
+            self::getTestsListForUser($user) === []
+            && !self::userHasFullEvaluacionesTestMenu($user)
+        ) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin temáticas asignadas',
+                'message' => 'Tu perfil no tiene temáticas de evaluación PRE/POST asignadas.',
+            ]);
+
+            return Response::redirect('/');
+        }
+
+        $testsFull = self::getTestsList();
+        $canSeeAll = Auth::canViewAllModuleRecords($user);
+        $filters = $this->collectEvaluacionFiltersFromRequest($request, $user, $canSeeAll);
+        $filters = $this->applyEvaluacionSearchScope($filters, $user);
+        $searchFilters = $filters;
+        unset($searchFilters['phase']);
+        $searchFilters['limit'] = 8000;
+
+        $repo = new TestResponseRepository();
+        $records = (!$canSeeAll && empty($user['document_number']))
+            ? []
+            : $repo->search($searchFilters);
+        $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
+        $impactSummary = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
+
+        $csv = $this->buildEvaluacionesCsv($comparisonRows, $impactSummary, $filters);
+
+        $filename = 'evaluaciones_' . date('Y-m-d_His') . '.csv';
+
+        return new Response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * Exportación PDF con resumen por municipio y tabla comparativa.
+     */
+    public function exportPdf(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (self::userIsBlockedFromEvaluaciones($user)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin acceso',
+                'message' => 'Los tests PRE/POST no están disponibles para tu perfil.',
+            ]);
+
+            return Response::redirect('/');
+        }
+        if (
+            self::getTestsListForUser($user) === []
+            && !self::userHasFullEvaluacionesTestMenu($user)
+        ) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin temáticas asignadas',
+                'message' => 'Tu perfil no tiene temáticas de evaluación PRE/POST asignadas.',
+            ]);
+
+            return Response::redirect('/');
+        }
+
+        $testsFull = self::getTestsList();
+        $canSeeAll = Auth::canViewAllModuleRecords($user);
+        $filters = $this->collectEvaluacionFiltersFromRequest($request, $user, $canSeeAll);
+        $filters = $this->applyEvaluacionSearchScope($filters, $user);
+        $searchFilters = $filters;
+        unset($searchFilters['phase']);
+        $searchFilters['limit'] = 8000;
+
+        $repo = new TestResponseRepository();
+        $records = (!$canSeeAll && empty($user['document_number']))
+            ? []
+            : $repo->search($searchFilters);
+        $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
+        $impactSummary = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
+
+        $html = $this->buildEvaluacionesPdfHtml($comparisonRows, $impactSummary, $filters);
+
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $options->set('isHtml5ParserEnabled', true);
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        $filename = 'evaluaciones_' . date('Y-m-d_His') . '.pdf';
+
+        return new Response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function collectEvaluacionFiltersFromRequest(Request $request, ?array $user, bool $canSeeAll): array
+    {
         $filters = [
             'test_key' => (string) $request->input('test_key', ''),
             'phase' => (string) $request->input('phase', ''),
@@ -185,25 +566,223 @@ final class EvaluacionesController
             'date_to' => (string) $request->input('date_to', ''),
         ];
 
-        // Si no es admin/coordinador, fuerza a ver solo sus propios registros (por documento asociado)
         if (!$canSeeAll && $user && !empty($user['document_number'])) {
             $filters['document_number'] = (string) $user['document_number'];
         }
 
-        $records = [];
-        if ($user) {
-            $repo = new TestResponseRepository();
-            $records = $repo->search($filters);
+        return $filters;
+    }
+
+    /**
+     * Restringe la consulta a las temáticas del rol (excepto admin/coordinación).
+     *
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    private function applyEvaluacionSearchScope(array $filters, ?array $user): array
+    {
+        if ($user === null || self::userHasFullEvaluacionesTestMenu($user)) {
+            return $filters;
         }
 
-        return Response::view('evaluaciones/index', [
-            'pageTitle' => 'Evaluaciones - Test',
-            'tests' => $tests,
-            'filters' => $filters,
-            'records' => $records,
-            'currentUser' => $user,
-            'canSeeAll' => (bool) $canSeeAll,
+        $allowedKeys = array_keys(self::getTestsListForUser($user));
+        if ($allowedKeys === []) {
+            return $filters;
+        }
+
+        $tk = trim((string) ($filters['test_key'] ?? ''));
+        if ($tk !== '' && !in_array($tk, $allowedKeys, true)) {
+            $filters['test_key'] = '';
+        }
+
+        if (($filters['test_key'] ?? '') === '') {
+            $filters['allowed_test_keys'] = $allowedKeys;
+        }
+
+        return $filters;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $comparisonRows
+     * @param array{global: ?array, by_municipality: array} $impactSummary
+     * @param array<string, mixed> $filters
+     */
+    private function buildEvaluacionesCsv(array $comparisonRows, array $impactSummary, array $filters): string
+    {
+        $sep = ';';
+        $lines = [];
+        $lines[] = "\xEF\xBB\xBF";
+        $lines[] = 'Equipo de Promoción y Prevención - Acción en Territorio - Evaluaciones PRE/POST';
+        $lines[] = 'Filtros: temática=' . ($filters['test_key'] ?: 'todas')
+            . '; documento=' . ($filters['document_number'] ?: '—')
+            . '; municipio=' . ($filters['municipality'] ?: '—')
+            . '; fechas=' . ($filters['date_from'] ?: '—') . ' / ' . ($filters['date_to'] ?: '—');
+        $lines[] = '';
+
+        $g = $impactSummary['global'] ?? null;
+        if (is_array($g)) {
+            $lines[] = 'Resumen impacto (solo personas con PRE y POST)';
+            $lines[] = implode($sep, [
+                'Ámbito',
+                'N con PRE+POST',
+                'Con mejoría %',
+                'Sin cambios %',
+                'Sin mejoría %',
+            ]);
+            $lines[] = implode($sep, [
+                (string) ($g['municipality'] ?? ''),
+                (string) ($g['con_ambos'] ?? '0'),
+                (string) ($g['pct_mejoria'] ?? '0'),
+                (string) ($g['pct_sin_cambios'] ?? '0'),
+                (string) ($g['pct_sin_mejoria'] ?? '0'),
+            ]);
+            foreach ($impactSummary['by_municipality'] ?? [] as $row) {
+                $lines[] = implode($sep, [
+                    (string) ($row['municipality'] ?? ''),
+                    (string) ($row['con_ambos'] ?? '0'),
+                    (string) ($row['pct_mejoria'] ?? '0'),
+                    (string) ($row['pct_sin_cambios'] ?? '0'),
+                    (string) ($row['pct_sin_mejoria'] ?? '0'),
+                ]);
+            }
+        }
+        $lines[] = '';
+        $lines[] = implode($sep, [
+            'Temática',
+            'Documento',
+            'Nombres',
+            'Apellidos',
+            'Subregión',
+            'Municipio',
+            'PRE %',
+            'Fecha PRE',
+            'POST %',
+            'Fecha POST',
+            'Delta puntos',
+            'Resultado impacto',
         ]);
+
+        foreach ($comparisonRows as $r) {
+            $prePct = $r['pre_score'] !== null ? number_format((float) $r['pre_score'], 2, ',', '') : '—';
+            $postPct = $r['post_score'] !== null ? number_format((float) $r['post_score'], 2, ',', '') : '—';
+            $delta = isset($r['delta']) && $r['delta'] !== null
+                ? number_format((float) $r['delta'], 2, ',', '')
+                : '—';
+            $lines[] = implode($sep, [
+                (string) ($r['test_name'] ?? ''),
+                (string) ($r['document_number'] ?? ''),
+                str_replace(["\r", "\n", ';'], [' ', ' ', ','], (string) ($r['first_name'] ?? '')),
+                str_replace(["\r", "\n", ';'], [' ', ' ', ','], (string) ($r['last_name'] ?? '')),
+                str_replace(["\r", "\n", ';'], [' ', ' ', ','], (string) ($r['subregion'] ?? '')),
+                str_replace(["\r", "\n", ';'], [' ', ' ', ','], (string) ($r['municipality'] ?? '')),
+                $prePct,
+                (string) ($r['pre_at'] ?? '—'),
+                $postPct,
+                (string) ($r['post_at'] ?? '—'),
+                $delta,
+                (string) ($r['impact_label'] ?? ''),
+            ]);
+        }
+
+        return implode("\r\n", $lines);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $comparisonRows
+     * @param array{global: ?array, by_municipality: array} $impactSummary
+     * @param array<string, mixed> $filters
+     */
+    private function buildEvaluacionesPdfHtml(array $comparisonRows, array $impactSummary, array $filters): string
+    {
+        $esc = static function (string $s): string {
+            return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        };
+
+        $g = $impactSummary['global'] ?? null;
+        $summaryRows = '';
+        if (is_array($g)) {
+            $summaryRows .= '<tr style="background:#e8f5e9;font-weight:bold;"><td>' . $esc((string) ($g['municipality'] ?? '')) . '</td>'
+                . '<td class="num">' . $esc((string) ($g['con_ambos'] ?? '0')) . '</td>'
+                . '<td class="num">' . $esc((string) ($g['pct_mejoria'] ?? '0')) . '%</td>'
+                . '<td class="num">' . $esc((string) ($g['pct_sin_cambios'] ?? '0')) . '%</td>'
+                . '<td class="num">' . $esc((string) ($g['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            foreach ($impactSummary['by_municipality'] ?? [] as $row) {
+                $summaryRows .= '<tr><td>' . $esc((string) ($row['municipality'] ?? '')) . '</td>'
+                    . '<td class="num">' . $esc((string) ($row['con_ambos'] ?? '0')) . '</td>'
+                    . '<td class="num">' . $esc((string) ($row['pct_mejoria'] ?? '0')) . '%</td>'
+                    . '<td class="num">' . $esc((string) ($row['pct_sin_cambios'] ?? '0')) . '%</td>'
+                    . '<td class="num">' . $esc((string) ($row['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            }
+        }
+
+        $detailRows = '';
+        foreach ($comparisonRows as $r) {
+            $lbl = (string) ($r['impact_label'] ?? '');
+            $bg = '#f8f9fa';
+            if (($r['impact'] ?? '') === EvaluacionesReportService::IMPACT_MEJORIA) {
+                $bg = '#d1e7dd';
+            } elseif (($r['impact'] ?? '') === EvaluacionesReportService::IMPACT_SIN_MEJORIA) {
+                $bg = '#f8d7da';
+            } elseif (($r['impact'] ?? '') === EvaluacionesReportService::IMPACT_SIN_CAMBIOS) {
+                $bg = '#e2e3e5';
+            }
+            $prePct = $r['pre_score'] !== null ? number_format((float) $r['pre_score'], 1) . '%' : '—';
+            $postPct = $r['post_score'] !== null ? number_format((float) $r['post_score'], 1) . '%' : '—';
+            $delta = isset($r['delta']) && $r['delta'] !== null ? number_format((float) $r['delta'], 1) : '—';
+            $detailRows .= '<tr style="background:' . $bg . ';">'
+                . '<td>' . $esc((string) ($r['test_name'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($r['document_number'] ?? '')) . '</td>'
+                . '<td>' . $esc(trim((string) ($r['first_name'] ?? '') . ' ' . (string) ($r['last_name'] ?? ''))) . '</td>'
+                . '<td>' . $esc((string) ($r['municipality'] ?? '')) . '</td>'
+                . '<td class="num">' . $esc($prePct) . '</td>'
+                . '<td class="num">' . $esc($postPct) . '</td>'
+                . '<td class="num">' . $esc($delta) . '</td>'
+                . '<td><strong>' . $esc($lbl) . '</strong></td></tr>';
+        }
+
+        $filtroTxt = 'Temática: ' . $esc($filters['test_key'] ?: 'todas')
+            . ' · Documento: ' . $esc($filters['document_number'] ?: '—')
+            . ' · Subregión: ' . $esc($filters['subregion'] ?: '—')
+            . ' · Municipio: ' . $esc($filters['municipality'] ?: '—');
+
+        $base = dirname(__DIR__, 2) . '/public/assets/img';
+        $logoAntSrc = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
+        $logoHomoSrc = PdfImageHelper::imageDataUri($base . '/logoHomo.png');
+        $logoAntHtml = $logoAntSrc !== ''
+            ? '<img src="' . $esc($logoAntSrc) . '" alt="Gobernación de Antioquia" class="logo-ant">'
+            : '';
+        $logoHomoHtml = $logoHomoSrc !== ''
+            ? '<img src="' . $esc($logoHomoSrc) . '" alt="HOMO" class="logo-homo">'
+            : '';
+
+        return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body{font-family:DejaVu Sans,sans-serif;font-size:9px;color:#212529;margin:0;padding:12px 14px;}
+            .pdf-header{width:100%;border-collapse:collapse;margin:0 0 10px;}
+            .pdf-header td{vertical-align:middle;padding:4px 6px;}
+            .pdf-header .hdr-center{text-align:center;}
+            .pdf-title{font-size:14px;color:#0f5132;font-weight:700;margin:0 0 2px;}
+            .pdf-subtitle{font-size:9px;color:#212529;margin:0;}
+            .logo-ant,.logo-homo{height:48px;width:auto;}
+            h2{font-size:11px;margin:12px 0 6px;}
+            table.data{border-collapse:collapse;width:100%;margin-bottom:10px;}
+            table.data th,table.data td{border:1px solid #ccc;padding:3px 5px;text-align:left;}
+            table.data th{background:#198754;color:#fff;}
+            table.data td.num{text-align:right;}
+            .muted{color:#6c757d;font-size:8px;}
+            </style></head><body>
+            <table class="pdf-header"><tr>
+            <td style="width:28%;">' . $logoAntHtml . '</td>
+            <td class="hdr-center" style="width:44%;"><p class="pdf-title">Evaluaciones PRE / POST</p><p class="pdf-subtitle">Acción en Territorio</p></td>
+            <td style="width:28%;text-align:right;">' . $logoHomoHtml . '</td>
+            </tr></table>
+            <p class="muted">' . $filtroTxt . ' · Generado: ' . $esc(date('Y-m-d H:i')) . '</p>
+            <h2>Resultado impacto por municipio (personas con PRE y POST)</h2>
+            <table class="data"><thead><tr><th>Municipio</th><th class="num">N PRE+POST</th><th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>'
+            . $summaryRows . '</tbody></table>
+            <h2>Detalle por persona</h2>
+            <table class="data"><thead><tr><th>Temática</th><th>Documento</th><th>Persona</th><th>Municipio</th><th>PRE</th><th>POST</th><th>Δ</th><th>Resultado impacto</th></tr></thead><tbody>'
+            . $detailRows . '</tbody></table>
+            </body></html>';
     }
 
     // PRE
@@ -264,6 +843,11 @@ final class EvaluacionesController
 
     private function storePreAdicciones(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('adicciones');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'adicciones';
         $phase = 'pre';
 
@@ -365,11 +949,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'PRE - TEST enviado',
-            'message' => sprintf(
-                'Tu PRE - TEST de Prevención de Adicciones ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'PRE - TEST',
+                'Prevención de Adicciones',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -413,6 +1001,20 @@ final class EvaluacionesController
             );
         }
 
+        $user = Auth::user();
+        if ($user !== null && self::userIsBlockedFromEvaluaciones($user)) {
+            return Response::json(
+                ['ok' => false, 'exists' => false, 'error' => 'Sin permiso'],
+                403
+            );
+        }
+        if ($user !== null && !self::userMayAccessTestKey($user, $testKey)) {
+            return Response::json(
+                ['ok' => false, 'exists' => false, 'error' => 'Sin permiso'],
+                403
+            );
+        }
+
         $repo = new TestResponseRepository();
         $pre = $repo->findByPerson($testKey, 'pre', $documentNumber);
         $exists = $pre !== null;
@@ -432,6 +1034,11 @@ final class EvaluacionesController
 
     private function storePreHospitales(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('hospitales');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'hospitales';
         $phase = 'pre';
 
@@ -534,11 +1141,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'PRE - TEST enviado',
-            'message' => sprintf(
-                'Tu PRE - TEST de Hospitales ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'PRE - TEST',
+                'Hospitales',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -547,6 +1158,11 @@ final class EvaluacionesController
 
     private function storePostHospitales(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('hospitales');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'hospitales';
         $phase = 'post';
 
@@ -655,11 +1271,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'POST - TEST enviado',
-            'message' => sprintf(
-                'Tu POST - TEST de Hospitales ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'POST - TEST',
+                'Hospitales',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -668,6 +1288,11 @@ final class EvaluacionesController
 
     private function storePreViolencias(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('violencias');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'violencias';
         $phase = 'pre';
 
@@ -772,11 +1397,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'PRE - TEST enviado',
-            'message' => sprintf(
-                'Tu PRE - TEST de Prevención de Violencias ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'PRE - TEST',
+                'Prevención de Violencias',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -785,6 +1414,11 @@ final class EvaluacionesController
 
     private function storePostViolencias(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('violencias');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'violencias';
         $phase = 'post';
 
@@ -892,11 +1526,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'POST - TEST enviado',
-            'message' => sprintf(
-                'Tu POST - TEST de Prevención de Violencias ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'POST - TEST',
+                'Prevención de Violencias',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -905,6 +1543,11 @@ final class EvaluacionesController
 
     private function storePreSuicidios(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('suicidios');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'suicidios';
         $phase = 'pre';
 
@@ -1006,11 +1649,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'PRE - TEST enviado',
-            'message' => sprintf(
-                'Tu PRE - TEST de Prevención de Suicidios ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'PRE - TEST',
+                'Prevención de Suicidios',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -1019,6 +1666,11 @@ final class EvaluacionesController
 
     private function storePostSuicidios(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('suicidios');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'suicidios';
         $phase = 'post';
 
@@ -1126,11 +1778,15 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'POST - TEST enviado',
-            'message' => sprintf(
-                'Tu POST - TEST de Prevención de Suicidios ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'POST - TEST',
+                'Prevención de Suicidios',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
@@ -1139,6 +1795,11 @@ final class EvaluacionesController
 
     private function storePostAdicciones(Request $request): Response
     {
+        $deny = $this->denyTestAccessResponse('adicciones');
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $testKey = 'adicciones';
         $phase = 'post';
 
@@ -1246,19 +1907,86 @@ final class EvaluacionesController
         Flash::set([
             'type' => 'success',
             'title' => 'POST - TEST enviado',
-            'message' => sprintf(
-                'Tu POST - TEST de Prevención de Adicciones ha sido registrado correctamente. Respuestas correctas: %d de %d (%.0f%%).',
+            'message' => $this->buildTestSuccessFlashMessage(
+                'POST - TEST',
+                'Prevención de Adicciones',
                 $correctCount,
                 $totalQuestions,
-                $scorePercent
+                $scorePercent,
+                $firstName,
+                $lastName,
+                $documentNumber
             ),
         ]);
 
         return Response::redirect('/evaluaciones/adicciones/post');
     }
 
+    /**
+     * Mensaje de confirmación tras guardar un test (incluye nombre, apellidos y documento del evaluado).
+     */
+    private function buildTestSuccessFlashMessage(
+        string $phaseLabel,
+        string $topicName,
+        int $correctCount,
+        int $totalQuestions,
+        float $scorePercent,
+        string $firstName,
+        string $lastName,
+        string $documentNumber
+    ): string {
+        $fn = trim($firstName);
+        $ln = trim($lastName);
+        $doc = trim($documentNumber);
+
+        return sprintf(
+            'Tu %s de %s ha sido registrado correctamente. Persona evaluada — Nombre: %s · Apellidos: %s · Documento: %s. Respuestas correctas: %d de %d (%.0f%%).',
+            $phaseLabel,
+            $topicName,
+            $fn !== '' ? $fn : '—',
+            $ln !== '' ? $ln : '—',
+            $doc !== '' ? $doc : '—',
+            $correctCount,
+            $totalQuestions,
+            $scorePercent
+        );
+    }
+
+    private function denyTestAccessResponse(string $testKey): ?Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return null;
+        }
+        if (self::userIsBlockedFromEvaluaciones($user)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin acceso',
+                'message' => 'Los tests PRE/POST no están disponibles para tu perfil.',
+            ]);
+
+            return Response::redirect('/');
+        }
+        if (!self::userMayAccessTestKey($user, $testKey)) {
+            Flash::set([
+                'type' => 'warning',
+                'title' => 'Temática no disponible',
+                'message' => 'No tienes permiso para acceder a esta temática de evaluación.',
+            ]);
+
+            return Response::redirect('/evaluaciones');
+        }
+
+        return null;
+    }
+
     private function renderForm(Request $request, string $testKey, string $phase): Response
     {
+        $deny = $this->denyTestAccessResponse($testKey);
+        if ($deny !== null) {
+            return $deny;
+        }
+
         $config = $this->configFor($testKey, $phase);
 
         $currentUser = Auth::user();

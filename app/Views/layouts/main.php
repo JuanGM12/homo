@@ -180,10 +180,14 @@ if ($currentUser) {
                                     <i class="bi bi-list-check" aria-hidden="true"></i>
                                     <span>Listado de Asistencia</span>
                                 </a>
+                                <?php
+                                $canSeeEvalNav = \App\Controllers\EvaluacionesController::userMaySeeEvaluacionesNav($currentUser);
+                                if ($canSeeEvalNav): ?>
                                 <a href="/evaluaciones" class="app-sidebar-link <?= str_starts_with($currentPath, '/evaluaciones') ? 'active' : '' ?>">
                                     <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i>
                                     <span>Evaluaciones · Test</span>
                                 </a>
+                                <?php endif; ?>
                                 <a href="/encuesta-opinion-aoat" class="app-sidebar-link <?= $pathForNav === '/encuesta-opinion-aoat' ? 'active' : '' ?>">
                                     <i class="bi bi-chat-square-text" aria-hidden="true"></i>
                                     <span>Encuesta de Opinión AoAT</span>

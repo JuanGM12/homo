@@ -30,6 +30,9 @@ final class App
 
         // Módulo 1: Evaluaciones - Test (acceso libre)
         $this->router->get('/evaluaciones', [\App\Controllers\EvaluacionesController::class, 'index']);
+        $this->router->get('/evaluaciones/detalle', [\App\Controllers\EvaluacionesController::class, 'showDetail'])->middleware('auth');
+        $this->router->get('/evaluaciones/exportar-csv', [\App\Controllers\EvaluacionesController::class, 'exportCsv'])->middleware('auth');
+        $this->router->get('/evaluaciones/exportar-pdf', [\App\Controllers\EvaluacionesController::class, 'exportPdf'])->middleware('auth');
 
         // Utilidad: verificación de PRE para POST (AJAX)
         $this->router->post('/evaluaciones/check-pre', [\App\Controllers\EvaluacionesController::class, 'checkPre']);
@@ -71,6 +74,7 @@ final class App
         $this->router->get('/aoat/editar', [\App\Controllers\AoatController::class, 'edit'])->middleware('auth');
         $this->router->post('/aoat/editar', [\App\Controllers\AoatController::class, 'update'])->middleware('auth');
         $this->router->post('/aoat/cambiar-estado', [\App\Controllers\AoatController::class, 'updateState'])->middleware('auth');
+        $this->router->post('/aoat/marcar-realizado', [\App\Controllers\AoatController::class, 'markAsRealizado'])->middleware('auth');
         $this->router->get('/aoat/reportes', [\App\Controllers\AoatController::class, 'reportForm'])->middleware('auth');
         $this->router->post('/aoat/reportes/enviar', [\App\Controllers\AoatController::class, 'sendWeeklyReport'])->middleware('auth');
         $this->router->get('/aoat/exportar', [\App\Controllers\AoatController::class, 'export'])->middleware('auth');

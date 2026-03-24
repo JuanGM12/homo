@@ -17,8 +17,7 @@ final class HomeController
     {
         $user = Auth::user();
         $userId = (int) ($user['id'] ?? 0);
-        $roles = $user['roles'] ?? [];
-        $canSeeGlobal = in_array('admin', $roles, true) || in_array('coordinador', $roles, true) || in_array('coordinadora', $roles, true);
+        $canSeeGlobal = Auth::canViewAllModuleRecords($user);
         $scopeIsGlobal = $canSeeGlobal;
 
         $pdo = Connection::getPdo();
@@ -102,7 +101,7 @@ final class HomeController
 
         return Response::view('home/index', [
             'pageTitle' => 'Equipo de Promoción y Prevención',
-            'tests' => EvaluacionesController::getTestsList(),
+            'tests' => EvaluacionesController::getTestsListForUser($user),
             'dashboard' => [
                 'scope_is_global' => $scopeIsGlobal,
                 'kpis' => $kpis,

@@ -29,17 +29,17 @@ final class PicController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $roles = $user['roles'] ?? [];
-        $isSpecialist = in_array('especialista', $roles, true);
-        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
-        $isAdmin = in_array('admin', $roles, true);
-
-        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
 
         if ($isAuditView) {
             $records = $this->repository->findForAudit();
         } else {
             $records = $this->repository->findForUser((int) $user['id']);
+        }
+
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
         return Response::view('pic/index', [
@@ -229,18 +229,19 @@ final class PicController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $roles = $user['roles'] ?? [];
-        $isSpecialist = in_array('especialista', $roles, true);
-        $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
-        $isAdmin = in_array('admin', $roles, true);
-
-        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
 
         if ($isAuditView) {
             $records = $this->repository->findForAudit();
         } else {
             $records = $this->repository->findForUser((int) $user['id']);
         }
+
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
+        }
+
         if ($records === []) {
             Flash::set([
                 'type' => 'info',

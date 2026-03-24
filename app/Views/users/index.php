@@ -21,17 +21,29 @@
     <form method="get" action="/admin/usuarios" class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label">Buscar por nombre o correo</label>
+                <div class="col-md-3">
+                    <label class="form-label">Buscar por nombre, correo o documento</label>
                     <input
                         type="text"
                         name="q"
                         class="form-control"
                         value="<?= htmlspecialchars((string) ($filters['query'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                        placeholder="Ej. Ana, juan@correo.gov.co"
+                        placeholder="Ej. Ana, juan@correo.gov.co, 12345678"
                     >
                 </div>
                 <div class="col-md-3">
+                    <label class="form-label">Filtrar por documento</label>
+                    <input
+                        type="text"
+                        name="document"
+                        class="form-control"
+                        value="<?= htmlspecialchars((string) ($filters['document'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                        placeholder="Número de documento"
+                        inputmode="numeric"
+                        autocomplete="off"
+                    >
+                </div>
+                <div class="col-md-2">
                     <label class="form-label">Rol</label>
                     <select name="role" class="form-select">
                         <option value="">Todos</option>
@@ -58,7 +70,7 @@
                         <option value="0" <?= $activeFilter === '0' ? 'selected' : '' ?>>Inactivos</option>
                     </select>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-outline-primary flex-grow-1">
                         <i class="bi bi-funnel me-1"></i>
                         Filtrar
@@ -80,8 +92,8 @@
             <table class="table align-middle mb-0">
                 <thead>
                 <tr>
-                    <th scope="col">ID</th>
                     <th scope="col">Nombre</th>
+                    <th scope="col">Documento de identidad</th>
                     <th scope="col">Correo</th>
                     <th scope="col">Roles</th>
                     <th scope="col">Estado</th>
@@ -91,8 +103,15 @@
                 <tbody>
                 <?php foreach ($users as $user): ?>
                     <tr>
-                        <td><?= (int) $user['id'] ?></td>
                         <td><?= htmlspecialchars((string) $user['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <?php
+                            $doc = trim((string) ($user['document_number'] ?? ''));
+                            echo $doc !== ''
+                                ? htmlspecialchars($doc, ENT_QUOTES, 'UTF-8')
+                                : '<span class="text-muted">—</span>';
+                            ?>
+                        </td>
                         <td><?= htmlspecialchars((string) $user['email'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string) ($user['roles_list'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                         <td>

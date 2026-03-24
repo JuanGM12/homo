@@ -99,6 +99,33 @@ final class TestResponseRepository
         return $row === false ? null : $row;
     }
 
+    public function findById(int $id): ?array
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare('SELECT * FROM test_responses WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function findAnswersByResponseId(int $responseId): array
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare(
+            'SELECT question_number, selected_option, is_correct
+             FROM test_response_answers
+             WHERE response_id = :response_id
+             ORDER BY question_number ASC'
+        );
+        $stmt->execute([':response_id' => $responseId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /**
      * Consulta respuestas de test con filtros opcionales.
      *
@@ -125,6 +152,20 @@ final class TestResponseRepository
         if (!empty($filters['test_key'])) {
             $where[] = 'test_key = :test_key';
             $params[':test_key'] = $filters['test_key'];
+        } elseif (!empty($filters['allowed_test_keys']) && is_array($filters['allowed_test_keys'])) {
+            $keys = array_values(array_unique(array_filter(
+                $filters['allowed_test_keys'],
+                static fn (mixed $k): bool => is_string($k) && $k !== ''
+            )));
+            if ($keys !== []) {
+                $placeholders = [];
+                foreach ($keys as $i => $k) {
+                    $ph = ':atk' . $i;
+                    $placeholders[] = $ph;
+                    $params[$ph] = $k;
+                }
+                $where[] = 'test_key IN (' . implode(', ', $placeholders) . ')';
+            }
         }
 
         if (!empty($filters['phase']) && in_array($filters['phase'], ['pre', 'post'], true)) {
@@ -161,7 +202,15 @@ final class TestResponseRepository
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
-        $sql .= ' ORDER BY created_at DESC, id DESC LIMIT 500';
+        $limit = isset($filters['limit']) ? (int) $filters['limit'] : 500;
+        if ($limit < 1) {
+            $limit = 500;
+        }
+        if ($limit > 10000) {
+            $limit = 10000;
+        }
+
+        $sql .= ' ORDER BY created_at DESC, id DESC LIMIT ' . $limit;
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);

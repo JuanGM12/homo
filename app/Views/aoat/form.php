@@ -37,11 +37,11 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
 
     <div class="row justify-content-center">
         <div class="col-lg-10 col-xl-9">
-            <div class="card border-0 shadow-sm rounded-4">
+            <div class="card border-0 app-form-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h4 fw-bold mb-4"><?= $isEdit ? 'Editar AoAT' : 'Registrar nueva AoAT' ?></h1>
 
-                    <form method="post" action="<?= $isEdit ? '/aoat/editar' : '/aoat/nueva' ?>">
+                    <form class="aoat-form" method="post" action="<?= $isEdit ? '/aoat/editar' : '/aoat/nueva' ?>">
                         <?php if ($isEdit && isset($record['id'])): ?>
                             <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
                         <?php endif; ?>
@@ -94,8 +94,10 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                     type="date"
                                     name="activity_date"
                                     class="form-control"
+                                    min="2026-01-01"
                                     value="<?= htmlspecialchars((string) ($oldPayload['activity_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
+                                    aria-describedby="activity-date-help"
                                 >
                             </div>
                             <div class="col-md-4">
@@ -126,14 +128,43 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                 <input
                                     type="text"
                                     class="form-control"
-                                    value="Asignada"
+                                    value="<?= htmlspecialchars(
+                                        $isEdit ? (string) ($record['state'] ?? 'Asignada') : 'Asignada',
+                                        ENT_QUOTES,
+                                        'UTF-8'
+                                    ) ?>"
                                     disabled
                                 >
                                 <div class="form-text">
-                                    Se registra siempre como <strong>Asignada</strong>. Será ajustada posteriormente según revisión.
+                                    <?php if (!$isEdit): ?>
+                                        Se registra como <strong>Asignada</strong>. Luego el especialista puede aprobarla o devolverla.
+                                    <?php elseif (($record['state'] ?? '') === 'Devuelta'): ?>
+                                        <strong>Devuelta</strong> para ajustes. Al terminar, usa <strong>Marcar como Realizado</strong> en el listado de AoAT.
+                                    <?php elseif (($record['state'] ?? '') === 'Realizado'): ?>
+                                        En revisión del especialista (no editable hasta aprobación o nueva devolución).
+                                    <?php else: ?>
+                                        Flujo: Asignada → (auditoría) Devuelta o Aprobada; si fue devuelta: el profesional pasa a Realizado → el especialista aprueba.
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($isEdit && ($record['state'] ?? '') === 'Devuelta'): ?>
+                            <div class="alert alert-warning border-0 shadow-sm mb-4">
+                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                                    <div>
+                                        <strong>AoAT devuelta.</strong> Realiza los ajustes indicados y luego marca el registro como «Realizado» desde el listado.
+                                    </div>
+                                    <form method="post" action="/aoat/marcar-realizado" class="mb-0" onsubmit="return confirm('¿Confirmas que ya realizaste los ajustes solicitados? El estado pasará a «Realizado».');">
+                                        <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="bi bi-check2-circle me-1"></i>
+                                            Marcar como Realizado
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php endif; ?>
 
                         <!-- Lugar visitado -->
                         <div class="row g-3 mb-4">
@@ -164,23 +195,24 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
                         </div>
 
-                        <hr class="my-4">
+                        <hr class="my-4 app-form-divider">
 
                         <?php if ($role === 'abogado'): ?>
-                            <div class="mb-3">
+                            <div class="mb-3 app-form-section-title">
                                 <h2 class="h6 fw-semibold mb-1">Temas de Política Pública en Salud Mental (Abogado)</h2>
                                 <p class="text-muted small mb-0">
                                     Marca todos los módulos que trabajaste durante esta AoAT. Puedes seleccionar varias opciones.
                                 </p>
                             </div>
 
+                            <div class="app-form-questions">
                             <!-- Actualización Mesa Municipal de Salud Mental y Prevención de las Adicciones -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="mesa_salud_mental[]" value="Módulo 1" <?= in_array('Módulo 1', $mesaSaludMental, true) ? 'checked' : '' ?>>
@@ -217,12 +249,12 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                             <!-- Actualización Política Pública Municipal de Salud y Prevención de las Adicciones -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-md-6 col-lg-6">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="ppmsmypa[]" value="Módulo 4" <?= in_array('Módulo 4', $ppmsmypaSel, true) ? 'checked' : '' ?>>
@@ -251,11 +283,12 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                             <!-- SAFER -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    SAFER <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">SAFER</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="safer[]" value="Módulo 1" <?= in_array('Módulo 1', $saferSel, true) ? 'checked' : '' ?>>
@@ -306,6 +339,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                     </div>
                                 </div>
                             </div>
+                            </div>
 
                             <!-- Pregunta al final de la cualificación -->
                             <div class="mb-4">
@@ -316,7 +350,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                         <?php elseif ($role === 'medico'): ?>
-                            <div class="mb-3">
+                            <div class="mb-3 app-form-section-title">
                                 <h2 class="h6 fw-semibold mb-1">Temas dictados en el Hospital del municipio visitado (Médico)</h2>
                                 <p class="text-muted small mb-0">
                                     Selecciona todos los temas que trabajaste en esta actividad. Es selección múltiple.
@@ -490,20 +524,21 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                         <?php elseif ($role === 'psicologo'): ?>
-                            <div class="mb-3">
+                            <div class="mb-3 app-form-section-title">
                                 <h2 class="h6 fw-semibold mb-1">Cualificación de temas (Psicólogo)</h2>
                                 <p class="text-muted small mb-0">
                                     Selecciona los temas que trabajaste en esta AoAT. Algunas preguntas son de selección múltiple y otras de selección única.
                                 </p>
                             </div>
 
+                            <div class="app-form-questions">
                             <!-- Cualificación temas en prevención del suicidio -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Cualificación temas en prevención del suicidio
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Cualificación temas en prevención del suicidio</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-12">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 1" <?= in_array('Módulo 1', $prevSuicidio, true) ? 'checked' : '' ?>>
@@ -540,12 +575,12 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                             <!-- Cualificación temas en prevención de Violencias -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Cualificación temas en prevención de Violencias
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Cualificación temas en prevención de Violencias</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-12">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="prev_violencias[]" value="Módulo 1" <?= in_array('Módulo 1', $prevViolencias, true) ? 'checked' : '' ?>>
@@ -582,12 +617,12 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                             <!-- Cualificación temas en prevención de Adicciones -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Cualificación temas en prevención de Adicciones
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Cualificación temas en prevención de Adicciones</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-12">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="prev_adicciones[]" value="Módulo 1" <?= in_array('Módulo 1', $prevAdicciones, true) ? 'checked' : '' ?>>
@@ -624,12 +659,12 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                             <!-- Cualificación temas de Salud Mental -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Cualificación temas de Salud Mental
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Cualificación temas de Salud Mental</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="salud_mental[]" value="Cuidado al cuidador" <?= in_array('Cuidado al cuidador', $saludMental, true) ? 'checked' : '' ?>>
@@ -692,14 +727,15 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                             <!-- Proyectos (selección única) -->
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Proyectos <span class="text-muted small">(selección única)</span>
-                                </label>
-                                <div class="row">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Proyectos <span class="text-danger">*</span></h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección única (obligatoria)</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="proyecto" value="Competencias Parentales" <?= $proyectoSeleccionado === 'Competencias Parentales' ? 'checked' : '' ?>>
+                                            <input class="form-check-input" type="radio" name="proyecto" value="Competencias Parentales" required <?= $proyectoSeleccionado === 'Competencias Parentales' ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Competencias Parentales
                                             </label>
@@ -767,19 +803,20 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
 
                         <?php elseif ($role === 'profesional social' || $role === 'profesional_social'): ?>
-                            <div class="mb-3">
+                            <div class="mb-3 app-form-section-title">
                                 <h2 class="h6 fw-semibold mb-1">Actividades realizadas (Profesional Social)</h2>
                                 <p class="text-muted small mb-0">
                                     Selecciona la(s) actividad(es) que realizaste en esta AoAT. Es selección múltiple.
                                 </p>
                             </div>
 
-                            <div class="mb-4">
-                                <label class="form-label d-block">
-                                    Seleccione la actividad realizada
-                                    <span class="text-muted small">(selección múltiple)</span>
-                                </label>
-                                <div class="row">
+                            <div class="app-form-questions">
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Seleccione la actividad realizada</h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
                                     <div class="col-md-6 col-lg-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="actividad_social[]" value="Formación (desarrollo de capacidades)" <?= in_array('Formación (desarrollo de capacidades)', $actividadSocial, true) ? 'checked' : '' ?>>
@@ -806,6 +843,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                     </div>
                                 </div>
                             </div>
+                            </div>
 
                             <!-- Pregunta al final de la cualificación -->
                             <div class="mb-4">
@@ -823,7 +861,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                             </div>
                         <?php endif; ?>
 
-                        <div class="d-flex justify-content-end">
+                        <div class="d-flex justify-content-end app-form-submit">
                             <button type="submit" class="btn btn-primary">
                                 Guardar AoAT
                             </button>

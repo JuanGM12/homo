@@ -39,7 +39,12 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
                     Reporte semanal
                 </a>
             <?php endif; ?>
-            <?php if (!$isAudit): ?>
+            <?php
+            // Vista "profesional": siempre puede registrar. Vista auditoría: admin/coord. no ven el botón;
+            // los especialistas sí (auditan y también registran sus propias AoAT).
+            $canRegisterNewAoat = !$isAudit || $isSpecialist;
+            ?>
+            <?php if ($canRegisterNewAoat): ?>
                 <a href="/aoat/nueva" class="btn btn-primary">
                     <i class="bi bi-plus-circle me-1"></i>
                     Nueva AoAT
@@ -66,6 +71,7 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
                 <option value="">Todos</option>
                 <option value="Asignada" <?= $currentState === 'Asignada' ? 'selected' : '' ?>>Asignada</option>
                 <option value="Devuelta" <?= $currentState === 'Devuelta' ? 'selected' : '' ?>>Devuelta</option>
+                <option value="Realizado" <?= $currentState === 'Realizado' ? 'selected' : '' ?>>Realizado</option>
                 <option value="Aprobada" <?= $currentState === 'Aprobada' ? 'selected' : '' ?>>Aprobada</option>
             </select>
         </div>

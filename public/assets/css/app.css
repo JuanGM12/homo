@@ -1196,6 +1196,77 @@ body {
     outline-offset: 2px;
 }
 
+/* Seguimiento AoAT — mismo orden visual que evaluaciones/test */
+.aoat-form .app-form-questions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.aoat-form .app-form-questions > .app-form-question {
+    margin-bottom: 0 !important;
+}
+
+.aoat-qual-section-header {
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--app-border-subtle);
+}
+
+.aoat-qual-section-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.4;
+    color: var(--app-primary);
+    letter-spacing: -0.01em;
+    padding-left: 0.75rem;
+    border-left: 4px solid var(--app-primary-soft);
+}
+
+.aoat-qual-hint {
+    display: inline-block;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--app-primary-deep);
+    background: var(--app-primary-subtle);
+    border: 1px solid var(--app-border-subtle);
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+}
+
+/* Controles más visibles (checkbox / radio) en AoAT */
+.aoat-form .app-form-questions .form-check-input {
+    width: 1.2em;
+    height: 1.2em;
+    margin-top: 0.2em;
+    border-width: 2px;
+    border-color: var(--app-text-secondary);
+    background-color: var(--app-surface);
+}
+
+.aoat-form .app-form-questions .form-check-input:checked {
+    background-color: var(--app-primary);
+    border-color: var(--app-primary);
+}
+
+.aoat-form .app-form-questions .form-check-input:focus {
+    box-shadow: 0 0 0 3px var(--app-primary-subtle);
+}
+
+.aoat-form .app-form-questions .form-check-label {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--app-text);
+}
+
+.aoat-form .app-form-questions .form-check-input:checked + .form-check-label {
+    background: var(--app-primary-subtle);
+    border-color: rgba(65, 96, 164, 0.35);
+    box-shadow: 0 0 0 1px rgba(65, 96, 164, 0.18);
+}
+
 /* Fila de campos (documento, nombre, etc.) */
 .app-form-fields {
     padding: 1.25rem 1rem;

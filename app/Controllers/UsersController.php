@@ -17,6 +17,7 @@ final class UsersController
 
         $filters = [
             'query' => trim((string) $request->input('q', '')),
+            'document' => trim((string) $request->input('document', '')),
             'role' => trim((string) $request->input('role', '')),
             'active' => (string) $request->input('active', ''),
         ];
@@ -48,15 +49,16 @@ final class UsersController
     {
         $name = trim((string) $request->input('name', ''));
         $email = trim((string) $request->input('email', ''));
+        $documentNumber = trim((string) $request->input('document_number', ''));
         $password = (string) $request->input('password', '');
         $active = (string) $request->input('active', '1') === '1' ? 1 : 0;
         $roles = (array) $request->input('roles', []);
 
-        if ($name === '' || $email === '' || $password === '') {
+        if ($name === '' || $email === '' || $documentNumber === '' || $password === '') {
             Flash::set([
                 'type' => 'error',
                 'title' => 'Campos obligatorios',
-                'message' => 'Nombre, correo y contraseña son obligatorios.',
+                'message' => 'Nombre, documento de identidad, correo y contraseña son obligatorios.',
             ]);
 
             return Response::redirect('/admin/usuarios/nuevo');
@@ -70,6 +72,7 @@ final class UsersController
             $repo->create([
                 'name' => $name,
                 'email' => $email,
+                'document_number' => $documentNumber,
                 'password' => $passwordHash,
                 'active' => $active,
             ], $roles);
@@ -77,7 +80,7 @@ final class UsersController
             Flash::set([
                 'type' => 'error',
                 'title' => 'No fue posible crear el usuario',
-                'message' => 'Revisa que el correo no esté repetido o intenta nuevamente.',
+                'message' => 'Revisa que el correo y el documento de identidad no estén repetidos o intenta nuevamente.',
             ]);
 
             return Response::redirect('/admin/usuarios/nuevo');
@@ -125,15 +128,16 @@ final class UsersController
         $id = (int) $request->input('id', 0);
         $name = trim((string) $request->input('name', ''));
         $email = trim((string) $request->input('email', ''));
+        $documentNumber = trim((string) $request->input('document_number', ''));
         $password = (string) $request->input('password', '');
         $active = (string) $request->input('active', '1') === '1' ? 1 : 0;
         $roles = (array) $request->input('roles', []);
 
-        if ($id <= 0 || $name === '' || $email === '') {
+        if ($id <= 0 || $name === '' || $email === '' || $documentNumber === '') {
             Flash::set([
                 'type' => 'error',
                 'title' => 'Datos inválidos',
-                'message' => 'Debes indicar un usuario válido, nombre y correo.',
+                'message' => 'Debes indicar un usuario válido, nombre, documento de identidad y correo.',
             ]);
 
             return Response::redirect('/admin/usuarios');
@@ -142,6 +146,7 @@ final class UsersController
         $data = [
             'name' => $name,
             'email' => $email,
+            'document_number' => $documentNumber,
             'active' => $active,
         ];
 
@@ -157,7 +162,7 @@ final class UsersController
             Flash::set([
                 'type' => 'error',
                 'title' => 'No fue posible actualizar el usuario',
-                'message' => 'Revisa que el correo no esté repetido o intenta nuevamente.',
+                'message' => 'Revisa que el correo y el documento de identidad no estén repetidos o intenta nuevamente.',
             ]);
 
             return Response::redirect('/admin/usuarios/editar?id=' . $id);

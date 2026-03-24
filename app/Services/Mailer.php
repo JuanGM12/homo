@@ -32,6 +32,34 @@ final class Mailer
         }
 
         $this->mailer->CharSet = 'UTF-8';
+        $this->mailer->Timeout = (int) Config::env('MAIL_TIMEOUT', 25);
+    }
+
+    /**
+     * Envía el correo de AoAT devuelta después de responder al cliente (no bloquea la petición HTTP).
+     */
+    public static function scheduleAoatReturnedNotification(
+        string $toEmail,
+        string $toName,
+        string $observation,
+        string $motive,
+        int $aoatId
+    ): void {
+        if ($toEmail === '') {
+            return;
+        }
+
+        register_shutdown_function(static function () use ($toEmail, $toName, $observation, $motive, $aoatId): void {
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            }
+            try {
+                $mailer = new self();
+                $mailer->sendAoatReturnedNotification($toEmail, $toName, $observation, $motive, $aoatId);
+            } catch (\Throwable $e) {
+                error_log('[Mailer] scheduleAoatReturnedNotification: ' . $e->getMessage());
+            }
+        });
     }
 
     /**

@@ -35,7 +35,8 @@ final class PlaneacionController
         $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
         $isAdmin = in_array('admin', $roles, true);
 
-        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
@@ -61,6 +62,10 @@ final class PlaneacionController
             $records = $this->repository->findForAudit($auditRoles);
         } else {
             $records = $this->repository->findForUser((int) $user['id']);
+        }
+
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
         if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
@@ -98,7 +103,7 @@ final class PlaneacionController
         }
 
         return Response::view('planeacion/index', [
-            'pageTitle' => 'Planeación anual de capacitaciones',
+            'pageTitle' => 'Planeaci?n anual de capacitaciones',
             'records' => $records,
             'isAuditView' => $isAuditView,
         ]);
@@ -125,7 +130,7 @@ final class PlaneacionController
         $primaryRole = (string) ($user['role'] ?? ($professional['roles'][0] ?? ''));
 
         return Response::view('planeacion/form', [
-            'pageTitle' => 'Nueva planeación anual',
+            'pageTitle' => 'Nueva planeaci?n anual',
             'mode' => 'create',
             'plan' => null,
             'professional' => $professional,
@@ -152,7 +157,7 @@ final class PlaneacionController
         $errors = [];
 
         if ($subregion === '') {
-            $errors[] = 'Debes seleccionar la subregión.';
+            $errors[] = 'Debes seleccionar la subregi?n.';
         }
 
         if ($municipality === '') {
@@ -165,7 +170,7 @@ final class PlaneacionController
         if (!empty($errors)) {
             Flash::set([
                 'type' => 'error',
-                'title' => 'Revisa la planeación',
+                'title' => 'Revisa la planeaci?n',
                 'message' => implode("\n", $errors),
             ]);
 
@@ -186,8 +191,8 @@ final class PlaneacionController
 
         Flash::set([
             'type' => 'success',
-            'title' => 'Planeación registrada',
-            'message' => 'La planeación anual de capacitaciones se ha guardado correctamente.',
+            'title' => 'Planeaci?n registrada',
+            'message' => 'La planeaci?n anual de capacitaciones se ha guardado correctamente.',
         ]);
 
         return Response::redirect('/planeacion');
@@ -209,7 +214,8 @@ final class PlaneacionController
         $isCoordinator = in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
         $isAdmin = in_array('admin', $roles, true);
 
-        $isAuditView = $isSpecialist || $isCoordinator || $isAdmin;
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
 
         if ($isAuditView) {
             $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
@@ -232,11 +238,15 @@ final class PlaneacionController
             $records = $this->repository->findForUser((int) $user['id']);
         }
 
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
+        }
+
         if ($records === []) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Sin registros para exportar',
-                'message' => 'Aún no tienes planeaciones anuales registradas para exportar.',
+                'message' => 'A?n no tienes planeaciones anuales registradas para exportar.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -259,14 +269,14 @@ final class PlaneacionController
 
         $lines = [];
         $lines[] = implode(';', [
-            'Año',
+            'A?o',
             'Profesional',
             'Rol',
-            'Subregión',
+            'Subregi?n',
             'Municipio',
             'Mes',
-            'Temas / módulos',
-            'Población objetivo',
+            'Temas / m?dulos',
+            'Poblaci?n objetivo',
         ]);
 
         foreach ($records as $plan) {
@@ -338,7 +348,7 @@ final class PlaneacionController
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
-                'message' => 'No puedes editar esta planeación.',
+                'message' => 'No puedes editar esta planeaci?n.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -347,8 +357,8 @@ final class PlaneacionController
         if (empty($plan['editable'])) {
             Flash::set([
                 'type' => 'info',
-                'title' => 'Edición no permitida',
-                'message' => 'Esta planeación ya fue aprobada por el especialista y no puede modificarse.',
+                'title' => 'Edici?n no permitida',
+                'message' => 'Esta planeaci?n ya fue aprobada por el especialista y no puede modificarse.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -361,7 +371,7 @@ final class PlaneacionController
         ];
 
         return Response::view('planeacion/form', [
-            'pageTitle' => 'Editar planeación anual',
+            'pageTitle' => 'Editar planeaci?n anual',
             'mode' => 'edit',
             'plan' => $plan,
             'professional' => $professional,
@@ -391,7 +401,7 @@ final class PlaneacionController
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
-                'message' => 'No puedes editar esta planeación.',
+                'message' => 'No puedes editar esta planeaci?n.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -400,8 +410,8 @@ final class PlaneacionController
         if (empty($plan['editable'])) {
             Flash::set([
                 'type' => 'info',
-                'title' => 'Edición no permitida',
-                'message' => 'Esta planeación ya fue aprobada por el especialista y no puede modificarse.',
+                'title' => 'Edici?n no permitida',
+                'message' => 'Esta planeaci?n ya fue aprobada por el especialista y no puede modificarse.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -414,7 +424,7 @@ final class PlaneacionController
         $errors = [];
 
         if ($subregion === '') {
-            $errors[] = 'Debes seleccionar la subregión.';
+            $errors[] = 'Debes seleccionar la subregi?n.';
         }
 
         if ($municipality === '') {
@@ -427,7 +437,7 @@ final class PlaneacionController
         if (!empty($errors)) {
             Flash::set([
                 'type' => 'error',
-                'title' => 'Revisa la planeación',
+                'title' => 'Revisa la planeaci?n',
                 'message' => implode("\n", $errors),
             ]);
 
@@ -443,8 +453,8 @@ final class PlaneacionController
 
         Flash::set([
             'type' => 'success',
-            'title' => 'Planeación actualizada',
-            'message' => 'La planeación anual de capacitaciones se ha actualizado correctamente.',
+            'title' => 'Planeaci?n actualizada',
+            'message' => 'La planeaci?n anual de capacitaciones se ha actualizado correctamente.',
         ]);
 
         return Response::redirect('/planeacion');
@@ -460,7 +470,7 @@ final class PlaneacionController
 
     /**
      * Construye el payload de meses a partir del Request y devuelve
-     * [payload, erroresDeValidación].
+     * [payload, erroresDeValidaci?n].
      *
      * @return array{0: array<string, array<string, mixed>>, 1: string[]}
      */
@@ -496,7 +506,7 @@ final class PlaneacionController
 
             if ($hasAnyData) {
                 if (empty($topics) || $population === '') {
-                    $errors[] = "Si vas a diligenciar {$label}, debes seleccionar al menos un tema y definir la población objetivo.";
+                    $errors[] = "Si vas a diligenciar {$label}, debes seleccionar al menos un tema y definir la poblaci?n objetivo.";
                 } else {
                     $filledMonths++;
                 }
@@ -510,7 +520,7 @@ final class PlaneacionController
         }
 
         if ($filledMonths === 0) {
-            $errors[] = 'Debes diligenciar al menos un mes con temas y población objetivo para guardar la planeación.';
+            $errors[] = 'Debes diligenciar al menos un mes con temas y poblaci?n objetivo para guardar la planeaci?n.';
         }
 
         return [$payload, $errors];

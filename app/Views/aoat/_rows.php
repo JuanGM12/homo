@@ -10,8 +10,9 @@ $user = $currentUserLocal ?? Auth::user();
 $userId = $user['id'] ?? null;
 $userRoles = $user['roles'] ?? [];
 $isSpecialist = in_array('especialista', $userRoles ?? [], true);
-$isCoordinator = in_array('coordinadora', $userRoles ?? [], true);
+$isCoordinator = in_array('coordinadora', $userRoles ?? [], true) || in_array('coordinador', $userRoles ?? [], true);
 $isAdmin = in_array('admin', $userRoles ?? [], true);
+$canAuditRole = $isSpecialist || $isCoordinator || $isAdmin;
 ?>
 
 <?php foreach ($records as $record): ?>
@@ -19,8 +20,10 @@ $isAdmin = in_array('admin', $userRoles ?? [], true);
     $ownerId = $record['user_id'] ?? null;
     $isOwner = $userId !== null && (int) $ownerId === (int) $userId;
     $state = (string) ($record['state'] ?? '');
-    $canEditForm = !$isAudit && $isOwner && $state !== 'Aprobada';
-    $canAuditState = $isAudit && !$isOwner && $state === 'Asignada' && ($isSpecialist || $isCoordinator || $isAdmin);
+    $canEditForm = !$isAudit && $isOwner && !in_array($state, ['Aprobada', 'Realizado'], true);
+    $canAuditState = $isAudit && !$isOwner && $state === 'Asignada' && $canAuditRole;
+    $canApproveFromRealizado = $isAudit && !$isOwner && $state === 'Realizado' && $canAuditRole;
+    $canMarkRealizado = !$isAudit && $isOwner && $state === 'Devuelta';
 
     $payloadArray = [];
     if (!empty($record['payload'])) {
@@ -41,6 +44,15 @@ $isAdmin = in_array('admin', $userRoles ?? [], true);
         'payload' => $payloadArray,
     ];
     $detailsJson = htmlspecialchars(json_encode($details, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+
+    $badgeClass = 'text-bg-light';
+    if ($state === 'Aprobada') {
+        $badgeClass = 'text-bg-success';
+    } elseif ($state === 'Devuelta') {
+        $badgeClass = 'text-bg-warning';
+    } elseif ($state === 'Realizado') {
+        $badgeClass = 'text-bg-info';
+    }
     ?>
     <tr>
         <td><?= (int) $record['id'] ?></td>
@@ -51,7 +63,7 @@ $isAdmin = in_array('admin', $userRoles ?? [], true);
         <td><?= htmlspecialchars((string) $record['subregion'], ENT_QUOTES, 'UTF-8') ?></td>
         <td><?= htmlspecialchars((string) $record['municipality'], ENT_QUOTES, 'UTF-8') ?></td>
         <td>
-            <span class="badge rounded-pill <?= $state === 'Aprobada' ? 'text-bg-success' : ($state === 'Devuelta' ? 'text-bg-warning' : 'text-bg-light') ?>">
+            <span class="badge rounded-pill <?= $badgeClass ?>">
                 <?= htmlspecialchars($state, ENT_QUOTES, 'UTF-8') ?>
             </span>
         </td>
@@ -70,7 +82,17 @@ $isAdmin = in_array('admin', $userRoles ?? [], true);
                     <i class="bi bi-pencil me-1"></i>
                     Editar
                 </a>
-            <?php elseif ($canAuditState): ?>
+            <?php endif; ?>
+            <?php if ($canMarkRealizado): ?>
+                <form method="post" action="/aoat/marcar-realizado" class="d-inline" onsubmit="return confirm('¿Confirmas que ya realizaste los ajustes solicitados? El estado pasará a «Realizado» y el especialista podrá aprobarlo.');">
+                    <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="bi bi-check2-circle me-1"></i>
+                        Marcar como Realizado
+                    </button>
+                </form>
+            <?php endif; ?>
+            <?php if ($canAuditState): ?>
                 <button
                     type="button"
                     class="btn btn-sm btn-outline-primary"
@@ -80,10 +102,21 @@ $isAdmin = in_array('admin', $userRoles ?? [], true);
                     <i class="bi bi-clipboard-check me-1"></i>
                     Auditar
                 </button>
-            <?php else: ?>
+            <?php endif; ?>
+            <?php if ($canApproveFromRealizado): ?>
+                <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    data-aoat-approve-realizado
+                    data-aoat="<?= $detailsJson ?>"
+                >
+                    <i class="bi bi-patch-check me-1"></i>
+                    Aprobar revisión
+                </button>
+            <?php endif; ?>
+            <?php if (!$canEditForm && !$canMarkRealizado && !$canAuditState && !$canApproveFromRealizado): ?>
                 <span class="text-muted small">Sin acciones</span>
             <?php endif; ?>
         </td>
     </tr>
 <?php endforeach; ?>
-

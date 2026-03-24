@@ -47,6 +47,24 @@ $selectedRoles = $isEdit ? (array) ($user['roles'] ?? []) : [];
                         </div>
 
                         <div class="mb-3">
+                            <label class="form-label">Documento de identidad <span class="text-danger">*</span></label>
+                            <input
+                                type="text"
+                                name="document_number"
+                                class="form-control"
+                                required
+                                maxlength="50"
+                                inputmode="numeric"
+                                autocomplete="off"
+                                value="<?= htmlspecialchars($isEdit ? (string) ($user['document_number'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>"
+                                aria-describedby="help-document-number"
+                            >
+                            <div id="help-document-number" class="form-text">
+                                Cédula de ciudadanía u otro documento. Debe ser único en el sistema (evaluaciones y reportes lo usan como identificador).
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label">Correo electrónico <span class="text-danger">*</span></label>
                             <input
                                 type="email"

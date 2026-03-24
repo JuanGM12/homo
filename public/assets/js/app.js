@@ -10,6 +10,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // AoAT: enlazar cada <label> con su checkbox/radio (clic en todo el texto marca la opción)
+    let aoatFieldSeq = 0;
+    document.querySelectorAll('.aoat-form .form-check').forEach((wrap) => {
+        const input = wrap.querySelector('input[type="checkbox"], input[type="radio"]');
+        const label = wrap.querySelector('.form-check-label');
+        if (!input || !label) {
+            return;
+        }
+        if (!input.id) {
+            input.id = `aoat-field-${aoatFieldSeq++}`;
+        }
+        label.setAttribute('for', input.id);
+    });
+
     // Interacción: frase del mes
     const fraseButtons = document.querySelectorAll('[data-frase-mes]');
     fraseButtons.forEach((btn) => {
@@ -37,6 +51,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
+                    const isTerritoryFilter = form.hasAttribute && form.hasAttribute('data-territory-filter');
+                    const municipalityEmptyLabel = isTerritoryFilter
+                        ? 'Todos los municipios'
+                        : 'Seleccione el municipio de pertenencia';
+
                     // Llenar opciones de subregión
                     if (subregionSelect.options.length <= 1) {
                         Object.keys(data).forEach((subregion) => {
@@ -48,7 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     const fillMunicipalities = (subregionValue, selectedMunicipality) => {
-                        municipalitySelect.innerHTML = '<option value="">Seleccione el municipio de pertenencia</option>';
+                        municipalitySelect.innerHTML =
+                            '<option value="">' + municipalityEmptyLabel + '</option>';
                         municipalitySelect.disabled = !subregionValue;
 
                         if (subregionValue && data[subregionValue]) {
@@ -396,102 +416,144 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Auditoría de AoAT: cambiar estado (Asignada -> Aprobada / Devuelta)
-    const aoatAuditButtons = document.querySelectorAll('[data-aoat-audit]');
-    if (aoatAuditButtons.length > 0) {
+    // Auditoría AoAT + aprobación desde Realizado (delegación: sigue funcionando tras filtros AJAX)
+    document.body.addEventListener('click', async (e) => {
+        const approveBtn = e.target.closest('[data-aoat-approve-realizado]');
+        const auditBtn = e.target.closest('[data-aoat-audit]');
+        if (!approveBtn && !auditBtn) {
+            return;
+        }
+
         const stateForm = document.getElementById('aoat-state-form');
         const inputId = document.getElementById('aoat-state-id');
         const inputState = document.getElementById('aoat-state-value');
         const inputObs = document.getElementById('aoat-state-observation');
         const inputMotive = document.getElementById('aoat-state-motive');
+        if (!stateForm || !inputId || !inputState || !inputObs || !inputMotive) {
+            return;
+        }
 
-        aoatAuditButtons.forEach((btn) => {
-            btn.addEventListener('click', async () => {
-                if (!stateForm || !inputId || !inputState || !inputObs || !inputMotive) return;
+        e.preventDefault();
 
-                const raw = btn.getAttribute('data-aoat');
-                if (!raw) return;
+        if (approveBtn) {
+            const raw = approveBtn.getAttribute('data-aoat');
+            if (!raw) return;
 
-                let data;
-                try {
-                    data = JSON.parse(raw);
-                } catch (e) {
-                    console.error('No se pudo parsear el detalle de la AoAT para auditoría.', e);
-                    return;
-                }
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (err) {
+                console.error('No se pudo parsear el detalle de la AoAT.', err);
+                return;
+            }
 
-                const id = data.id || '';
-                const profesional = data.professional || '';
+            const id = data.id || '';
+            const profesional = data.professional || '';
 
-                const { value: action } = await Swal.fire({
-                    title: 'Cambiar estado de AoAT',
-                    html: `<p class="small mb-2">Profesional: <strong>${profesional}</strong><br>ID registro: <strong>${id}</strong></p>
-<p class="small mb-1">Selecciona la acción a realizar:</p>`,
-                    input: 'radio',
-                    inputOptions: {
-                        Aprobada: 'Marcar como Aprobada (se cierra el registro)',
-                        Devuelta: 'Marcar como Devuelta (se notifica al profesional)',
-                    },
-                    inputValidator: (value) => (!value ? 'Debes seleccionar una opción.' : null),
-                    confirmButtonText: 'Continuar',
-                    showCancelButton: true,
-                    cancelButtonText: 'Cancelar',
-                    width: '40rem',
-                });
-
-                if (!action) {
-                    return;
-                }
-
-                let observation = '';
-                let motive = '';
-
-                if (action === 'Devuelta') {
-                    const { value: formValues } = await Swal.fire({
-                        title: 'Devolver AoAT',
-                        html:
-                            '<div class="mb-2 text-start small">Indica el motivo y la observación para devolver este registro.</div>' +
-                            '<select id="swal-aoat-motive" class="form-select mb-2">' +
-                            '<option value="">Selecciona un motivo</option>' +
-                            '<option value="Sin Cargar en AoAT">Sin Cargar en AoAT</option>' +
-                            '<option value="Sin cargar en Drive">Sin cargar en Drive</option>' +
-                            '</select>' +
-                            '<textarea id="swal-aoat-observation" class="form-control" rows="3" placeholder="Describe el motivo de la devolución"></textarea>',
-                        focusConfirm: false,
-                        preConfirm: () => {
-                            const motiveEl = document.getElementById('swal-aoat-motive');
-                            const obsEl = document.getElementById('swal-aoat-observation');
-                            const m = motiveEl ? motiveEl.value : '';
-                            const o = obsEl ? obsEl.value.trim() : '';
-                            if (!m || !o) {
-                                Swal.showValidationMessage('Debes seleccionar un motivo y escribir una observación.');
-                                return null;
-                            }
-                            return { motive: m, observation: o };
-                        },
-                        showCancelButton: true,
-                        cancelButtonText: 'Cancelar',
-                        confirmButtonText: 'Enviar devolución',
-                        width: '40rem',
-                    });
-
-                    if (!formValues) {
-                        return;
-                    }
-
-                    observation = formValues.observation;
-                    motive = formValues.motive;
-                }
-
-                inputId.value = String(id);
-                inputState.value = action;
-                inputObs.value = observation;
-                inputMotive.value = motive;
-
-                stateForm.submit();
+            const result = await Swal.fire({
+                title: 'Aprobar revisión de AoAT',
+                html: `<p class="small mb-0">Profesional: <strong>${profesional}</strong><br>ID registro: <strong>${id}</strong></p>
+<p class="small mt-2 mb-0">El profesional marcó el registro como <strong>Realizado</strong> tras los ajustes. ¿Confirmas la <strong>aprobación final</strong>?</p>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, aprobar',
+                cancelButtonText: 'Cancelar',
+                width: '40rem',
             });
+
+            if (!result.isConfirmed) {
+                return;
+            }
+
+            inputId.value = String(id);
+            inputState.value = 'Aprobada';
+            inputObs.value = '';
+            inputMotive.value = '';
+            stateForm.submit();
+            return;
+        }
+
+        const raw = auditBtn.getAttribute('data-aoat');
+        if (!raw) return;
+
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (err) {
+            console.error('No se pudo parsear el detalle de la AoAT para auditoría.', err);
+            return;
+        }
+
+        const id = data.id || '';
+        const profesional = data.professional || '';
+
+        const { value: action } = await Swal.fire({
+            title: 'Cambiar estado de AoAT',
+            html: `<p class="small mb-2">Profesional: <strong>${profesional}</strong><br>ID registro: <strong>${id}</strong></p>
+<p class="small mb-1">Selecciona la acción a realizar:</p>`,
+            input: 'radio',
+            inputOptions: {
+                Aprobada: 'Marcar como Aprobada (se cierra el registro)',
+                Devuelta: 'Marcar como Devuelta (se notifica al profesional)',
+            },
+            inputValidator: (value) => (!value ? 'Debes seleccionar una opción.' : null),
+            confirmButtonText: 'Continuar',
+            showCancelButton: true,
+            cancelButtonText: 'Cancelar',
+            width: '40rem',
         });
-    }
+
+        if (!action) {
+            return;
+        }
+
+        let observation = '';
+        let motive = '';
+
+        if (action === 'Devuelta') {
+            const { value: formValues } = await Swal.fire({
+                title: 'Devolver AoAT',
+                html:
+                    '<div class="mb-2 text-start small">Indica el motivo y la observación para devolver este registro.</div>' +
+                    '<select id="swal-aoat-motive" class="form-select mb-2">' +
+                    '<option value="">Selecciona un motivo</option>' +
+                    '<option value="Sin Cargar en AoAT">Sin Cargar en AoAT</option>' +
+                    '<option value="Sin cargar en Drive">Sin cargar en Drive</option>' +
+                    '</select>' +
+                    '<textarea id="swal-aoat-observation" class="form-control" rows="3" placeholder="Describe el motivo de la devolución"></textarea>',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const motiveEl = document.getElementById('swal-aoat-motive');
+                    const obsEl = document.getElementById('swal-aoat-observation');
+                    const m = motiveEl ? motiveEl.value : '';
+                    const o = obsEl ? obsEl.value.trim() : '';
+                    if (!m || !o) {
+                        Swal.showValidationMessage('Debes seleccionar un motivo y escribir una observación.');
+                        return null;
+                    }
+                    return { motive: m, observation: o };
+                },
+                showCancelButton: true,
+                cancelButtonText: 'Cancelar',
+                confirmButtonText: 'Enviar devolución',
+                width: '40rem',
+            });
+
+            if (!formValues) {
+                return;
+            }
+
+            observation = formValues.observation;
+            motive = formValues.motive;
+        }
+
+        inputId.value = String(id);
+        inputState.value = action;
+        inputObs.value = observation;
+        inputMotive.value = motive;
+
+        stateForm.submit();
+    });
 
     // Filtros AJAX para AoAT
     const aoatFilterForm = document.querySelector('[data-aoat-filters]');

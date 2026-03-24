@@ -1,5 +1,7 @@
 <?php
 use App\Services\Auth;
+/** @var array<string, array{name: string, color: string}> $tests */
+$tests = $tests ?? [];
 /** @var array $dashboard */
 $dashboard = $dashboard ?? [];
 $kpis = $dashboard['kpis'] ?? [];
@@ -152,6 +154,7 @@ $isAuthenticated = Auth::check();
     </section>
 <?php endif; ?>
 
+<?php if (!$isAuthenticated || $tests !== []): ?>
 <section class="mb-5" id="evaluaciones-tests">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
         <div>
@@ -164,3 +167,4 @@ $isAuthenticated = Auth::check();
 
     <?php require __DIR__ . '/../evaluaciones/_listado.php'; ?>
 </section>
+<?php endif; ?>
