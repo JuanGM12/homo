@@ -1,28 +1,39 @@
 <?php
 /** @var array|null $record */
 /** @var array $professional */
+/** @var array $oldInput */
 
 $isEdit = isset($record) && isset($record['id']);
 $role = strtolower((string) ($professional['role'] ?? ''));
 
-$oldPayload = [];
+$formData = [];
 if ($isEdit && isset($record['payload'])) {
     $decoded = json_decode((string) $record['payload'], true);
     if (is_array($decoded)) {
-        $oldPayload = $decoded;
+        $formData = $decoded;
     }
 }
 
-$prevSuicidio = isset($oldPayload['prev_suicidio']) && is_array($oldPayload['prev_suicidio']) ? $oldPayload['prev_suicidio'] : [];
-$prevViolencias = isset($oldPayload['prev_violencias']) && is_array($oldPayload['prev_violencias']) ? $oldPayload['prev_violencias'] : [];
-$prevAdicciones = isset($oldPayload['prev_adicciones']) && is_array($oldPayload['prev_adicciones']) ? $oldPayload['prev_adicciones'] : [];
-$saludMental = isset($oldPayload['salud_mental']) && is_array($oldPayload['salud_mental']) ? $oldPayload['salud_mental'] : [];
-$proyectoSeleccionado = isset($oldPayload['proyecto']) ? (string) $oldPayload['proyecto'] : '';
-$mesaSaludMental = isset($oldPayload['mesa_salud_mental']) && is_array($oldPayload['mesa_salud_mental']) ? $oldPayload['mesa_salud_mental'] : [];
-$ppmsmypaSel = isset($oldPayload['ppmsmypa']) && is_array($oldPayload['ppmsmypa']) ? $oldPayload['ppmsmypa'] : [];
-$saferSel = isset($oldPayload['safer']) && is_array($oldPayload['safer']) ? $oldPayload['safer'] : [];
-$temasHospital = isset($oldPayload['temas_hospital']) && is_array($oldPayload['temas_hospital']) ? $oldPayload['temas_hospital'] : [];
-$actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayload['actividad_social']) ? $oldPayload['actividad_social'] : [];
+if ($isEdit) {
+    $formData['subregion'] = (string) ($record['subregion'] ?? '');
+    $formData['municipality'] = (string) ($record['municipality'] ?? '');
+}
+
+if (isset($oldInput) && is_array($oldInput) && $oldInput !== []) {
+    $formData = array_replace($formData, $oldInput);
+}
+
+$oldPayload = $formData;
+$prevSuicidio = isset($formData['prev_suicidio']) && is_array($formData['prev_suicidio']) ? $formData['prev_suicidio'] : [];
+$prevViolencias = isset($formData['prev_violencias']) && is_array($formData['prev_violencias']) ? $formData['prev_violencias'] : [];
+$prevAdicciones = isset($formData['prev_adicciones']) && is_array($formData['prev_adicciones']) ? $formData['prev_adicciones'] : [];
+$saludMental = isset($formData['salud_mental']) && is_array($formData['salud_mental']) ? $formData['salud_mental'] : [];
+$proyectoSeleccionado = isset($formData['proyecto']) ? (string) $formData['proyecto'] : '';
+$mesaSaludMental = isset($formData['mesa_salud_mental']) && is_array($formData['mesa_salud_mental']) ? $formData['mesa_salud_mental'] : [];
+$ppmsmypaSel = isset($formData['ppmsmypa']) && is_array($formData['ppmsmypa']) ? $formData['ppmsmypa'] : [];
+$saferSel = isset($formData['safer']) && is_array($formData['safer']) ? $formData['safer'] : [];
+$temasHospital = isset($formData['temas_hospital']) && is_array($formData['temas_hospital']) ? $formData['temas_hospital'] : [];
+$actividadSocial = isset($formData['actividad_social']) && is_array($formData['actividad_social']) ? $formData['actividad_social'] : [];
 ?>
 
 <section class="mb-4">
@@ -139,7 +150,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                     <?php if (!$isEdit): ?>
                                         Se registra como <strong>Asignada</strong>. Luego el especialista puede aprobarla o devolverla.
                                     <?php elseif (($record['state'] ?? '') === 'Devuelta'): ?>
-                                        <strong>Devuelta</strong> para ajustes. Al terminar, usa <strong>Marcar como Realizado</strong> en el listado de AoAT.
+                                        <strong>Devuelta</strong> para ajustes. Realiza los cambios y al final usa <strong>Guardar cambios y marcar como realizado</strong>.
                                     <?php elseif (($record['state'] ?? '') === 'Realizado'): ?>
                                         En revisión del especialista (no editable hasta aprobación o nueva devolución).
                                     <?php else: ?>
@@ -151,18 +162,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
 
                         <?php if ($isEdit && ($record['state'] ?? '') === 'Devuelta'): ?>
                             <div class="alert alert-warning border-0 shadow-sm mb-4">
-                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                                    <div>
-                                        <strong>AoAT devuelta.</strong> Realiza los ajustes indicados y luego marca el registro como «Realizado» desde el listado.
-                                    </div>
-                                    <form method="post" action="/aoat/marcar-realizado" class="mb-0" onsubmit="return confirm('¿Confirmas que ya realizaste los ajustes solicitados? El estado pasará a «Realizado».');">
-                                        <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
-                                        <button type="submit" class="btn btn-success btn-sm">
-                                            <i class="bi bi-check2-circle me-1"></i>
-                                            Marcar como Realizado
-                                        </button>
-                                    </form>
-                                </div>
+                                <strong>AoAT devuelta.</strong> Ajusta la información necesaria y al final del formulario guarda los cambios para enviarla nuevamente a revisión.
                             </div>
                         <?php endif; ?>
 
@@ -174,7 +174,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                     name="subregion"
                                     class="form-select"
                                     data-subregion-select
-                                    data-current-value="<?= htmlspecialchars((string) ($record['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    data-current-value="<?= htmlspecialchars((string) ($formData['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
                                 >
                                     <option value="">Seleccione la subregión que visitó</option>
@@ -186,7 +186,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                     name="municipality"
                                     class="form-select"
                                     data-municipality-select
-                                    data-current-value="<?= htmlspecialchars((string) ($record['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    data-current-value="<?= htmlspecialchars((string) ($formData['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
                                     disabled
                                 >
@@ -346,7 +346,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                 <label class="form-label">
                                     ¿Identifica otro caso diferente? Describa cuál
                                 </label>
-                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."><?= htmlspecialchars((string) ($formData['otro_caso'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                             </div>
 
                         <?php elseif ($role === 'medico'): ?>
@@ -520,7 +520,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                 <label class="form-label">
                                     ¿Identifica otro caso diferente? Describa cuál
                                 </label>
-                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."><?= htmlspecialchars((string) ($formData['otro_caso'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                             </div>
 
                         <?php elseif ($role === 'psicologo'): ?>
@@ -799,7 +799,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                 <label class="form-label">
                                     ¿Identifica otro caso diferente? Describa cuál
                                 </label>
-                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."><?= htmlspecialchars((string) ($formData['otro_caso'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                             </div>
 
                         <?php elseif ($role === 'profesional social' || $role === 'profesional_social'): ?>
@@ -850,7 +850,7 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
                                 <label class="form-label">
                                     ¿Identifica otro caso diferente? Describa cuál
                                 </label>
-                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."></textarea>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."><?= htmlspecialchars((string) ($formData['otro_caso'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                             </div>
 
                         <?php else: ?>
@@ -863,7 +863,9 @@ $actividadSocial = isset($oldPayload['actividad_social']) && is_array($oldPayloa
 
                         <div class="d-flex justify-content-end app-form-submit">
                             <button type="submit" class="btn btn-primary">
-                                Guardar AoAT
+                                <?= $isEdit && (($record['state'] ?? '') === 'Devuelta')
+                                    ? 'Guardar cambios y marcar como realizado'
+                                    : 'Guardar AoAT' ?>
                             </button>
                         </div>
                     </form>

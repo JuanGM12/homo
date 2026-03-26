@@ -66,7 +66,7 @@ final class AsistenciaRepository
     /**
      * Lista actividades con filtros opcionales.
      *
-     * @param array{subregion?: string, municipality?: string, advisor_user_id?: int, status?: string} $filters
+     * @param array{subregion?: string, municipality?: string, advisor_user_id?: int, advisor_user_ids?: array<int, int>, status?: string} $filters
      * @return array
      */
     public function findWithFilters(array $filters = []): array
@@ -86,10 +86,32 @@ final class AsistenciaRepository
         if (!empty($filters['advisor_user_id'])) {
             $where[] = 'advisor_user_id = :advisor_user_id';
             $params[':advisor_user_id'] = (int) $filters['advisor_user_id'];
+        } elseif (!empty($filters['advisor_user_ids']) && is_array($filters['advisor_user_ids'])) {
+            $advisorIds = array_values(array_filter(
+                array_map(static fn (mixed $id): int => (int) $id, $filters['advisor_user_ids']),
+                static fn (int $id): bool => $id > 0
+            ));
+            if ($advisorIds !== []) {
+                $placeholders = [];
+                foreach ($advisorIds as $index => $advisorId) {
+                    $placeholder = ':advisor_user_id_' . $index;
+                    $placeholders[] = $placeholder;
+                    $params[$placeholder] = $advisorId;
+                }
+                $where[] = 'advisor_user_id IN (' . implode(', ', $placeholders) . ')';
+            }
         }
         if (!empty($filters['status'])) {
             $where[] = 'status = :status';
             $params[':status'] = $filters['status'];
+        }
+        if (!empty($filters['from_date'])) {
+            $where[] = 'activity_date >= :from_date';
+            $params[':from_date'] = $filters['from_date'];
+        }
+        if (!empty($filters['to_date'])) {
+            $where[] = 'activity_date <= :to_date';
+            $params[':to_date'] = $filters['to_date'];
         }
 
         $sql = 'SELECT * FROM asistencia_actividades';

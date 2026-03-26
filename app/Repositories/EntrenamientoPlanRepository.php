@@ -96,12 +96,30 @@ final class EntrenamientoPlanRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function findForAudit(): array
+    public function findForAudit(array $professionalRoles = []): array
     {
         $pdo = Connection::getPdo();
 
-        $sql = 'SELECT * FROM entrenamiento_plans ORDER BY created_at DESC';
-        $stmt = $pdo->query($sql);
+        if ($professionalRoles === []) {
+            $sql = 'SELECT * FROM entrenamiento_plans ORDER BY created_at DESC';
+            $stmt = $pdo->query($sql);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($professionalRoles), '?'));
+        $sql = sprintf(
+            'SELECT DISTINCT ep.*
+             FROM entrenamiento_plans ep
+             INNER JOIN user_roles ur ON ur.user_id = ep.user_id
+             INNER JOIN roles r ON r.id = ur.role_id
+             WHERE r.name IN (%s)
+             ORDER BY ep.created_at DESC',
+            $placeholders
+        );
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($professionalRoles);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }

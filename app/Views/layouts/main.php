@@ -193,7 +193,7 @@ if ($currentUser) {
                                     <span>Encuesta de Opinión AoAT</span>
                                 </a>
                                 <?php
-                                $encuestaConsultaRoles = ['admin', 'coordinadora', 'coordinador', 'especialista'];
+                                $encuestaConsultaRoles = ['admin', 'coordinadora', 'coordinador', 'especialista', 'medico', 'psicologo', 'abogado', 'profesional social', 'profesional_social'];
                                 $canConsultarEncuesta = $currentUser && (bool) array_intersect($encuestaConsultaRoles, $currentUserRoles);
                                 if ($canConsultarEncuesta): ?>
                                     <a href="/encuesta-opinion-aoat/listar" class="app-sidebar-link <?= str_starts_with($currentPath, '/encuesta-opinion-aoat/listar') ? 'active' : '' ?>">

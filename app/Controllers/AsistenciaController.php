@@ -14,6 +14,9 @@ use App\Services\PdfImageHelper;
 
 final class AsistenciaController
 {
+    private const INDEX_PAGE_SIZE = 20;
+    private const MIN_ALLOWED_DATE = '2026-01-01';
+
     private AsistenciaRepository $repo;
     private UserRepository $userRepo;
 
@@ -24,31 +27,86 @@ final class AsistenciaController
     }
 
     /** Tipos de listado / Actividad (select2 múltiple) */
-    public static function getTiposActividad(): array
+    /**
+     * Tipos de listado / actividad por rol profesional.
+     *
+     * @return array<string, array<int, string>>
+     */
+    private static function getTiposActividadCatalog(): array
     {
         return [
-            'Adicciones - Módulo 1: Modelos explicativos (biopsicosocial, aprendizaje y condicionamiento), neurobiología de las adicciones, determinantes sociales, factores de riesgo y de protección, prevención basada en evidencia, influencia normativa.',
-            'Adicciones - Módulo 2: Comprensión de las adicciones según tipo de sustancia, dependencias comportamentales (juego patológico, nomofobia, juegos electrónicos, oniomanía, adicción al trabajo, vigorexia), cigarrillos electrónicos, cannabis, patología dual.',
-            'Adicciones - Módulo 3: Rutas de atención, tamizajes (ASSIST, AUDIT, CRAFFT, Fagerström), intervenciones (entrevista motivacional, intervención única, mindfulness), grupos de apoyo, reducción de riesgos y daños.',
-            'Presentación del programa Salud para el Alma',
-            'Salud Mental - Análisis de Caso y Recomendaciones Técnicas a Aplicar',
-            'Salud Mental - Cuidado al cuidador',
-            'Salud Mental - Cuidado del profesional – burnout',
-            'Salud Mental - Dispositivos Comunitarios',
-            'Salud Mental - Estigma',
-            'Salud Mental - Estrategias de Salud Mental (Aventura Crecer, Comp Parent, VQSC, JPL, FQSC, SAFER)',
-            'Salud Mental - Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación',
-            'Salud Mental - Normatividad en Salud Mental y Adicciones',
-            'Salud Mental - Primeros auxilios psicológicos e intervención en crisis',
-            'Salud Mental - Trastornos mentales prioritarios de interés en salud pública',
-            'Suicidio - Módulo 1: Evolución histórica del suicidio, aproximación conceptual de la conducta suicida, teorías explicativas de primera generación, teorías explicativas de segunda generación, factores de riesgo (biológicos, psiquiátricos, psicológicos y sociales), factores de protección, señales de alarma, ruta de atención y articulación intersectorial, notificación y seguimiento, plan de seguridad.',
-            'Suicidio - Módulo 2: Comunicación y suicidio como factor de riesgo y de protección, impacto del lenguaje y los mensajes, efecto Werther, efecto Papageno, principios de la comunicación responsable, recomendaciones de la OMS para medios y contextos comunitarios, pautas de lo que se debe y no se debe comunicar, aplicación del efecto Papageno en contextos comunitarios e institucionales, roles y responsabilidades de actores clave, poder de la narrativa y reducción del estigma, recursos y guías para la comunicación responsable',
-            'Suicidio - Módulo 3: Concepto y alcances de la posvención, posvención como estrategia de prevención y salud pública, impacto psicosocial del suicidio, duelo por suicidio y sus particularidades, duelo y tamizajes para suicidio (RQC, SRQ, Whooley, GAD-2, Zarit, Plutchick, PHQ-9, C-SSRS), estigma y silencios, principios orientadores de la posvención, acciones de posvención en el territorio, acompañamiento a familias e instituciones, comunicación posterior a una muerte por suicidio, identificación y seguimiento de personas en riesgo, articulación con servicios de salud mental, autocuidado del profesional psicosocial.',
-            'Violencias - Módulo 1: Definición, marco normativo, epidemiología, tipología, características.',
-            'Violencias - Módulo 2: Violencias interpersonales, violencia familiar y de pareja, violencia comunitaria, violencia juvenil, bullying.',
-            'Violencias - Módulo 3: Modelos de prevención de las violencias interpersonales (prevención universal, selectiva, indicada y de recurrencias), programas basados en la evidencia para la prevención de las violencias (modelo INSPIRE, modelo RESPETO y otros).',
+            'medico' => [
+                'Abordaje del manejo de alcohol en el primer nivel de atención - Alcohol y embarazo.',
+                'Abordaje del manejo de tabaco en el primer nivel.',
+                'Adicciones en la baja complejidad',
+                'Conducta suicida',
+                'Desmonte de benzodiacepinas',
+                'Desmonte de opioides',
+                'Epilepsia',
+                'Intoxicaciones por medicamentos de control',
+                'Manejo del dolor',
+                'Paciente agitado',
+                'Pre Test',
+                'Post Test',
+                'Trastorno Afectivo Bipolar',
+                'Trastorno de Déficit de Atención e Hiperactividad',
+                'Trastorno Depresivo',
+                'Trastorno Psicótico',
+                'Trastornos de Ansiedad',
+                'Trastornos del Sueño',
+            ],
+            'psicologo' => [
+                'Adicciones - Módulo 1: Modelos explicativos (biopsicosocial, aprendizaje y condicionamiento), neurobiología de las adicciones, determinantes sociales, factores de riesgo y de protección, prevención basada en evidencia, influencia normativa.',
+                'Adicciones - Módulo 2: Comprensión de las adicciones según tipo de sustancia, dependencias comportamentales (juego patológico, nomofobia, juegos electrónicos, oniomanía, adicción al trabajo, vigorexia), cigarrillos electrónicos, cannabis, patología dual.',
+                'Adicciones - Módulo 3: Rutas de atención, tamizajes (ASSIST, AUDIT, CRAFFT, Fagerstróm), intervenciones (entrevista motivacional, intervención única, mindfulness), grupos de apoyo, reducción de riesgos y daños.',
+                'Presentación del programa Salud para el Alma',
+                'Salud Mental - Análisis de Caso y Recomendaciones Técnicas a Aplicar',
+                'Salud Mental - Cuidado al cuidador',
+                'Salud Mental - Cuidado del profesional - burnout',
+                'Salud Mental - Dispositivos Comunitarios',
+                'Salud Mental - Estigma',
+                'Salud Mental - Estrategias de Salud Mental (Aventura Crecer, Comp Parent, VQSC, JPL, FQSC, SAFER)',
+                'Salud Mental - Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación',
+                'Salud Mental - Normatividad en Salud Mental y Adicciones',
+                'Salud Mental - Primeros auxilios psicológicos e intervención en crisis',
+                'Salud Mental - Trastornos mentales prioritarios de interés en salud pública',
+                'Suicidio - Módulo 1: Evolución histórica del suicidio, aproximación conceptual de la conducta suicida, teorías explicativas de primera generación, teorías explicativas de segunda generación, factores de riesgo (biológicos, psiquiátricos, psicológicos y sociales), factores de protección, señales de alarma, ruta de atención y articulación intersectorial, notificación y seguimiento, plan de seguridad.',
+                'Suicidio - Módulo 2: Comunicación y suicidio como factor de riesgo y de protección, impacto del lenguaje y los mensajes, efecto Werther, efecto Papageno, principios de la comunicación responsable, recomendaciones de la OMS para medios y contextos comunitarios, pautas de lo que se debe y no se debe comunicar, aplicación del efecto Papageno en contextos comunitarios e institucionales, roles y responsabilidades de actores clave, poder de la narrativa y reducción del estigma, recursos y guías para la comunicación responsable.',
+                'Suicidio - Módulo 3: Concepto y alcances de la posvención, posvención como estrategia de prevención y salud pública, impacto psicosocial del suicidio, duelo por suicidio y sus particularidades, duelo y tamizajes para suicidio (RQC, SRQ, Whooley, GAD-2, Zarit, Plutchick, PHQ-9, C-SSRS), estigma y silencios, principios orientadores de la posvención, acciones de posvención en el territorio, acompañamiento a familias e instituciones, comunicación posterior a una muerte por suicidio, identificación y seguimiento de personas en riesgo, articulación con servicios de salud mental, autocuidado del profesional psicosocial.',
+                'Violencias - Módulo 1: Definición, marco normativo, epidemiología, tipología, característica.',
+                'Violencias - Módulo 2: Violencias interpersonales, violencia familiar y de pareja, violencia comunitaria, violencia juvenil, bullying.',
+                'Violencias - Módulo 3: Modelos de prevención de las violencias interpersonales (prevención universal, selectiva, indicada y de recurrencias), programas basados en la evidencia para la prevención de las violencias.',
+            ],
+            'abogado' => [
+                'Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones',
+                'Actualización de la Política pública Municipal de Salud y Prevención de las Adicciones',
+                'Presentación inicial',
+                'SAFER - Módulo 1: Socialización de la problemática pública del alcohol, generalidades.',
+                'SAFER - Módulo 2: Socialización de la problemática pública del alcohol, generalidades.',
+                'SAFER - Módulo 3: Legislación actual con énfasis en consumo de menores y mujeres.',
+                'SAFER - Módulo 4: Legislación actual con énfasis en consumo de menores y mujeres.',
+                'SAFER - Módulo 5: Socialización de la problemática pública del alcohol.',
+            ],
+            'trabajador_social' => [
+                'Actividad de apoyo',
+                'Espacio de articulación',
+                'Formación (desarrollo de capacidades)',
+                'Profesional social actividades',
+            ],
         ];
     }
+
+    /**
+     * @return string[]
+     */
+    public static function getTiposActividadByRole(?string $role): array
+    {
+        $catalog = self::getTiposActividadCatalog();
+        $normalizedRole = self::normalizeActividadRole($role);
+
+        return $catalog[$normalizedRole] ?? [];
+    }
+
 
     public function index(Request $request): Response
     {
@@ -57,31 +115,55 @@ final class AsistenciaController
             return Response::redirect('/login');
         }
 
+        $sort        = trim((string) $request->input('sort', 'activity_date'));
+        $dir         = strtolower(trim((string) $request->input('dir', 'desc')));
+        $currentPage = max(1, (int) $request->input('page', 1));
+
         $filters = [
-            'subregion' => trim((string) $request->input('subregion', '')),
-            'municipality' => trim((string) $request->input('municipality', '')),
+            'subregion'       => trim((string) $request->input('subregion', '')),
+            'municipality'    => trim((string) $request->input('municipality', '')),
             'advisor_user_id' => $request->input('advisor_user_id') !== '' ? (int) $request->input('advisor_user_id') : null,
-            'status' => trim((string) $request->input('status', '')),
+            'status'          => trim((string) $request->input('status', '')),
+            'from_date'       => trim((string) $request->input('from_date', '')),
+            'to_date'         => trim((string) $request->input('to_date', '')),
         ];
 
-        if (!Auth::canViewAllModuleRecords($user)) {
+        $advisors = $this->visibleAdvisorsForUser($user);
+        if ($this->userCanViewAllAsistencia($user)) {
+            // sin restricción adicional
+        } elseif ($this->userIsEspecialista($user)) {
+            $allowedAdvisorIds = array_map(static fn (array $advisor): int => (int) ($advisor['id'] ?? 0), $advisors);
+            $requestedAdvisorId = (int) ($filters['advisor_user_id'] ?? 0);
+
+            if ($requestedAdvisorId > 0) {
+                if (!in_array($requestedAdvisorId, $allowedAdvisorIds, true)) {
+                    $filters['advisor_user_id'] = null;
+                    $filters['advisor_user_ids'] = [0];
+                }
+            } else {
+                $filters['advisor_user_ids'] = $allowedAdvisorIds === [] ? [0] : $allowedAdvisorIds;
+            }
+        } else {
             $filters['advisor_user_id'] = (int) $user['id'];
         }
 
         $records = $this->repo->findWithFilters(array_filter($filters));
-        $advisors = $this->userRepo->findNonAdminAdvisors();
 
-        // Contar asistentes por actividad
         foreach ($records as &$row) {
             $row['asistentes_count'] = $this->repo->countAsistentesByActividad((int) $row['id']);
         }
         unset($row);
 
+        $records    = $this->sortRecords($records, $sort, $dir);
+        $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
+
         return Response::view('asistencia/index', [
-            'pageTitle' => 'Listados de Asistencia',
-            'records' => $records,
-            'advisors' => $advisors,
-            'filters' => $filters,
+            'pageTitle'  => 'Listados de Asistencia',
+            'records'    => $pagination['items'],
+            'pagination' => $pagination,
+            'advisors'   => $advisors,
+            'filters'    => $filters,
+            'canFilterAdvisor' => count($advisors) > 1,
         ]);
     }
 
@@ -92,13 +174,30 @@ final class AsistenciaController
             return Response::redirect('/login');
         }
 
-        $advisors = $this->userRepo->findNonAdminAdvisors();
-        $tiposActividad = self::getTiposActividad();
+        if ($this->userCanViewAllAsistencia($user)) {
+            $advisors = $this->visibleAdvisorsForUser($user);
+            $selectedAdvisorId = count($advisors) === 1 ? (int) ($advisors[0]['id'] ?? 0) : 0;
+            $canChooseAdvisor = count($advisors) > 1;
+        } else {
+            $advisors = [[
+                'id' => (int) ($user['id'] ?? 0),
+                'name' => (string) ($user['name'] ?? 'Mi usuario'),
+            ]];
+            $selectedAdvisorId = (int) ($user['id'] ?? 0);
+            $canChooseAdvisor = false;
+        }
+        $activityOptionsByAdvisor = $this->buildActivityOptionsByAdvisor($advisors, $user);
+        $tiposActividad = $selectedAdvisorId > 0
+            ? ($activityOptionsByAdvisor[$selectedAdvisorId] ?? [])
+            : [];
 
         return Response::view('asistencia/form', [
             'pageTitle' => 'Nueva Actividad de Asistencia',
             'advisors' => $advisors,
             'tiposActividad' => $tiposActividad,
+            'activityOptionsByAdvisor' => $activityOptionsByAdvisor,
+            'selectedAdvisorId' => $selectedAdvisorId,
+            'canChooseAdvisor' => $canChooseAdvisor,
         ]);
     }
 
@@ -120,6 +219,26 @@ final class AsistenciaController
         }
 
         $advisorUserId = (int) $request->input('advisor_user_id');
+        if (
+            !$this->userCanViewAllAsistencia($user)
+            && $advisorUserId !== (int) ($user['id'] ?? 0)
+        ) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Asesor no permitido',
+                'message' => 'Solo puedes crear actividades de asistencia para tu propio usuario.',
+            ]);
+            return Response::redirect('/asistencia/nueva');
+        }
+
+        if ($this->userCanViewAllAsistencia($user) && !$this->advisorIsVisibleForUser($user, $advisorUserId)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Asesor no permitido',
+                'message' => 'No puedes crear actividades para ese asesor.',
+            ]);
+            return Response::redirect('/asistencia/nueva');
+        }
         $advisor = $this->userRepo->find($advisorUserId);
         $advisorName = $advisor ? (string) $advisor['name'] : 'Asesor';
 
@@ -134,6 +253,18 @@ final class AsistenciaController
                 'type' => 'error',
                 'title' => 'Actividad requerida',
                 'message' => 'Debes seleccionar al menos un tipo de listado.',
+            ]);
+            return Response::redirect('/asistencia/nueva');
+        }
+
+        $advisorActivityRole = $this->resolveActividadRoleFromUser($advisor ?? $user);
+        $allowedActivityTypes = self::getTiposActividadByRole($advisorActivityRole);
+        $invalidActivityTypes = array_values(array_diff($actividadTipos, $allowedActivityTypes));
+        if ($invalidActivityTypes !== []) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Tipo de actividad no permitido',
+                'message' => 'Seleccionaste actividades que no corresponden al rol del asesor.',
             ]);
             return Response::redirect('/asistencia/nueva');
         }
@@ -189,6 +320,10 @@ final class AsistenciaController
             Flash::set(['type' => 'error', 'title' => 'No encontrado', 'message' => 'La actividad no existe.']);
             return Response::redirect('/asistencia');
         }
+        if (!$this->userCanAccessActividad($user, $actividad)) {
+            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'No puedes consultar esta actividad de asistencia.']);
+            return Response::redirect('/asistencia');
+        }
 
         $asistentes = $this->repo->findAsistentesByActividad($id);
         $registrationUrl = $this->registrationUrl($actividad['code']);
@@ -212,6 +347,10 @@ final class AsistenciaController
         $actividad = $id > 0 ? $this->repo->findById($id) : null;
         if (!$actividad) {
             Flash::set(['type' => 'error', 'title' => 'No encontrado', 'message' => 'Actividad no encontrada.']);
+            return Response::redirect('/asistencia');
+        }
+        if (!$this->userCanAccessActividad($user, $actividad)) {
+            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'No puedes exportar esta actividad de asistencia.']);
             return Response::redirect('/asistencia');
         }
 
@@ -263,6 +402,10 @@ final class AsistenciaController
             Flash::set(['type' => 'error', 'title' => 'No encontrado', 'message' => 'Actividad no encontrada.']);
             return Response::redirect('/asistencia');
         }
+        if (!$this->userCanAccessActividad($user, $actividad)) {
+            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'No puedes exportar esta actividad de asistencia.']);
+            return Response::redirect('/asistencia');
+        }
 
         $asistentes = $this->repo->findAsistentesByActividad($id);
         $html = $this->buildPdfHtml($actividad, $asistentes);
@@ -289,6 +432,10 @@ final class AsistenciaController
         $actividad = $this->repo->findById($id);
         if (!$actividad) {
             Flash::set(['type' => 'error', 'title' => 'No encontrado', 'message' => 'La actividad no existe.']);
+            return Response::redirect('/asistencia');
+        }
+        if (!$this->userCanAccessActividad($user, $actividad)) {
+            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'No puedes eliminar esta actividad de asistencia.']);
             return Response::redirect('/asistencia');
         }
 
@@ -320,6 +467,10 @@ final class AsistenciaController
             Flash::set(['type' => 'error', 'title' => 'No encontrado', 'message' => 'La actividad no existe.']);
             return Response::redirect('/asistencia');
         }
+        if (!$this->userCanAccessActividad($user, $actividad)) {
+            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'No puedes modificar esta actividad de asistencia.']);
+            return Response::redirect('/asistencia');
+        }
 
         $this->repo->updateStatus($id, $status);
         Flash::set([
@@ -328,6 +479,210 @@ final class AsistenciaController
             'message' => 'El estado de la actividad se ha actualizado.',
         ]);
         return Response::redirect('/asistencia/ver?id=' . $id);
+    }
+
+    private function paginateRecords(array $records, int $page, int $perPage): array
+    {
+        $totalItems  = count($records);
+        $totalPages  = max(1, (int) ceil($totalItems / $perPage));
+        $currentPage = min(max(1, $page), $totalPages);
+        $offset      = ($currentPage - 1) * $perPage;
+
+        return [
+            'items'        => array_slice($records, $offset, $perPage),
+            'total_items'  => $totalItems,
+            'per_page'     => $perPage,
+            'current_page' => $currentPage,
+            'total_pages'  => $totalPages,
+            'from'         => $totalItems === 0 ? 0 : $offset + 1,
+            'to'           => min($offset + $perPage, $totalItems),
+        ];
+    }
+
+    private function userCanViewAllAsistencia(array $user): bool
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+
+        return in_array('admin', $roles, true)
+            || in_array('coordinador', $roles, true)
+            || in_array('coordinadora', $roles, true);
+    }
+
+    private function userIsEspecialista(array $user): bool
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+
+        return in_array('especialista', $roles, true);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function visibleAdvisorsForUser(array $user): array
+    {
+        $all = $this->userRepo->findNonAdminAdvisors();
+        if ($this->userCanViewAllAsistencia($user)) {
+            return $all;
+        }
+        if (!$this->userIsEspecialista($user)) {
+            return array_values(array_filter($all, static fn (array $advisor): bool => (int) ($advisor['id'] ?? 0) === (int) ($user['id'] ?? 0)));
+        }
+
+        $allowedRole = $this->especialistaAdvisorRole($user);
+        if ($allowedRole === null) {
+            return [];
+        }
+
+        $visible = [];
+        foreach ($all as $advisor) {
+            $advisorId = (int) ($advisor['id'] ?? 0);
+            if ($advisorId <= 0) {
+                continue;
+            }
+            $advisorUser = $this->userRepo->find($advisorId);
+            if ($advisorUser !== null && in_array($allowedRole, array_map('strtolower', $advisorUser['roles'] ?? []), true)) {
+                $visible[] = $advisor;
+            }
+        }
+
+        return $visible;
+    }
+
+    private function advisorIsVisibleForUser(array $user, int $advisorUserId): bool
+    {
+        if ($advisorUserId <= 0) {
+            return false;
+        }
+
+        foreach ($this->visibleAdvisorsForUser($user) as $advisor) {
+            if ((int) ($advisor['id'] ?? 0) === $advisorUserId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /**
+     * @param array<int, array<string, mixed>> $advisors
+     * @return array<int, array<int, string>>
+     */
+    private function buildActivityOptionsByAdvisor(array $advisors, array $currentUser): array
+    {
+        $optionsByAdvisor = [];
+
+        foreach ($advisors as $advisor) {
+            $advisorId = (int) ($advisor['id'] ?? 0);
+            if ($advisorId <= 0) {
+                continue;
+            }
+
+            $advisorUser = $advisorId === (int) ($currentUser['id'] ?? 0)
+                ? $currentUser
+                : $this->userRepo->find($advisorId);
+            $activityRole = $this->resolveActividadRoleFromUser($advisorUser ?? []);
+            $optionsByAdvisor[$advisorId] = self::getTiposActividadByRole($activityRole);
+        }
+
+        return $optionsByAdvisor;
+    }
+
+    private function resolveActividadRoleFromUser(array $user): ?string
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+        $primaryRole = strtolower(trim((string) ($user['role'] ?? '')));
+
+        if (in_array('psicologo', $roles, true) || $primaryRole === 'psicologo') {
+            return 'psicologo';
+        }
+        if (in_array('medico', $roles, true) || $primaryRole === 'medico') {
+            return 'medico';
+        }
+        if (in_array('abogado', $roles, true) || $primaryRole === 'abogado') {
+            return 'abogado';
+        }
+        if (
+            in_array('profesional social', $roles, true)
+            || in_array('profesional_social', $roles, true)
+            || in_array('trabajador social', $roles, true)
+            || $primaryRole === 'profesional social'
+            || $primaryRole === 'profesional_social'
+            || $primaryRole === 'trabajador social'
+        ) {
+            return 'trabajador_social';
+        }
+
+        return null;
+    }
+
+    private static function normalizeActividadRole(?string $role): string
+    {
+        $normalized = strtolower(trim((string) $role));
+        if ($normalized === 'profesional social' || $normalized === 'profesional_social' || $normalized === 'trabajador social') {
+            return 'trabajador_social';
+        }
+
+        return $normalized;
+    }
+
+    private function especialistaAdvisorRole(array $user): ?string
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+        $primaryRole = strtolower(trim((string) ($user['role'] ?? '')));
+
+        if (in_array('psicologo', $roles, true) || $primaryRole === 'psicologo') {
+            return 'psicologo';
+        }
+        if (in_array('medico', $roles, true) || $primaryRole === 'medico') {
+            return 'medico';
+        }
+        if (in_array('abogado', $roles, true) || $primaryRole === 'abogado') {
+            return 'abogado';
+        }
+
+        return null;
+    }
+
+    private function userCanAccessActividad(array $user, array $actividad): bool
+    {
+        if ($this->userCanViewAllAsistencia($user)) {
+            return true;
+        }
+
+        $advisorUserId = (int) ($actividad['advisor_user_id'] ?? 0);
+        if (!$this->userIsEspecialista($user)) {
+            return $advisorUserId === (int) ($user['id'] ?? 0);
+        }
+
+        foreach ($this->visibleAdvisorsForUser($user) as $advisor) {
+            if ((int) ($advisor['id'] ?? 0) === $advisorUserId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function sortRecords(array $records, string $sort, string $dir): array
+    {
+        $allowed = ['activity_date', 'subregion', 'municipality', 'advisor_name', 'status', 'asistentes_count'];
+        if (!in_array($sort, $allowed, true)) {
+            $sort = 'activity_date';
+        }
+        $direction = $dir === 'asc' ? 'asc' : 'desc';
+
+        usort($records, function (array $a, array $b) use ($sort, $direction): int {
+            $av = strtolower(trim((string) ($a[$sort] ?? '')));
+            $bv = strtolower(trim((string) ($b[$sort] ?? '')));
+            if ($av === $bv) {
+                return 0;
+            }
+            $cmp = $av <=> $bv;
+            return $direction === 'asc' ? $cmp : -$cmp;
+        });
+
+        return $records;
     }
 
     private function validateForm(Request $request): array
@@ -347,8 +702,20 @@ final class AsistenciaController
         }
         if (trim((string) $request->input('activity_date', '')) === '') {
             $errors[] = 'La fecha de la actividad es obligatoria.';
+        } elseif (!$this->isAllowedPlatformDate((string) $request->input('activity_date', ''))) {
+            $errors[] = 'La fecha de la actividad no puede ser anterior al 1 de enero de 2026.';
         }
         return $errors;
+    }
+
+    private function isAllowedPlatformDate(string $date): bool
+    {
+        $normalizedDate = trim($date);
+        if ($normalizedDate === '') {
+            return false;
+        }
+
+        return $normalizedDate >= self::MIN_ALLOWED_DATE;
     }
 
     /**

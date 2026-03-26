@@ -68,7 +68,18 @@ final class PicRepository
     {
         $pdo = Connection::getPdo();
 
-        $sql = 'SELECT * FROM pic_records WHERE user_id = :user_id ORDER BY created_at DESC';
+        $sql = 'SELECT pr.*,
+                       rm.roles_list AS professional_role
+                FROM pic_records pr
+                LEFT JOIN (
+                    SELECT ur.user_id,
+                           GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ", ") AS roles_list
+                    FROM user_roles ur
+                    INNER JOIN roles r ON r.id = ur.role_id
+                    GROUP BY ur.user_id
+                ) rm ON rm.user_id = pr.user_id
+                WHERE pr.user_id = :user_id
+                ORDER BY pr.created_at DESC';
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $userId]);
 
@@ -92,12 +103,48 @@ final class PicRepository
      *
      * @return array<int, array<string, mixed>> 
      */
-    public function findForAudit(): array
+    public function findForAudit(array $professionalRoles = []): array
     {
         $pdo = Connection::getPdo();
 
-        $sql = 'SELECT * FROM pic_records ORDER BY created_at DESC';
-        $stmt = $pdo->query($sql);
+        if ($professionalRoles === []) {
+            $sql = 'SELECT pr.*,
+                           rm.roles_list AS professional_role
+                    FROM pic_records pr
+                    LEFT JOIN (
+                        SELECT ur.user_id,
+                               GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ", ") AS roles_list
+                        FROM user_roles ur
+                        INNER JOIN roles r ON r.id = ur.role_id
+                        GROUP BY ur.user_id
+                    ) rm ON rm.user_id = pr.user_id
+                    ORDER BY pr.created_at DESC';
+            $stmt = $pdo->query($sql);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($professionalRoles), '?'));
+        $sql = sprintf(
+            'SELECT DISTINCT pr.*,
+                    rm.roles_list AS professional_role
+             FROM pic_records pr
+             LEFT JOIN (
+                 SELECT ur2.user_id,
+                        GROUP_CONCAT(DISTINCT r2.name ORDER BY r2.name SEPARATOR ", ") AS roles_list
+                 FROM user_roles ur2
+                 INNER JOIN roles r2 ON r2.id = ur2.role_id
+                 GROUP BY ur2.user_id
+             ) rm ON rm.user_id = pr.user_id
+             INNER JOIN user_roles ur ON ur.user_id = pr.user_id
+             INNER JOIN roles r ON r.id = ur.role_id
+             WHERE r.name IN (%s)
+             ORDER BY pr.created_at DESC',
+            $placeholders
+        );
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($professionalRoles);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }

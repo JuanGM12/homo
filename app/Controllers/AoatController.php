@@ -11,11 +11,13 @@ use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\Mailer;
 use App\Services\PdfImageHelper;
-use Dompdf\Dompdf;
-use Dompdf\Options;
+use App\Services\PdfService;
 
 final class AoatController
 {
+    private const INDEX_PAGE_SIZE = 20;
+    private const FORM_OLD_INPUT_KEY = 'aoat_old_input';
+
     public function index(Request $request): Response
     {
         $user = Auth::user();
@@ -40,6 +42,9 @@ final class AoatController
         $stateFilter = trim((string) $request->input('state', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
+        $sort = trim((string) $request->input('sort', 'created_at'));
+        $dir = strtolower(trim((string) $request->input('dir', 'desc')));
+        $currentPage = max(1, (int) $request->input('page', 1));
 
         if ($isAuditView) {
             // Vista de auditoría: especialistas, coordinadora y admin.
@@ -106,16 +111,22 @@ final class AoatController
             }));
         }
 
-        // Respuesta parcial para AJAX: solo filas de la tabla
+        $records = $this->sortRecords($records, $sort, $dir);
+
+        $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
+        $paginatedRecords = $pagination['items'];
+
+        // Respuesta parcial para AJAX: resultados del listado
         if ((string) $request->input('partial', '') === 'rows') {
-            $html = $this->renderAoatRowsPartial($records, $isAuditView, $user);
+            $html = $this->renderAoatResultsPartial($paginatedRecords, $pagination, $isAuditView, $user);
 
             return Response::json(['html' => $html]);
         }
 
         return Response::view('aoat/index', [
             'pageTitle' => 'AoAT - Mis registros',
-            'records' => $records,
+            'records' => $paginatedRecords,
+            'pagination' => $pagination,
             'isAuditView' => $isAuditView,
         ]);
     }
@@ -145,6 +156,7 @@ final class AoatController
             'mode' => 'create',
             'record' => null,
             'professional' => $professional,
+            'oldInput' => $this->consumeOldInput('create'),
         ]);
     }
 
@@ -176,24 +188,27 @@ final class AoatController
         // Validamos únicamente los campos que la persona diligencia en el formulario.
         // Los datos del profesional provienen de la sesión y, si por alguna razón están incompletos,
         // no deben bloquear el registro de la AoAT.
-        if (
-            $aoatNumber === '' ||
-            $activityDate === '' ||
-            $activityType === '' ||
-            $activityWith === '' ||
-            $subregion === '' ||
-            $municipality === ''
-        ) {
+        $missingRequiredFields = $this->findMissingAoatBaseFields(
+            $aoatNumber,
+            $activityDate,
+            $activityType,
+            $activityWith,
+            $subregion,
+            $municipality
+        );
+        if ($missingRequiredFields !== []) {
+            $this->flashOldInput('create', 0, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Campos obligatorios incompletos',
-                'message' => 'Por favor completa todos los campos requeridos.',
+                'message' => 'Completa estos campos: ' . implode(', ', $missingRequiredFields) . '.',
             ]);
 
             return Response::redirect('/aoat/nueva');
         }
 
         if (!$this->isActivityDateYear2026OrLater($activityDate)) {
+            $this->flashOldInput('create', 0, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Fecha de la actividad no válida',
@@ -205,6 +220,7 @@ final class AoatController
 
         $qualError = $this->validateAoatQualificationSections($request, $user);
         if ($qualError !== null) {
+            $this->flashOldInput('create', 0, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Cualificación incompleta',
@@ -237,7 +253,9 @@ final class AoatController
 
         try {
             $repo->create($data);
+            $this->clearOldInput();
         } catch (\PDOException $e) {
+            $this->flashOldInput('create', 0, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'No fue posible guardar la AoAT',
@@ -365,6 +383,48 @@ final class AoatController
         }
 
         $repo = new AoatRepository();
+        $singleId = (int) $request->input('id', 0);
+        $format = strtolower(trim((string) $request->input('format', '')));
+
+        if ($singleId > 0) {
+            $record = $repo->findById($singleId);
+            if ($record === null) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Registro no encontrado',
+                    'message' => 'La AoAT que intentas exportar no existe.',
+                ]);
+
+                return Response::redirect('/aoat');
+            }
+
+            if (!$this->canExportSingleAoat($user, $record)) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Exportación no permitida',
+                    'message' => 'Solo puedes exportar individualmente AoAT aprobadas, excepto si tu rol es admin, coordinador o especialista.',
+                ]);
+
+                return Response::redirect('/aoat');
+            }
+
+            if (!in_array($format, ['pdf', 'xls', 'excel'], true)) {
+                Flash::set([
+                    'type' => 'info',
+                    'title' => 'Formato no válido',
+                    'message' => 'Selecciona un formato de exportación válido (PDF o Excel).',
+                ]);
+
+                return Response::redirect('/aoat');
+            }
+
+            if ($format === 'pdf') {
+                return $this->exportSingleAoatPdf($record);
+            }
+
+            return $this->exportSingleAoatExcel($record);
+        }
+
         $roles = $user['roles'] ?? [];
 
         $isSpecialist = in_array('especialista', $roles, true);
@@ -549,6 +609,7 @@ final class AoatController
             'mode' => 'edit',
             'record' => $record,
             'professional' => $professional,
+            'oldInput' => $this->consumeOldInput('edit', (int) $record['id']),
         ]);
     }
 
@@ -608,24 +669,27 @@ final class AoatController
         $subregion = trim((string) $request->input('subregion', ''));
         $municipality = trim((string) $request->input('municipality', ''));
 
-        if (
-            $aoatNumber === '' ||
-            $activityDate === '' ||
-            $activityType === '' ||
-            $activityWith === '' ||
-            $subregion === '' ||
-            $municipality === ''
-        ) {
+        $missingRequiredFields = $this->findMissingAoatBaseFields(
+            $aoatNumber,
+            $activityDate,
+            $activityType,
+            $activityWith,
+            $subregion,
+            $municipality
+        );
+        if ($missingRequiredFields !== []) {
+            $this->flashOldInput('edit', $id, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Campos obligatorios incompletos',
-                'message' => 'Por favor completa todos los campos requeridos.',
+                'message' => 'Completa estos campos: ' . implode(', ', $missingRequiredFields) . '.',
             ]);
 
             return Response::redirect('/aoat/editar?id=' . $id);
         }
 
         if (!$this->isActivityDateYear2026OrLater($activityDate)) {
+            $this->flashOldInput('edit', $id, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Fecha de la actividad no válida',
@@ -637,6 +701,7 @@ final class AoatController
 
         $qualError = $this->validateAoatQualificationSections($request, $user);
         if ($qualError !== null) {
+            $this->flashOldInput('edit', $id, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Cualificación incompleta',
@@ -649,12 +714,20 @@ final class AoatController
         $payload = $this->buildPayload($request);
 
         try {
-            $repo->update($id, [
+            $updateData = [
                 'subregion' => $subregion,
                 'municipality' => $municipality,
                 'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            ]);
+            ];
+            $wasReturned = (string) ($record['state'] ?? '') === 'Devuelta';
+            if ($wasReturned) {
+                $updateData['state'] = 'Realizado';
+            }
+
+            $repo->update($id, $updateData);
+            $this->clearOldInput();
         } catch (\PDOException $e) {
+            $this->flashOldInput('edit', $id, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'No fue posible actualizar la AoAT',
@@ -664,10 +737,13 @@ final class AoatController
             return Response::redirect('/aoat/editar?id=' . $id);
         }
 
+        $wasReturned = (string) ($record['state'] ?? '') === 'Devuelta';
         Flash::set([
             'type' => 'success',
-            'title' => 'AoAT actualizada',
-            'message' => 'El registro de AoAT se ha actualizado correctamente.',
+            'title' => $wasReturned ? 'Cambios guardados y AoAT marcada como realizada' : 'AoAT actualizada',
+            'message' => $wasReturned
+                ? 'Los ajustes se guardaron correctamente y la AoAT pasó a estado "Realizado" para revisión del especialista.'
+                : 'El registro de AoAT se ha actualizado correctamente.',
         ]);
 
         return Response::redirect('/aoat');
@@ -765,7 +841,24 @@ final class AoatController
 
             $toEmail = (string) ($record['professional_email'] ?? '');
             $toName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
-            Mailer::scheduleAoatReturnedNotification($toEmail, $toName, $observation, $motive, $id);
+            $payload = [];
+            if (isset($record['payload'])) {
+                $decodedPayload = json_decode((string) $record['payload'], true);
+                if (is_array($decodedPayload)) {
+                    $payload = $decodedPayload;
+                }
+            }
+
+            Mailer::scheduleAoatReturnedNotification(
+                $toEmail,
+                $toName,
+                $observation,
+                $motive,
+                $id,
+                (string) ($record['subregion'] ?? ''),
+                (string) ($record['municipality'] ?? ''),
+                (string) ($payload['activity_date'] ?? '')
+            );
 
             Flash::set([
                 'type' => 'success',
@@ -899,21 +992,117 @@ final class AoatController
     }
 
     /**
-     * Renderiza solo las filas de la tabla de AoAT (para AJAX).
+     * Renderiza resultados del listado de AoAT (tabla, vacÃ­o y paginaciÃ³n) para AJAX.
      *
      * @param array<int, array<string, mixed>> $records
+     * @param array<string, mixed> $pagination
      */
-    private function renderAoatRowsPartial(array $records, bool $isAuditView, array $user): string
+    private function renderAoatResultsPartial(array $records, array $pagination, bool $isAuditView, array $user): string
     {
         $isAuditViewLocal = $isAuditView;
         $currentUser = $user;
+        $paginationData = $pagination;
 
         ob_start();
         /** @var array<int, array<string, mixed>> $records */
         $isAudit = $isAuditViewLocal;
         $currentUserLocal = $currentUser;
-        require __DIR__ . '/../Views/aoat/_rows.php';
+        $pagination = $paginationData;
+        require __DIR__ . '/../Views/aoat/_results.php';
         return (string) ob_get_clean();
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array{
+     *   items: array<int, array<string, mixed>>,
+     *   current_page: int,
+     *   total_pages: int,
+     *   total_items: int,
+     *   per_page: int,
+     *   from: int,
+     *   to: int
+     * }
+     */
+    private function paginateRecords(array $records, int $page, int $perPage): array
+    {
+        $totalItems = count($records);
+        $totalPages = max(1, (int) ceil($totalItems / $perPage));
+        $currentPage = min(max(1, $page), $totalPages);
+        $offset = ($currentPage - 1) * $perPage;
+        $items = array_slice($records, $offset, $perPage);
+        $from = $totalItems === 0 ? 0 : $offset + 1;
+        $to = $totalItems === 0 ? 0 : min($offset + $perPage, $totalItems);
+
+        return [
+            'items' => $items,
+            'current_page' => $currentPage,
+            'total_pages' => $totalPages,
+            'total_items' => $totalItems,
+            'per_page' => $perPage,
+            'from' => $from,
+            'to' => $to,
+        ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function sortRecords(array $records, string $sort, string $dir): array
+    {
+        $allowedSorts = ['created_at', 'professional', 'subregion', 'municipality', 'state'];
+        if (!in_array($sort, $allowedSorts, true)) {
+            $sort = 'created_at';
+        }
+
+        $dir = $dir === 'asc' ? 'asc' : 'desc';
+
+        usort($records, function (array $a, array $b) use ($sort, $dir): int {
+            $valueA = $this->extractSortValue($a, $sort);
+            $valueB = $this->extractSortValue($b, $sort);
+
+            if ($valueA === $valueB) {
+                $fallbackA = (string) ($a['created_at'] ?? '');
+                $fallbackB = (string) ($b['created_at'] ?? '');
+                $cmpFallback = $fallbackA <=> $fallbackB;
+                if ($cmpFallback !== 0) {
+                    return $dir === 'asc' ? $cmpFallback : -$cmpFallback;
+                }
+
+                return ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0));
+            }
+
+            $cmp = $valueA <=> $valueB;
+            return $dir === 'asc' ? $cmp : -$cmp;
+        });
+
+        return $records;
+    }
+
+    private function extractSortValue(array $row, string $sort): string
+    {
+        if ($sort === 'professional') {
+            return $this->normalizeSortText(
+                trim((string) (($row['professional_name'] ?? '') . ' ' . ($row['professional_last_name'] ?? '')))
+            );
+        }
+
+        return match ($sort) {
+            'created_at' => (string) ($row['created_at'] ?? ''),
+            'subregion' => $this->normalizeSortText((string) ($row['subregion'] ?? '')),
+            'municipality' => $this->normalizeSortText((string) ($row['municipality'] ?? '')),
+            'state' => $this->normalizeSortText((string) ($row['state'] ?? '')),
+            default => '',
+        };
+    }
+
+    private function normalizeSortText(string $value): string
+    {
+        $normalized = trim(mb_strtolower($value, 'UTF-8'));
+        $normalized = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $normalized) ?: $normalized;
+
+        return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
     }
 
     /**
@@ -1032,6 +1221,85 @@ final class AoatController
         );
 
         return $payload;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function findMissingAoatBaseFields(
+        string $aoatNumber,
+        string $activityDate,
+        string $activityType,
+        string $activityWith,
+        string $subregion,
+        string $municipality
+    ): array {
+        $missing = [];
+
+        if ($aoatNumber === '') {
+            $missing[] = 'Número de la AoAT o actividad';
+        }
+        if ($activityDate === '') {
+            $missing[] = 'Fecha de la actividad';
+        }
+        if ($activityType === '') {
+            $missing[] = 'Actividad que realizó';
+        }
+        if ($activityWith === '') {
+            $missing[] = 'Con quién realizó la actividad';
+        }
+        if ($subregion === '') {
+            $missing[] = 'Subregión que visitó';
+        }
+        if ($municipality === '') {
+            $missing[] = 'Municipio visitado';
+        }
+
+        return $missing;
+    }
+
+    private function flashOldInput(string $mode, int $recordId, Request $request): void
+    {
+        $_SESSION[self::FORM_OLD_INPUT_KEY] = [
+            'mode' => $mode,
+            'record_id' => $recordId,
+            'data' => $this->buildFormInput($request),
+        ];
+    }
+
+    private function consumeOldInput(string $mode, int $recordId = 0): array
+    {
+        $flash = $_SESSION[self::FORM_OLD_INPUT_KEY] ?? null;
+        if (!is_array($flash)) {
+            return [];
+        }
+
+        unset($_SESSION[self::FORM_OLD_INPUT_KEY]);
+
+        if (($flash['mode'] ?? null) !== $mode) {
+            return [];
+        }
+
+        if ((int) ($flash['record_id'] ?? 0) !== $recordId) {
+            return [];
+        }
+
+        $data = $flash['data'] ?? null;
+
+        return is_array($data) ? $data : [];
+    }
+
+    private function clearOldInput(): void
+    {
+        unset($_SESSION[self::FORM_OLD_INPUT_KEY]);
+    }
+
+    private function buildFormInput(Request $request): array
+    {
+        $input = $_POST;
+        unset($input['id']);
+
+        return is_array($input) ? $input : [];
     }
 
     /**
@@ -1181,17 +1449,13 @@ final class AoatController
      */
     private function renderWeeklyReportPdf(string $fromDate, string $toDate, array $reportData): string
     {
-        $options = new Options();
-        $options->set('isRemoteEnabled', false);
-        $options->set('isHtml5ParserEnabled', true);
-
-        $dompdf = new Dompdf($options);
         $html = $this->buildWeeklyReportHtml($fromDate, $toDate, $reportData, true);
-        $dompdf->loadHtml($html, 'UTF-8');
-        $dompdf->setPaper('A4', 'landscape');
-        $dompdf->render();
 
-        return $dompdf->output();
+        return PdfService::renderHtml(
+            $html,
+            'L',
+            sprintf('Reporte semanal AoAT %s a %s', $fromDate, $toDate)
+        );
     }
 
     private function buildActionsSummary(string $role, array $payload): string
@@ -1236,6 +1500,231 @@ final class AoatController
         }
 
         return implode(' | ', $parts);
+    }
+
+    /**
+     * @param array<string,mixed> $record
+     */
+    private function canExportSingleAoat(array $user, array $record): bool
+    {
+        if (Auth::canViewAllModuleRecords($user)) {
+            return true;
+        }
+
+        $ownerId = (int) ($record['user_id'] ?? 0);
+        $currentUserId = (int) ($user['id'] ?? 0);
+
+        return $ownerId === $currentUserId && (string) ($record['state'] ?? '') === 'Aprobada';
+    }
+
+    /**
+     * @param array<string,mixed> $record
+     */
+    private function exportSingleAoatPdf(array $record): Response
+    {
+        $html = $this->buildSingleAoatExportHtml($record, true);
+        $pdfBinary = PdfService::renderHtml(
+            $html,
+            'P',
+            'AoAT individual'
+        );
+
+        $filename = 'aoat_' . (int) ($record['id'] ?? 0) . '_' . date('Ymd_His') . '.pdf';
+
+        return new Response($pdfBinary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * @param array<string,mixed> $record
+     */
+    private function exportSingleAoatExcel(array $record): Response
+    {
+        $html = $this->buildSingleAoatExportHtml($record, false);
+        $filename = 'aoat_' . (int) ($record['id'] ?? 0) . '_' . date('Ymd_His') . '.xls';
+
+        return new Response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * @param array<string,mixed> $record
+     */
+    private function buildSingleAoatExportHtml(array $record, bool $forPdf): string
+    {
+        $payload = [];
+        if (isset($record['payload']) && $record['payload'] !== null) {
+            $decoded = json_decode((string) $record['payload'], true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
+        }
+
+        $logoHomo = dirname(__DIR__, 2) . '/public/assets/img/logoHomo.png';
+        $logoAntioquia = dirname(__DIR__, 2) . '/public/assets/img/logoAntioquia.png';
+        $logoHomoSrc = $forPdf ? PdfImageHelper::imageDataUri($logoHomo) : $this->buildExcelImageTag($logoHomo, 'HOMO');
+        $logoAntioquiaSrc = $forPdf ? PdfImageHelper::imageDataUri($logoAntioquia) : $this->buildExcelImageTag($logoAntioquia, 'Gobernación de Antioquia');
+
+        $professionalName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
+        $roleLabel = ucwords(str_replace('_', ' ', (string) ($record['professional_role'] ?? '')));
+        $activityDate = $this->formatExportDate((string) ($payload['activity_date'] ?? ''));
+        $createdAt = $this->formatExportDateTime((string) ($record['created_at'] ?? ''));
+
+        $summaryRows = [
+            'ID AoAT' => (string) ($record['id'] ?? ''),
+            'Fecha de registro' => $createdAt,
+            'Fecha AoAT' => $activityDate,
+            'Profesional' => $professionalName,
+            'Rol profesional' => $roleLabel,
+            'Subregión' => (string) ($record['subregion'] ?? ''),
+            'Municipio' => (string) ($record['municipality'] ?? ''),
+            'Estado AoAT' => (string) ($record['state'] ?? ''),
+            'Motivo de devolución' => (string) ($record['audit_motive'] ?? ''),
+            'Observación de devolución' => (string) ($record['audit_observation'] ?? ''),
+        ];
+
+        $questionRows = [];
+        foreach ($payload as $key => $value) {
+            $label = $this->aoatPayloadLabel((string) $key);
+            if (is_array($value)) {
+                $cleanValues = array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $value), static fn (string $item): bool => $item !== ''));
+                if ($cleanValues === []) {
+                    continue;
+                }
+                $questionRows[$label] = implode(', ', $cleanValues);
+                continue;
+            }
+
+            $text = trim((string) $value);
+            if ($text === '') {
+                continue;
+            }
+            $questionRows[$label] = $text;
+        }
+
+        $renderLogo = static function (string $srcOrHtml, string $alt, bool $isPdf): string {
+            if ($isPdf) {
+                return $srcOrHtml !== ''
+                    ? '<img src="' . htmlspecialchars($srcOrHtml, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '" style="height:54px;width:auto;">'
+                    : '';
+            }
+
+            return $srcOrHtml;
+        };
+
+        $html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>AoAT individual</title>';
+        $html .= '<style>
+            body{font-family:DejaVu Sans,Arial,sans-serif;color:#284d46;font-size:12px;margin:0;padding:0;background:#f7faf8;}
+            .page{padding:20px;}
+            .sheet{background:#ffffff;border:1px solid #d9e8e3;border-radius:16px;padding:18px;}
+            .header{border:1px solid #c7ddd6;border-radius:14px;background:linear-gradient(135deg,#e4f0ec 0%,#f4efe5 100%);padding:14px 16px;}
+            .header-table{width:100%;border-collapse:collapse;}
+            .header-table td{vertical-align:middle;}
+            .title{margin:0;font-size:20px;font-weight:700;color:#4160a4;}
+            .subtitle{margin:4px 0 0;font-size:12px;color:#35645b;}
+            .summary-card{margin-top:16px;}
+            .section-title{margin:18px 0 8px;font-size:14px;font-weight:700;color:#4160a4;}
+            table{width:100%;border-collapse:collapse;}
+            th,td{border:1px solid #d8e8f5;padding:8px 10px;vertical-align:top;text-align:left;}
+            th{width:32%;background:#dfece7;color:#24564e;font-weight:700;}
+            td{background:#ffffff;color:#2f4d48;}
+            .answers th{background:#f4eee7;}
+            .footer{margin-top:16px;font-size:10px;color:#64748b;text-align:center;}
+        </style></head><body><div class="page"><div class="sheet">';
+        $html .= '<div class="header"><table class="header-table"><tr>';
+        $html .= '<td style="width:28%;">' . $renderLogo($logoAntioquiaSrc, 'Gobernación de Antioquia', $forPdf) . '</td>';
+        $html .= '<td style="width:44%;text-align:center;"><p class="title">Registro individual de AoAT</p><p class="subtitle">Equipo de Promoción y Prevención · Acción en Territorio</p></td>';
+        $html .= '<td style="width:28%;text-align:right;">' . $renderLogo($logoHomoSrc, 'HOMO', $forPdf) . '</td>';
+        $html .= '</tr></table></div>';
+
+        $html .= '<div class="summary-card"><p class="section-title">Resumen general</p><table>';
+        foreach ($summaryRows as $label => $value) {
+            $displayValue = trim((string) $value) !== '' ? (string) $value : 'No registrado';
+            $html .= '<tr><th>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</th><td>' . nl2br(htmlspecialchars($displayValue, ENT_QUOTES, 'UTF-8')) . '</td></tr>';
+        }
+        $html .= '</table></div>';
+
+        $html .= '<div class="answers"><p class="section-title">Respuestas del formulario</p><table>';
+        if ($questionRows === []) {
+            $html .= '<tr><td colspan="2">No se encontraron respuestas registradas para esta AoAT.</td></tr>';
+        } else {
+            foreach ($questionRows as $label => $value) {
+                $html .= '<tr><th>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</th><td>' . nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8')) . '</td></tr>';
+            }
+        }
+        $html .= '</table></div>';
+
+        $html .= '<p class="footer">Documento generado automáticamente desde la plataforma Equipo de Promoción y Prevención.</p>';
+        $html .= '</div></div></body></html>';
+
+        return $html;
+    }
+
+    private function aoatPayloadLabel(string $key): string
+    {
+        $labels = [
+            'proyecto' => 'Proyecto',
+            'aoat_number' => 'Número de la AoAT o actividad',
+            'activity_date' => 'Fecha de la actividad',
+            'activity_type' => 'Actividad que realizó',
+            'activity_with' => 'Con quién realizó la actividad',
+            'subregion' => 'Subregión que visitó',
+            'municipality' => 'Municipio visitado',
+            'prev_suicidio' => 'Cualificación temas en prevención del suicidio',
+            'prev_violencias' => 'Cualificación temas en prevención de violencias',
+            'prev_adicciones' => 'Cualificación temas en prevención de adicciones',
+            'salud_mental' => 'Cualificación temas de salud mental',
+            'mesa_salud_mental' => 'Mesa Municipal de Salud Mental y Prevención de las Adicciones',
+            'ppmsmypa' => 'Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)',
+            'safer' => 'SAFER',
+            'temas_hospital' => 'Temas dictados en el hospital',
+            'actividad_social' => 'Actividades realizadas (Profesional social)',
+            'otro_caso' => 'Otro caso identificado',
+        ];
+
+        return $labels[$key] ?? ucwords(str_replace('_', ' ', $key));
+    }
+
+    private function formatExportDate(string $date): string
+    {
+        $date = trim($date);
+        if ($date === '') {
+            return '';
+        }
+
+        try {
+            return (new \DateTimeImmutable($date))->format('d/m/Y');
+        } catch (\Exception) {
+            return $date;
+        }
+    }
+
+    private function formatExportDateTime(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        try {
+            return (new \DateTimeImmutable($value))->format('d/m/Y H:i');
+        } catch (\Exception) {
+            return $value;
+        }
+    }
+
+    private function buildExcelImageTag(string $path, string $alt): string
+    {
+        $src = PdfImageHelper::imageDataUri($path);
+        if ($src === '') {
+            return '<span style="font-size:12px;font-weight:700;color:#35645b;">' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '</span>';
+        }
+
+        return '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '" style="height:54px;width:auto;">';
     }
 }
 

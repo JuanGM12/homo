@@ -12,6 +12,8 @@ use App\Services\Flash;
 
 final class EntrenamientoController
 {
+    private const INDEX_PAGE_SIZE = 20;
+
     private EntrenamientoPlanRepository $repository;
 
     public function __construct()
@@ -29,11 +31,19 @@ final class EntrenamientoController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
+        $roles = $user['roles'] ?? [];
         $canViewAll = Auth::canViewAllModuleRecords($user);
         $isAuditView = $canViewAll;
+        $search = trim((string) $request->input('q', ''));
+        $stateFilter = trim((string) $request->input('state', ''));
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+        $sort = trim((string) $request->input('sort', 'created_at'));
+        $dir = strtolower(trim((string) $request->input('dir', 'desc')));
+        $currentPage = max(1, (int) $request->input('page', 1));
 
         if ($isAuditView) {
-            $records = $this->repository->findForAudit();
+            $records = $this->repository->findForAudit($this->resolveAuditRoles($user));
         } else {
             $records = $this->repository->findForUser((int) $user['id']);
         }
@@ -42,10 +52,23 @@ final class EntrenamientoController
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate);
+        $records = $this->sortRecords($records, $sort, $dir);
+        $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
+        $paginatedRecords = $pagination['items'];
+
+        if ((string) $request->input('partial', '') === 'results') {
+            $html = $this->renderResultsPartial($paginatedRecords, $pagination, $isAuditView, $user);
+
+            return Response::json(['html' => $html]);
+        }
+
         return Response::view('entrenamiento/index', [
             'pageTitle' => 'Plan de Entrenamiento',
-            'records' => $records,
+            'records' => $paginatedRecords,
+            'pagination' => $pagination,
             'isAuditView' => $isAuditView,
+            'canCreateOwnRecord' => $this->userCanCreateOwnRecord($user),
         ]);
     }
 
@@ -55,7 +78,7 @@ final class EntrenamientoController
         if (!$user) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanAccessModule($user)) {
+        if (!$this->userCanCreateOwnRecord($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -79,7 +102,7 @@ final class EntrenamientoController
         if (!$user) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanAccessModule($user)) {
+        if (!$this->userCanCreateOwnRecord($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -157,7 +180,7 @@ final class EntrenamientoController
         if (!$user) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanAccessModule($user)) {
+        if (!$this->userCanCreateOwnRecord($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -205,7 +228,7 @@ final class EntrenamientoController
         if (!$user) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanAccessModule($user)) {
+        if (!$this->userCanCreateOwnRecord($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -311,7 +334,7 @@ final class EntrenamientoController
         $isAuditView = $canViewAll;
 
         if ($isAuditView) {
-            $records = $this->repository->findForAudit();
+            $records = $this->repository->findForAudit($this->resolveAuditRoles($user));
         } else {
             $records = $this->repository->findForUser((int) $user['id']);
         }
@@ -319,6 +342,16 @@ final class EntrenamientoController
         if (!$canViewAll) {
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
+
+        $search = trim((string) $request->input('q', ''));
+        $stateFilter = trim((string) $request->input('state', ''));
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+        $sort = trim((string) $request->input('sort', 'created_at'));
+        $dir = strtolower(trim((string) $request->input('dir', 'desc')));
+
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate);
+        $records = $this->sortRecords($records, $sort, $dir);
 
         if ($records === []) {
             Flash::set([
@@ -388,6 +421,171 @@ final class EntrenamientoController
         $roles = $user['roles'] ?? [];
         $allowed = ['psicologo', 'admin', 'especialista', 'coordinadora', 'coordinador'];
         return (bool) array_intersect($roles, $allowed);
+    }
+
+    private function userCanCreateOwnRecord(array $user): bool
+    {
+        $roles = $user['roles'] ?? [];
+        $allowed = ['psicologo', 'especialista'];
+
+        return (bool) array_intersect($roles, $allowed);
+    }
+
+    /**
+     * @return string[]
+     */
+    private function resolveAuditRoles(array $user): array
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+        if (in_array('admin', $roles, true) || in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true)) {
+            return [];
+        }
+
+        if (!in_array('especialista', $roles, true)) {
+            return [];
+        }
+
+        $primaryRole = strtolower(trim((string) ($user['role'] ?? (($roles[0] ?? '') ?: ''))));
+        if ($primaryRole === 'psicologo' || in_array('psicologo', $roles, true)) {
+            return ['psicologo', 'profesional social', 'profesional_social'];
+        }
+        if ($primaryRole === 'medico' || in_array('medico', $roles, true)) {
+            return ['medico'];
+        }
+        if ($primaryRole === 'abogado' || in_array('abogado', $roles, true)) {
+            return ['abogado'];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<string, mixed>
+     */
+    private function paginateRecords(array $records, int $page, int $perPage): array
+    {
+        $totalItems = count($records);
+        $totalPages = max(1, (int) ceil($totalItems / $perPage));
+        $currentPage = min(max(1, $page), $totalPages);
+        $offset = ($currentPage - 1) * $perPage;
+
+        return [
+            'items' => array_slice($records, $offset, $perPage),
+            'total_items' => $totalItems,
+            'per_page' => $perPage,
+            'current_page' => $currentPage,
+            'total_pages' => $totalPages,
+            'from' => $totalItems === 0 ? 0 : $offset + 1,
+            'to' => min($offset + $perPage, $totalItems),
+        ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function sortRecords(array $records, string $sort, string $dir): array
+    {
+        $allowedSorts = ['created_at', 'professional_name', 'subregion', 'municipality', 'state'];
+        if (!in_array($sort, $allowedSorts, true)) {
+            $sort = 'created_at';
+        }
+
+        $direction = $dir === 'asc' ? 'asc' : 'desc';
+
+        usort($records, function (array $left, array $right) use ($sort, $direction): int {
+            $leftValue = $this->extractSortValue($left, $sort);
+            $rightValue = $this->extractSortValue($right, $sort);
+
+            if ($leftValue === $rightValue) {
+                return 0;
+            }
+
+            $comparison = $leftValue <=> $rightValue;
+
+            return $direction === 'asc' ? $comparison : -$comparison;
+        });
+
+        return $records;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function extractSortValue(array $row, string $sort): string
+    {
+        if ($sort === 'state') {
+            return !empty($row['editable']) ? 'editable' : 'aprobado';
+        }
+
+        return strtolower(trim((string) ($row[$sort] ?? '')));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyIndexFilters(
+        array $records,
+        string $search,
+        string $stateFilter,
+        string $fromDate,
+        string $toDate
+    ): array {
+        if ($search === '' && $stateFilter === '' && $fromDate === '' && $toDate === '') {
+            return $records;
+        }
+
+        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+            if ($stateFilter !== '') {
+                $state = !empty($row['editable']) ? 'Editable' : 'Aprobado';
+                if ($state !== $stateFilter) {
+                    return false;
+                }
+            }
+
+            $created = trim((string) ($row['created_at'] ?? ''));
+            $createdDate = $created !== '' ? substr($created, 0, 10) : '';
+
+            if ($fromDate !== '' && $createdDate !== '' && $createdDate < $fromDate) {
+                return false;
+            }
+
+            if ($toDate !== '' && $createdDate !== '' && $createdDate > $toDate) {
+                return false;
+            }
+
+            if ($search === '') {
+                return true;
+            }
+
+            $haystack = implode(' ', [
+                (string) ($row['professional_name'] ?? ''),
+                (string) ($row['subregion'] ?? ''),
+                (string) ($row['municipality'] ?? ''),
+                (string) ($row['professional_email'] ?? ''),
+            ]);
+
+            return stripos($haystack, $search) !== false;
+        }));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @param array<string, mixed> $pagination
+     * @param array<string, mixed> $user
+     */
+    private function renderResultsPartial(array $records, array $pagination, bool $isAuditView, array $user): string
+    {
+        $isAuditViewLocal = $isAuditView;
+        $currentUser = $user;
+
+        ob_start();
+        require dirname(__DIR__) . '/Views/entrenamiento/_results.php';
+        $html = ob_get_clean();
+
+        return is_string($html) ? $html : '';
     }
 
     private function collectArrayInput(mixed $input): array

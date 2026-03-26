@@ -4,6 +4,7 @@
 /** @var array<string, mixed> $professional */
 /** @var string $role */
 /** @var int $planYear */
+/** @var array<string, mixed> $oldInput */
 $shortenLabel = function (string $text, int $max = 72): string {
     $t = trim($text);
     if (mb_strlen($t) <= $max) {
@@ -11,6 +12,7 @@ $shortenLabel = function (string $text, int $max = 72): string {
     }
     return mb_substr($t, 0, $max - 1, 'UTF-8') . '…';
 };
+$oldInput = is_array($oldInput ?? null) ? $oldInput : [];
 ?>
 
 <section class="mb-4">
@@ -41,7 +43,7 @@ $shortenLabel = function (string $text, int $max = 72): string {
                 <?php if ($mode === 'edit' && $plan !== null): ?>
                     <input type="hidden" name="id" value="<?= htmlspecialchars((string) $plan['id'], ENT_QUOTES, 'UTF-8') ?>">
                 <?php endif; ?>
-                <input type="hidden" name="plan_year" value="<?= htmlspecialchars((string) $planYear, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="plan_year" value="<?= htmlspecialchars((string) ($oldInput['plan_year'] ?? $planYear), ENT_QUOTES, 'UTF-8') ?>">
 
                 <div class="app-form-section mb-4">
                     <h2 class="h6 fw-semibold text-secondary mb-3">Datos del profesional</h2>
@@ -72,7 +74,7 @@ $shortenLabel = function (string $text, int $max = 72): string {
                                 class="form-select"
                                 required
                                 data-subregion-select
-                                data-current-value="<?= htmlspecialchars((string) ($plan['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                data-current-value="<?= htmlspecialchars((string) ($oldInput['subregion'] ?? ($plan['subregion'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
                             >
                                 <option value="">Seleccione la subregión</option>
                             </select>
@@ -85,7 +87,7 @@ $shortenLabel = function (string $text, int $max = 72): string {
                                 class="form-select"
                                 required
                                 data-municipality-select
-                                data-current-value="<?= htmlspecialchars((string) ($plan['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                data-current-value="<?= htmlspecialchars((string) ($oldInput['municipality'] ?? ($plan['municipality'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
                                 disabled
                             >
                                 <option value="">Seleccione el municipio</option>
@@ -111,7 +113,23 @@ $shortenLabel = function (string $text, int $max = 72): string {
                 ];
 
                 $existingPayload = [];
-                if (!empty($plan['payload'])) {
+                if ($oldInput !== []) {
+                    foreach ($months as $monthKey => $monthLabel) {
+                        $rawTopics = $oldInput[$monthKey . '_temas'] ?? [];
+                        $topics = is_array($rawTopics)
+                            ? array_values(array_filter(array_map('strval', $rawTopics)))
+                            : [];
+                        $population = trim((string) ($oldInput[$monthKey . '_poblacion'] ?? ''));
+
+                        if ($topics !== [] || $population !== '') {
+                            $existingPayload[$monthKey] = [
+                                'label' => $monthLabel,
+                                'topics' => $topics,
+                                'population' => $population,
+                            ];
+                        }
+                    }
+                } elseif (!empty($plan['payload'])) {
                     $decoded = json_decode((string) $plan['payload'], true);
                     if (is_array($decoded)) {
                         $existingPayload = $decoded;

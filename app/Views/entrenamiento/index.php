@@ -1,33 +1,39 @@
 <?php
 /** @var array<int, array<string, mixed>> $records */
+/** @var array<string, mixed> $pagination */
 /** @var bool|null $isAuditView */
+/** @var bool|null $canCreateOwnRecord */
 
-use App\Services\Auth;
-
-$user = Auth::user();
-$userId = $user['id'] ?? null;
 $isAudit = (bool) ($isAuditView ?? false);
+$currentSort = (string) ($_GET['sort'] ?? 'created_at');
+$currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+$exportQuery = $_GET;
+unset($exportQuery['partial']);
+$exportHref = '/entrenamiento/exportar';
+if ($exportQuery !== []) {
+    $exportHref .= '?' . http_build_query($exportQuery);
+}
 ?>
 
 <section class="mt-5 mb-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
         <div>
             <h1 class="section-title mb-1">
-                <?= $isAudit ? 'Plan de Entrenamiento · Auditoría' : 'Plan de Entrenamiento' ?>
+                <?= $isAudit ? 'Plan de Entrenamiento · Auditoria' : 'Plan de Entrenamiento' ?>
             </h1>
             <p class="section-subtitle mb-0">
                 <?= $isAudit
                     ? 'Consulta los planes de entrenamiento registrados por los profesionales a tu cargo.'
-                    : 'Registra y consulta tus planes de entrenamiento (Psicólogos).'
+                    : 'Registra y consulta tus planes de entrenamiento.'
                 ?>
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a href="/entrenamiento/exportar" class="btn btn-outline-success">
+            <a href="<?= htmlspecialchars($exportHref, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-success" data-entrenamiento-export-link>
                 <i class="bi bi-file-earmark-excel me-1"></i>
                 Exportar (Excel)
             </a>
-            <?php if (!$isAudit): ?>
+            <?php if (!empty($canCreateOwnRecord)): ?>
                 <a href="/entrenamiento/nuevo" class="btn btn-primary">
                     <i class="bi bi-plus-circle me-1"></i>
                     Nuevo plan
@@ -36,50 +42,64 @@ $isAudit = (bool) ($isAuditView ?? false);
         </div>
     </div>
 
-    <?php if (empty($records)): ?>
-        <div class="alert alert-info border-0 shadow-sm">
-            Aún no has registrado ningún plan de entrenamiento. Utiliza el botón <strong>Nuevo plan</strong> para crear el primero.
+    <form class="row g-2 mb-4 align-items-end entrenamiento-filter-bar" method="get" data-entrenamiento-filters>
+        <input type="hidden" name="sort" value="<?= htmlspecialchars($currentSort, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="dir" value="<?= htmlspecialchars($currentDir, ENT_QUOTES, 'UTF-8') ?>">
+
+        <div class="col-lg-4">
+            <label class="form-label small text-muted">Buscar</label>
+            <input
+                type="text"
+                name="q"
+                class="form-control"
+                placeholder="Profesional, subregion, municipio..."
+                value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+            >
         </div>
-    <?php else: ?>
-        <div class="table-responsive shadow-sm rounded-4 bg-white p-3">
-            <table class="table align-middle mb-0">
-                <thead>
-                <tr>
-                    <th scope="col">Fecha registro</th>
-                    <th scope="col">Subregión</th>
-                    <th scope="col">Municipio</th>
-                    <th scope="col">Estado</th>
-                    <th scope="col">Acciones</th>
-                </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($records as $plan): ?>
-                    <?php $isOwner = $userId !== null && (int) ($plan['user_id'] ?? 0) === (int) $userId; ?>
-                    <tr>
-                        <td><?= htmlspecialchars((string) ($plan['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string) ($plan['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string) ($plan['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td>
-                            <?php if (!empty($plan['editable'])): ?>
-                                <span class="badge bg-secondary">Editable</span>
-                            <?php else: ?>
-                                <span class="badge bg-success">Aprobado</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($plan['editable']) && $isOwner && !$isAudit): ?>
-                                <a href="/entrenamiento/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-pencil me-1"></i>
-                                    Editar
-                                </a>
-                            <?php else: ?>
-                                <span class="text-muted small">Sin acciones</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+
+        <div class="col-lg-3">
+            <label class="form-label small text-muted">Estado</label>
+            <?php $currentState = (string) ($_GET['state'] ?? ''); ?>
+            <select name="state" class="form-select">
+                <option value="">Todos</option>
+                <option value="Editable" <?= $currentState === 'Editable' ? 'selected' : '' ?>>Editable</option>
+                <option value="Aprobado" <?= $currentState === 'Aprobado' ? 'selected' : '' ?>>Aprobado</option>
+            </select>
         </div>
-    <?php endif; ?>
+
+        <div class="col-lg-4">
+            <div class="row g-2">
+                <div class="col-sm-6">
+                    <label class="form-label small text-muted">Desde (fecha registro)</label>
+                    <input
+                        type="date"
+                        name="from_date"
+                        class="form-control"
+                        value="<?= htmlspecialchars((string) ($_GET['from_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                    >
+                </div>
+                <div class="col-sm-6">
+                    <label class="form-label small text-muted">Hasta (fecha registro)</label>
+                    <input
+                        type="date"
+                        name="to_date"
+                        class="form-control"
+                        value="<?= htmlspecialchars((string) ($_GET['to_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                    >
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-1 d-grid">
+            <a href="/entrenamiento" class="btn btn-outline-secondary">Limpiar</a>
+        </div>
+    </form>
+
+    <div class="entrenamiento-results-panel" data-entrenamiento-results>
+        <?php
+        $isAuditViewLocal = $isAudit;
+        $currentUser = \App\Services\Auth::user() ?? [];
+        require __DIR__ . '/_results.php';
+        ?>
+    </div>
 </section>

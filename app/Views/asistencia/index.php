@@ -2,9 +2,62 @@
 /** @var array $records */
 /** @var array $advisors */
 /** @var array $filters */
+/** @var array $pagination */
+/** @var bool $canFilterAdvisor */
+
+$totalItems  = (int) ($pagination['total_items'] ?? 0);
+$currentPage = (int) ($pagination['current_page'] ?? 1);
+$totalPages  = (int) ($pagination['total_pages'] ?? 1);
+$from        = (int) ($pagination['from'] ?? 0);
+$to          = (int) ($pagination['to'] ?? 0);
+
+$currentSort = (string) ($_GET['sort'] ?? 'activity_date');
+$currentDir  = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+
+$query = $_GET;
+unset($query['partial']);
+
+$buildPageHref = static function (int $page) use ($query): string {
+    $query['page'] = $page;
+    return '/asistencia?' . http_build_query($query);
+};
+
+$buildSortHref = static function (string $key) use ($query, $currentSort, $currentDir): string {
+    $query['sort'] = $key;
+    $query['dir']  = ($currentSort === $key && $currentDir === 'asc') ? 'desc' : 'asc';
+    $query['page'] = 1;
+    return '/asistencia?' . http_build_query($query);
+};
+
+$sortIcon = static function (string $key) use ($currentSort, $currentDir): string {
+    if ($currentSort !== $key) {
+        return 'bi-arrow-down-up';
+    }
+    return $currentDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down';
+};
+
+$pages = [];
+if ($totalPages <= 7) {
+    $pages = range(1, max(1, $totalPages));
+} else {
+    $pages = array_unique([
+        1, 2,
+        max(1, $currentPage - 1),
+        $currentPage,
+        min($totalPages, $currentPage + 1),
+        $totalPages - 1, $totalPages,
+    ]);
+    sort($pages);
+}
+
+$subColors = ['#1e3a5f', '#2d4a3e', '#3d2a5c', '#1a3f5c', '#4a2c1e', '#2a3d1a', '#1e4a4a', '#4a3a1e'];
+$getSubStyle = static function (string $sub) use ($subColors): string {
+    $idx = abs(crc32(strtolower(trim($sub)))) % count($subColors);
+    return 'background:' . $subColors[$idx] . ';color:#fff;';
+};
 ?>
 <section class="mt-5 mb-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
         <div>
             <h1 class="section-title mb-1">Listados de Asistencia</h1>
             <p class="section-subtitle mb-0">Gestión de actividades y registro de asistentes.</p>
@@ -15,130 +68,198 @@
         </a>
     </div>
 
+    <!-- Filtros -->
     <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-body p-3">
-            <form method="get" action="/asistencia" class="row g-2 align-items-end">
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Subregión</label>
-                    <select name="subregion" class="form-select form-select-sm" data-subregion-filter>
+        <div class="card-body p-4">
+            <form method="get" action="/asistencia" id="asi-filter-form" class="row g-3 align-items-end">
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">Subregión</label>
+                    <select name="subregion" class="form-select" data-subregion-filter data-asi-autosubmit>
                         <option value="">Todas</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Municipio</label>
-                    <select name="municipality" class="form-select form-select-sm" data-municipality-filter disabled>
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">Municipio</label>
+                    <select name="municipality" class="form-select" data-municipality-filter data-asi-autosubmit disabled>
                         <option value="">Todos</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Asesor</label>
-                    <select name="advisor_user_id" class="form-select form-select-sm">
-                        <option value="">Todos</option>
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">Asesor</label>
+                    <select name="advisor_user_id" class="form-select" data-asi-autosubmit <?= !empty($canFilterAdvisor) ? '' : 'disabled' ?>>
+                        <option value=""><?= !empty($canFilterAdvisor) ? 'Todos' : 'Mi listado' ?></option>
                         <?php foreach ($advisors as $a): ?>
                             <option value="<?= (int) $a['id'] ?>" <?= (isset($filters['advisor_user_id']) && (int) $filters['advisor_user_id'] === (int) $a['id']) ? 'selected' : '' ?>><?= htmlspecialchars((string) $a['name'], ENT_QUOTES, 'UTF-8') ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <?php if (empty($canFilterAdvisor)): ?>
+                        <input type="hidden" name="advisor_user_id" value="<?= (int) ($filters['advisor_user_id'] ?? ($advisors[0]['id'] ?? 0)) ?>">
+                    <?php endif; ?>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Estado</label>
-                    <select name="status" class="form-select form-select-sm">
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">Estado</label>
+                    <select name="status" class="form-select" data-asi-autosubmit>
                         <option value="">Todos</option>
                         <option value="Pendiente" <?= ($filters['status'] ?? '') === 'Pendiente' ? 'selected' : '' ?>>Pendiente</option>
                         <option value="Activo" <?= ($filters['status'] ?? '') === 'Activo' ? 'selected' : '' ?>>Activo</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">Filtrar</button>
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">Fecha desde</label>
+                    <input type="date" name="from_date" class="form-control" value="<?= htmlspecialchars((string) ($filters['from_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" data-asi-autosubmit>
                 </div>
-                <div class="col-md-2">
-                    <a href="/asistencia" class="btn btn-outline-secondary btn-sm w-100">Limpiar</a>
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">Fecha hasta</label>
+                    <input type="date" name="to_date" class="form-control" value="<?= htmlspecialchars((string) ($filters['to_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" data-asi-autosubmit>
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <a href="/asistencia" class="asi-filter-clear-link">Limpiar</a>
                 </div>
             </form>
         </div>
     </div>
 
-    <?php if (empty($records)): ?>
-        <div class="alert alert-info border-0 shadow-sm">
-            No hay actividades registradas. Utiliza <strong>Nueva Actividad</strong> para crear la primera.
+    <!-- Tabla -->
+    <?php if ($totalItems === 0): ?>
+        <div class="asi-empty-state">
+            <div class="asi-empty-icon"><i class="bi bi-calendar-x"></i></div>
+            <p class="asi-empty-title">Sin actividades</p>
+            <p class="asi-empty-copy">No hay actividades que coincidan con los filtros aplicados. Crea una nueva con el botón <strong>+ Nueva Actividad</strong>.</p>
         </div>
     <?php else: ?>
-        <div class="table-responsive shadow-sm rounded-4 bg-white p-3">
-            <table class="table align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th scope="col">Código</th>
-                        <th scope="col">Fecha</th>
-                        <th scope="col">Subregión</th>
-                        <th scope="col">Municipio</th>
-                        <th scope="col">Lugar</th>
-                        <th scope="col">Tipo Listado</th>
-                        <th scope="col">Asesor</th>
-                        <th scope="col">Asistentes</th>
-                        <th scope="col">Estado</th>
-                        <th scope="col"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($records as $row): ?>
-                        <?php
-                        $tipos = $row['actividad_tipos'] ?? [];
-                        $tiposList = is_array($tipos) ? $tipos : [];
-                        // Mostramos máximo 3 badges por fila para no saturar la tabla.
-                        $tiposPreview = array_slice($tiposList, 0, 3);
-                        $hasMoreTipos = is_array($tipos) && count($tipos) > 3;
-                        ?>
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="asi-table-head-bar px-4 py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <p class="mb-0 asi-table-summary">
+                    Mostrando <strong><?= $from ?>–<?= $to ?></strong> de <strong><?= $totalItems ?></strong> actividades
+                </p>
+                <span class="asi-page-chip">Página <?= $currentPage ?> de <?= $totalPages ?></span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 asi-table">
+                    <thead>
                         <tr>
-                            <td><span class="text-primary fw-medium"><?= htmlspecialchars((string) ($row['code'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span></td>
-                            <td><?= htmlspecialchars((string) ($row['activity_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string) ($row['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string) ($row['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string) ($row['lugar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td class="small">
-                                <?php if ($tiposPreview !== []): ?>
-                                    <div class="d-flex flex-column gap-1">
-                                        <?php foreach ($tiposPreview as $tipo): ?>
-                                            <span
-                                                class="badge bg-light text-dark border text-start text-wrap"
-                                                style="white-space: normal; max-width: 100%;"
-                                                title="<?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>"
-                                            >
-                                                <?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>
-                                            </span>
-                                        <?php endforeach; ?>
-                                        <?php if ($hasMoreTipos): ?>
-                                            <span class="text-muted small">…y otros tipos</span>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <span class="text-muted">—</span>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= htmlspecialchars((string) ($row['advisor_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= (int) ($row['asistentes_count'] ?? 0) ?></td>
-                            <td>
-                                <span class="badge rounded-pill <?= ($row['status'] ?? '') === 'Activo' ? 'text-bg-success' : 'text-bg-warning' ?>">
-                                    <?= htmlspecialchars((string) ($row['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                </span>
-                            </td>
-                            <td>
-                                <a href="/asistencia/ver?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary" title="Ver detalle">
-                                    <i class="bi bi-eye"></i>
-                                </a>
-                            </td>
+                            <th><a class="asi-sort-link <?= $currentSort === 'activity_date' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('activity_date'), ENT_QUOTES, 'UTF-8') ?>"><span>Fecha</span><i class="bi <?= $sortIcon('activity_date') ?>"></i></a></th>
+                            <th><a class="asi-sort-link <?= $currentSort === 'subregion' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('subregion'), ENT_QUOTES, 'UTF-8') ?>"><span>Subregión</span><i class="bi <?= $sortIcon('subregion') ?>"></i></a></th>
+                            <th><a class="asi-sort-link <?= $currentSort === 'municipality' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('municipality'), ENT_QUOTES, 'UTF-8') ?>"><span>Municipio</span><i class="bi <?= $sortIcon('municipality') ?>"></i></a></th>
+                            <th>Lugar</th>
+                            <th>Tipo Listado</th>
+                            <th><a class="asi-sort-link <?= $currentSort === 'advisor_name' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('advisor_name'), ENT_QUOTES, 'UTF-8') ?>"><span>Asesor</span><i class="bi <?= $sortIcon('advisor_name') ?>"></i></a></th>
+                            <th class="text-center"><a class="asi-sort-link <?= $currentSort === 'asistentes_count' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('asistentes_count'), ENT_QUOTES, 'UTF-8') ?>"><span>Asistentes</span><i class="bi <?= $sortIcon('asistentes_count') ?>"></i></a></th>
+                            <th><a class="asi-sort-link <?= $currentSort === 'status' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('status'), ENT_QUOTES, 'UTF-8') ?>"><span>Estado</span><i class="bi <?= $sortIcon('status') ?>"></i></a></th>
+                            <th></th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($records as $row): ?>
+                            <?php
+                            $tipos       = $row['actividad_tipos'] ?? [];
+                            $tiposList   = is_array($tipos) ? $tipos : [];
+                            $tiposView   = array_slice($tiposList, 0, 2);
+                            $tiposExtra  = count($tiposList) - count($tiposView);
+                            $statusClass = ($row['status'] ?? '') === 'Activo' ? 'is-active' : 'is-pending';
+                            ?>
+                            <tr>
+                                <td class="asi-date"><?= htmlspecialchars((string) ($row['activity_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td>
+                                    <?php if (!empty($row['subregion'])): ?>
+                                        <span class="asi-subregion-pill" style="<?= $getSubStyle((string) $row['subregion']) ?>">
+                                            <?= htmlspecialchars((string) $row['subregion'], ENT_QUOTES, 'UTF-8') ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= htmlspecialchars((string) ($row['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="asi-lugar" title="<?= htmlspecialchars((string) ($row['lugar'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= htmlspecialchars((string) ($row['lugar'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                </td>
+                                <td>
+                                    <?php if ($tiposView !== []): ?>
+                                        <div class="asi-tipos-list">
+                                            <?php foreach ($tiposView as $tipo): ?>
+                                                <span class="asi-tipo-item" title="<?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <?= htmlspecialchars((string) $tipo, ENT_QUOTES, 'UTF-8') ?>
+                                                </span>
+                                            <?php endforeach; ?>
+                                            <?php if ($tiposExtra > 0): ?>
+                                                <span class="asi-tipos-more">+<?= $tiposExtra ?> más</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="asi-cell-advisor">
+                                    <span class="asi-advisor-name"><?= htmlspecialchars((string) ($row['advisor_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="asi-count-badge"><?= (int) ($row['asistentes_count'] ?? 0) ?></span>
+                                </td>
+                                <td>
+                                    <span class="asi-status-pill <?= $statusClass ?>">
+                                        <?= htmlspecialchars((string) ($row['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <a href="/asistencia/ver?id=<?= (int) $row['id'] ?>" class="asi-btn-view" title="Ver detalle">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <?php if ($totalPages > 1): ?>
+                <nav class="asi-pagination-wrap" aria-label="Paginación de asistencia">
+                    <p class="asi-pagination-summary mb-0"><?= $totalItems ?> actividades en total</p>
+                    <ul class="pagination asi-pagination mb-0">
+                        <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= htmlspecialchars($buildPageHref(max(1, $currentPage - 1)), ENT_QUOTES, 'UTF-8') ?>" aria-label="Anterior">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        <?php
+                        $prev = null;
+                        foreach ($pages as $pg):
+                            if ($prev !== null && $pg > $prev + 1):
+                        ?>
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        <?php endif; ?>
+                            <li class="page-item <?= $pg === $currentPage ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= htmlspecialchars($buildPageHref($pg), ENT_QUOTES, 'UTF-8') ?>"><?= $pg ?></a>
+                            </li>
+                        <?php
+                            $prev = $pg;
+                        endforeach;
+                        ?>
+                        <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= htmlspecialchars($buildPageHref(min($totalPages, $currentPage + 1)), ENT_QUOTES, 'UTF-8') ?>" aria-label="Siguiente">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 </section>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var subregionSelect = document.querySelector('[data-subregion-filter]');
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('select[data-asi-autosubmit]').forEach(function (el) {
+        el.addEventListener('change', function () {
+            document.getElementById('asi-filter-form').submit();
+        });
+    });
+
+    var subregionSelect   = document.querySelector('[data-subregion-filter]');
     var municipalitySelect = document.querySelector('[data-municipality-filter]');
     if (!subregionSelect || !municipalitySelect) return;
-    fetch('/assets/js/municipios.json').then(function(r) { return r.json(); }).then(function(data) {
-        Object.keys(data).forEach(function(sub) {
+
+    fetch('/assets/js/municipios.json').then(function (r) { return r.json(); }).then(function (data) {
+        Object.keys(data).forEach(function (sub) {
             var opt = document.createElement('option');
             opt.value = sub;
             opt.textContent = sub;
@@ -146,11 +267,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         var currentSub = new URLSearchParams(window.location.search).get('subregion');
         var currentMun = new URLSearchParams(window.location.search).get('municipality');
-        if (currentSub) { subregionSelect.value = currentSub; municipalitySelect.disabled = false; (data[currentSub] || []).forEach(function(m) { var o = document.createElement('option'); o.value = m; o.textContent = m; if (m === currentMun) o.selected = true; municipalitySelect.appendChild(o); }); }
-        subregionSelect.addEventListener('change', function() {
+        if (currentSub) {
+            subregionSelect.value = currentSub;
+            municipalitySelect.disabled = false;
+            (data[currentSub] || []).forEach(function (m) {
+                var o = document.createElement('option');
+                o.value = m;
+                o.textContent = m;
+                if (m === currentMun) o.selected = true;
+                municipalitySelect.appendChild(o);
+            });
+        }
+        subregionSelect.addEventListener('change', function () {
             municipalitySelect.innerHTML = '<option value="">Todos</option>';
             municipalitySelect.disabled = !subregionSelect.value;
-            if (subregionSelect.value && data[subregionSelect.value]) { data[subregionSelect.value].forEach(function(m) { var o = document.createElement('option'); o.value = m; o.textContent = m; municipalitySelect.appendChild(o); }); }
+            if (subregionSelect.value && data[subregionSelect.value]) {
+                data[subregionSelect.value].forEach(function (m) {
+                    var o = document.createElement('option');
+                    o.value = m;
+                    o.textContent = m;
+                    municipalitySelect.appendChild(o);
+                });
+            }
         });
     });
 });

@@ -48,7 +48,14 @@ final class EncuestaOpinionAoatRepository
     {
         $pdo = Connection::getPdo();
         $stmt = $pdo->query(
-            'SELECT * FROM encuesta_opinion_aoat ORDER BY created_at DESC, id DESC'
+            "SELECT
+                e.*,
+                GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ',') AS advisor_roles
+            FROM encuesta_opinion_aoat e
+            LEFT JOIN user_roles ur ON ur.user_id = e.advisor_user_id
+            LEFT JOIN roles r ON r.id = ur.role_id
+            GROUP BY e.id
+            ORDER BY e.created_at DESC, e.id DESC"
         );
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

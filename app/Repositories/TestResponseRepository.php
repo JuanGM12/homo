@@ -133,6 +133,7 @@ final class TestResponseRepository
      *  - test_key: string
      *  - phase: 'pre'|'post'
      *  - document_number: string
+     *  - search: string
      *  - subregion: string
      *  - municipality: string
      *  - date_from: 'Y-m-d'
@@ -174,8 +175,16 @@ final class TestResponseRepository
         }
 
         if (!empty($filters['document_number'])) {
-            $where[] = 'document_number = :document_number';
-            $params[':document_number'] = $filters['document_number'];
+            $where[] = 'document_number LIKE :document_number';
+            $params[':document_number'] = '%' . trim((string) $filters['document_number']) . '%';
+        }
+
+        if (!empty($filters['search'])) {
+            $where[] = '(document_number LIKE :search
+                OR first_name LIKE :search
+                OR last_name LIKE :search
+                OR CONCAT(first_name, " ", last_name) LIKE :search)';
+            $params[':search'] = '%' . trim((string) $filters['search']) . '%';
         }
 
         if (!empty($filters['subregion'])) {

@@ -1,18 +1,21 @@
 <?php
 /** @var array<int, array<string, mixed>> $records */
 /** @var bool|null $isAuditView */
+/** @var array<string, mixed> $pagination */
 
 use App\Services\Auth;
 
 $user = Auth::user();
-$userId = $user['id'] ?? null;
 $userRoles = $user['roles'] ?? [];
 $isAudit = (bool) ($isAuditView ?? false);
 $isSpecialist = in_array('especialista', $userRoles ?? [], true);
 $isCoordinator = in_array('coordinadora', $userRoles ?? [], true) || in_array('coordinador', $userRoles ?? [], true);
 $isAdmin = in_array('admin', $userRoles ?? [], true);
 $canUseWeeklyReport = $isAdmin || $isCoordinator;
-$exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
+
+$exportParams = $_GET;
+unset($exportParams['partial']);
+$exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
 ?>
 
 <section class="mt-5 mb-4">
@@ -22,13 +25,17 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
             <p class="section-subtitle mb-0">
                 <?= $isAudit
                     ? 'Visualiza y audita los registros de AoAT de los profesionales a tu cargo.'
-                    : 'Asesorías y Asistencias Técnicas diligenciadas por el profesional.'
+                    : 'Asesorías y asistencias técnicas diligenciadas por el profesional.'
                 ?>
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
             <?php if ($isAudit): ?>
-                <a href="/aoat/exportar<?= htmlspecialchars($exportQuery, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-success">
+                <a
+                    href="/aoat/exportar<?= htmlspecialchars($exportQuery, ENT_QUOTES, 'UTF-8') ?>"
+                    class="btn btn-outline-success"
+                    data-aoat-export-link
+                >
                     <i class="bi bi-download me-1"></i>
                     Exportar CSV
                 </a>
@@ -39,11 +46,7 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
                     Reporte semanal
                 </a>
             <?php endif; ?>
-            <?php
-            // Vista "profesional": siempre puede registrar. Vista auditoría: admin/coord. no ven el botón;
-            // los especialistas sí (auditan y también registran sus propias AoAT).
-            $canRegisterNewAoat = !$isAudit || $isSpecialist;
-            ?>
+            <?php $canRegisterNewAoat = !$isAudit || $isSpecialist; ?>
             <?php if ($canRegisterNewAoat): ?>
                 <a href="/aoat/nueva" class="btn btn-primary">
                     <i class="bi bi-plus-circle me-1"></i>
@@ -53,7 +56,9 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
         </div>
     </div>
 
-    <form class="row g-2 mb-3 align-items-end" method="get" data-aoat-filters>
+    <form class="row g-2 mb-4 align-items-end aoat-filter-bar" method="get" data-aoat-filters>
+        <input type="hidden" name="sort" value="<?= htmlspecialchars((string) ($_GET['sort'] ?? 'created_at'), ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="dir" value="<?= htmlspecialchars((string) ($_GET['dir'] ?? 'desc'), ENT_QUOTES, 'UTF-8') ?>">
         <div class="col-md-4">
             <label class="form-label small text-muted">Buscar</label>
             <input
@@ -102,33 +107,9 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
         </div>
     </form>
 
-    <?php if (empty($records)): ?>
-        <div class="alert alert-info border-0 shadow-sm">
-            <?= $isAudit
-                ? 'Aún no hay registros de AoAT para auditar en tu perfil.'
-                : 'Aún no has registrado AoAT. Utiliza el botón <strong>Nueva AoAT</strong> para crear la primera.'
-            ?>
-        </div>
-    <?php else: ?>
-        <div class="table-responsive shadow-sm rounded-4 bg-white p-3">
-            <table class="table align-middle mb-0">
-                <thead>
-                <tr>
-                    <th scope="col">ID</th>
-                    <th scope="col">Fecha</th>
-                    <th scope="col">Profesional</th>
-                    <th scope="col">Subregión</th>
-                    <th scope="col">Municipio</th>
-                    <th scope="col">Estado AoAT</th>
-                    <th scope="col">Acciones</th>
-                </tr>
-                </thead>
-                <tbody data-aoat-tbody>
-                <?php require __DIR__ . '/_rows.php'; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
+    <div class="aoat-results-panel shadow-sm" data-aoat-results>
+        <?php require __DIR__ . '/_results.php'; ?>
+    </div>
 </section>
 
 <form id="aoat-state-form" method="post" action="/aoat/cambiar-estado" class="d-none">
@@ -137,4 +118,3 @@ $exportQuery = $_GET ? ('?' . http_build_query($_GET)) : '';
     <input type="hidden" name="observation" id="aoat-state-observation">
     <input type="hidden" name="motive" id="aoat-state-motive">
 </form>
-
