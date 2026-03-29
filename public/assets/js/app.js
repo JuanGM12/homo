@@ -116,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!municipalitySelect) {
                         return;
                     }
+                    const isNumberOnlyEdit = !!(form.dataset && form.dataset.numberOnlyEdit === '1');
 
                     const isTerritoryFilter = form.hasAttribute && form.hasAttribute('data-territory-filter');
                     const municipalityEmptyLabel = isTerritoryFilter
@@ -135,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const fillMunicipalities = (subregionValue, selectedMunicipality) => {
                         municipalitySelect.innerHTML =
                             '<option value="">' + municipalityEmptyLabel + '</option>';
-                        municipalitySelect.disabled = !subregionValue;
+                        municipalitySelect.disabled = isNumberOnlyEdit || !subregionValue;
 
                         if (subregionValue && data[subregionValue]) {
                             data[subregionValue].forEach((municipio) => {
@@ -156,6 +157,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (currentSubregion) {
                         subregionSelect.value = currentSubregion;
                         fillMunicipalities(currentSubregion, currentMunicipality);
+                    }
+
+                    if (isNumberOnlyEdit) {
+                        subregionSelect.disabled = true;
+                        municipalitySelect.disabled = true;
+                        return;
                     }
 
                     subregionSelect.addEventListener('change', () => {

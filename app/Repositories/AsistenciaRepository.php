@@ -66,7 +66,7 @@ final class AsistenciaRepository
     /**
      * Lista actividades con filtros opcionales.
      *
-     * @param array{subregion?: string, municipality?: string, advisor_user_id?: int, advisor_user_ids?: array<int, int>, status?: string} $filters
+     * @param array{subregion?: string, municipality?: string, advisor_user_id?: int, advisor_user_ids?: array<int, int>, status?: string, tipo?: string} $filters
      * @return array
      */
     public function findWithFilters(array $filters = []): array
@@ -104,6 +104,10 @@ final class AsistenciaRepository
         if (!empty($filters['status'])) {
             $where[] = 'status = :status';
             $params[':status'] = $filters['status'];
+        }
+        if (!empty($filters['tipo'])) {
+            $where[] = 'tipo = :tipo';
+            $params[':tipo'] = $filters['tipo'];
         }
         if (!empty($filters['from_date'])) {
             $where[] = 'activity_date >= :from_date';
@@ -228,6 +232,10 @@ final class AsistenciaRepository
 
     private function decodeActividadTipos(array $row): array
     {
+        $row['tipo'] = isset($row['tipo']) && is_string($row['tipo']) && trim($row['tipo']) !== ''
+            ? trim((string) $row['tipo'])
+            : 'aoat';
+
         if (isset($row['actividad_tipos']) && is_string($row['actividad_tipos'])) {
             $decoded = json_decode($row['actividad_tipos'], true);
             $row['actividad_tipos'] = is_array($decoded) ? $decoded : [];

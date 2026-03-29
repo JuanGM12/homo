@@ -50,6 +50,12 @@ $formatCreatedAt = static function (?string $value): array {
         }
     }
 
+    $canEditNumberOnly = !$isAudit
+        && $isOwner
+        && in_array($state, ['Aprobada', 'Realizado'], true)
+        && trim((string) ($payloadArray['aoat_number'] ?? '')) === '0';
+    $canEditForm = $canEditForm || $canEditNumberOnly;
+
     $auditMotive = trim((string) ($record['audit_motive'] ?? ''));
     $auditObservation = trim((string) ($record['audit_observation'] ?? ''));
     if ($state === 'Devuelta' && ($auditMotive !== '' || $auditObservation !== '')) {

@@ -575,7 +575,9 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
-        if (($record['state'] ?? '') === 'Aprobada') {
+        $canEditApprovedNumberOnly = $this->canEditApprovedOrRealizadoAoatNumber($record);
+
+        if (($record['state'] ?? '') === 'Aprobada' && !$canEditApprovedNumberOnly) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Edición no permitida',
@@ -585,7 +587,7 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
-        if (($record['state'] ?? '') === 'Realizado') {
+        if (($record['state'] ?? '') === 'Realizado' && !$canEditApprovedNumberOnly) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'En revisión del especialista',
@@ -641,7 +643,9 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
-        if (($record['state'] ?? '') === 'Aprobada') {
+        $canEditApprovedNumberOnly = $this->canEditApprovedOrRealizadoAoatNumber($record);
+
+        if (($record['state'] ?? '') === 'Aprobada' && !$canEditApprovedNumberOnly) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Edición no permitida',
@@ -651,11 +655,52 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
-        if (($record['state'] ?? '') === 'Realizado') {
+        if (($record['state'] ?? '') === 'Realizado' && !$canEditApprovedNumberOnly) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'En revisión del especialista',
                 'message' => 'No puedes editar un registro en estado "Realizado" hasta que el especialista lo apruebe o lo devuelva.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if ($canEditApprovedNumberOnly) {
+            $aoatNumber = trim((string) $request->input('aoat_number', ''));
+            if ($aoatNumber === '') {
+                $this->flashOldInput('edit', $id, $request);
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Campo obligatorio',
+                    'message' => 'Debes indicar el Número de la AoAT o actividad.',
+                ]);
+
+                return Response::redirect('/aoat/editar?id=' . $id);
+            }
+
+            $payload = $this->decodePayload($record);
+            $payload['aoat_number'] = $aoatNumber;
+
+            try {
+                $repo->update($id, [
+                    'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                ]);
+                $this->clearOldInput();
+            } catch (\PDOException $e) {
+                $this->flashOldInput('edit', $id, $request);
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'No fue posible actualizar la AoAT',
+                    'message' => 'Ocurrió un problema al actualizar el número de la AoAT. Intenta nuevamente en unos minutos.',
+                ]);
+
+                return Response::redirect('/aoat/editar?id=' . $id);
+            }
+
+            Flash::set([
+                'type' => 'success',
+                'title' => 'Número AoAT actualizado',
+                'message' => 'El número de la AoAT o actividad se actualizó correctamente.',
             ]);
 
             return Response::redirect('/aoat');
@@ -992,7 +1037,7 @@ final class AoatController
     }
 
     /**
-     * Renderiza resultados del listado de AoAT (tabla, vacÃ­o y paginaciÃ³n) para AJAX.
+     * Renderiza resultados del listado de AoAT (tabla, vací­o y paginación) para AJAX.
      *
      * @param array<int, array<string, mixed>> $records
      * @param array<string, mixed> $pagination
@@ -1221,6 +1266,26 @@ final class AoatController
         );
 
         return $payload;
+    }
+
+    private function decodePayload(array $record): array
+    {
+        $payload = json_decode((string) ($record['payload'] ?? ''), true);
+
+        return is_array($payload) ? $payload : [];
+    }
+
+    private function canEditApprovedOrRealizadoAoatNumber(array $record): bool
+    {
+        $state = (string) ($record['state'] ?? '');
+        if (!in_array($state, ['Aprobada', 'Realizado'], true)) {
+            return false;
+        }
+
+        $payload = $this->decodePayload($record);
+        $aoatNumber = trim((string) ($payload['aoat_number'] ?? ''));
+
+        return $aoatNumber === '0';
     }
 
     /**

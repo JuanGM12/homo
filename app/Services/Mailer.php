@@ -169,7 +169,7 @@ final class Mailer
                         <td style="padding:28px 30px 20px;color:#173c37;">
                             <p style="margin:0 0 14px;font-size:15px;line-height:1.7;">Hola <strong>' . $escapedName . '</strong>,</p>
                             <p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:#375a54;">
-                                Tu registro de Asesoría o Asistencia Técnica <strong>#' . $escapedAoatId . '</strong> fue marcado como <strong style="color:#a85c00;">Devuelta</strong> por el especialista. Revisa la información resumida a continuación, realiza los ajustes solicitados y luego actualiza el estado a <strong>Realizado</strong>.
+                                Tu registro de Asesoría o Asistencia Técnica fue marcado como <strong style="color:#a85c00;">Devuelta</strong> por el especialista. Revisa la información resumida a continuación, realiza los ajustes solicitados y luego actualiza el estado a <strong>Realizado</strong>.
                             </p>
                             <div style="margin:22px 0 20px;padding:18px 20px;border-radius:18px;background:linear-gradient(180deg,#f8fbfa 0%,#f5efe5 100%);border:1px solid #dbe7e2;">
                                 <div style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2d6a60;">

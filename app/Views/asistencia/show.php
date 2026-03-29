@@ -4,6 +4,9 @@
 /** @var string $registrationUrl */
 $tipos = $actividad['actividad_tipos'] ?? [];
 $tiposList = is_array($tipos) ? $tipos : [];
+$tipoActividad = (string) ($actividad['tipo'] ?? 'aoat');
+$tipoActividadLabel = $tipoActividad === 'actividad' ? 'Actividades' : 'AoAT';
+$backUrl = '/asistencia?tab=' . rawurlencode($tipoActividad === 'actividad' ? 'actividad' : 'aoat');
 $code = (string) ($actividad['code'] ?? '');
 $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . rawurlencode($registrationUrl);
 
@@ -17,7 +20,7 @@ if ($subregion !== '') {
 ?>
 <section class="mt-5 mb-5">
     <div class="mb-4">
-        <a href="/asistencia" class="asi-show-back-link">
+        <a href="<?= htmlspecialchars($backUrl, ENT_QUOTES, 'UTF-8') ?>" class="asi-show-back-link">
             <i class="bi bi-arrow-left me-1"></i>
             Volver al listado
         </a>
@@ -62,11 +65,15 @@ if ($subregion !== '') {
                         <span class="asi-show-value"><?= htmlspecialchars((string) ($actividad['lugar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span>
                     </div>
                     <div class="asi-show-field">
+                        <span class="asi-show-label">Tipo</span>
+                        <span class="asi-show-value"><?= htmlspecialchars($tipoActividadLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                    </div>
+                    <div class="asi-show-field">
                         <span class="asi-show-label">Asesor</span>
                         <span class="asi-show-value"><?= htmlspecialchars((string) ($actividad['advisor_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span>
                     </div>
                     <div class="asi-show-field">
-                        <span class="asi-show-label">Tipo de Listado</span>
+                        <span class="asi-show-label"><?= $tipoActividad === 'actividad' ? 'Actividad' : 'Listado AoAT' ?></span>
                         <?php if ($tiposList !== []): ?>
                             <div class="d-flex flex-column gap-1 mt-1">
                                 <?php foreach ($tiposList as $tipo): ?>

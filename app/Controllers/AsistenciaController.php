@@ -115,6 +115,7 @@ final class AsistenciaController
             return Response::redirect('/login');
         }
 
+        $activeTab   = $this->normalizeActividadTipo((string) $request->input('tab', 'aoat'));
         $sort        = trim((string) $request->input('sort', 'activity_date'));
         $dir         = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
@@ -126,6 +127,7 @@ final class AsistenciaController
             'status'          => trim((string) $request->input('status', '')),
             'from_date'       => trim((string) $request->input('from_date', '')),
             'to_date'         => trim((string) $request->input('to_date', '')),
+            'tipo'            => $activeTab,
         ];
 
         $advisors = $this->visibleAdvisorsForUser($user);
@@ -163,6 +165,7 @@ final class AsistenciaController
             'pagination' => $pagination,
             'advisors'   => $advisors,
             'filters'    => $filters,
+            'activeTab'  => $activeTab,
             'canFilterAdvisor' => count($advisors) > 1,
         ]);
     }
@@ -198,6 +201,7 @@ final class AsistenciaController
             'activityOptionsByAdvisor' => $activityOptionsByAdvisor,
             'selectedAdvisorId' => $selectedAdvisorId,
             'canChooseAdvisor' => $canChooseAdvisor,
+            'defaultTipo' => 'aoat',
         ]);
     }
 
@@ -208,7 +212,7 @@ final class AsistenciaController
             return Response::redirect('/login');
         }
 
-        $errors = $this->validateForm($request);
+        $errors = $this->validateActivityForm($request);
         if ($errors !== []) {
             Flash::set([
                 'type' => 'error',
@@ -242,31 +246,31 @@ final class AsistenciaController
         $advisor = $this->userRepo->find($advisorUserId);
         $advisorName = $advisor ? (string) $advisor['name'] : 'Asesor';
 
-        $actividadTipos = $request->input('actividad_tipos');
-        if (is_array($actividadTipos)) {
-            $actividadTipos = array_values(array_filter(array_map('trim', $actividadTipos)));
-        } else {
-            $actividadTipos = [];
-        }
+        $tipo = $this->normalizeActividadTipo((string) $request->input('tipo', 'aoat'));
+        $actividadTipos = $this->resolveActividadPayload($request, $tipo);
         if ($actividadTipos === []) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'Actividad requerida',
-                'message' => 'Debes seleccionar al menos un tipo de listado.',
+                'message' => $tipo === 'actividad'
+                    ? 'Debes escribir el nombre de la actividad.'
+                    : 'Debes seleccionar al menos un tipo de listado AoAT.',
             ]);
             return Response::redirect('/asistencia/nueva');
         }
 
-        $advisorActivityRole = $this->resolveActividadRoleFromUser($advisor ?? $user);
-        $allowedActivityTypes = self::getTiposActividadByRole($advisorActivityRole);
-        $invalidActivityTypes = array_values(array_diff($actividadTipos, $allowedActivityTypes));
-        if ($invalidActivityTypes !== []) {
-            Flash::set([
-                'type' => 'error',
-                'title' => 'Tipo de actividad no permitido',
-                'message' => 'Seleccionaste actividades que no corresponden al rol del asesor.',
-            ]);
-            return Response::redirect('/asistencia/nueva');
+        if ($tipo === 'aoat') {
+            $advisorActivityRole = $this->resolveActividadRoleFromUser($advisor ?? $user);
+            $allowedActivityTypes = self::getTiposActividadByRole($advisorActivityRole);
+            $invalidActivityTypes = array_values(array_diff($actividadTipos, $allowedActivityTypes));
+            if ($invalidActivityTypes !== []) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Tipo de actividad no permitido',
+                    'message' => 'Seleccionaste actividades que no corresponden al rol del asesor.',
+                ]);
+                return Response::redirect('/asistencia/nueva');
+            }
         }
 
         $code = $this->repo->generateUniqueCode();
@@ -279,6 +283,7 @@ final class AsistenciaController
             'advisor_user_id' => $advisorUserId,
             'advisor_name' => $advisorName,
             'activity_date' => trim((string) $request->input('activity_date', '')),
+            'tipo' => $tipo,
             'actividad_tipos' => json_encode($actividadTipos, JSON_UNESCAPED_UNICODE),
             'status' => 'Pendiente',
         ];
@@ -718,6 +723,51 @@ final class AsistenciaController
         return $normalizedDate >= self::MIN_ALLOWED_DATE;
     }
 
+    private function validateActivityForm(Request $request): array
+    {
+        $errors = $this->validateForm($request);
+        $tipo = $this->normalizeActividadTipo((string) $request->input('tipo', 'aoat'));
+
+        if ($tipo === 'actividad') {
+            if (trim((string) $request->input('actividad_libre', '')) === '') {
+                $errors[] = 'Debes escribir el nombre de la actividad.';
+            }
+        } elseif ($this->resolveActividadPayload($request, 'aoat') === []) {
+            $errors[] = 'Debes seleccionar al menos un tipo de listado AoAT.';
+        }
+
+        return $errors;
+    }
+
+    private function normalizeActividadTipo(string $tipo): string
+    {
+        return strtolower(trim($tipo)) === 'actividad' ? 'actividad' : 'aoat';
+    }
+
+    /**
+     * @return string[]
+     */
+    private function resolveActividadPayload(Request $request, string $tipo): array
+    {
+        if ($tipo === 'actividad') {
+            $actividadLibre = trim((string) $request->input('actividad_libre', ''));
+
+            return $actividadLibre !== '' ? [$actividadLibre] : [];
+        }
+
+        $actividadTipos = $request->input('actividad_tipos');
+        if (!is_array($actividadTipos)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $actividadTipos)));
+    }
+
+    private function actividadTipoLabel(string $tipo): string
+    {
+        return $this->normalizeActividadTipo($tipo) === 'actividad' ? 'Actividades' : 'AoAT';
+    }
+
     /**
      * Formulario público de registro de asistencia (enlace automático por código).
      */
@@ -733,6 +783,7 @@ final class AsistenciaController
         }
         $tipos = $actividad['actividad_tipos'] ?? [];
         $tituloListado = is_array($tipos) && count($tipos) > 0 ? $tipos[0] : 'Listado de asistencia';
+        $tituloListado = $this->actividadTipoLabel((string) ($actividad['tipo'] ?? 'aoat')) . ': ' . $tituloListado;
 
         return Response::view('asistencia/registrar', [
             'pageTitle' => 'Registro de Asistencia',
@@ -888,6 +939,7 @@ final class AsistenciaController
 
         $tipos = $actividad['actividad_tipos'] ?? [];
         $tiposStr = is_array($tipos) ? implode('; ', $tipos) : (string) $tipos;
+        $tipoLabel = $this->actividadTipoLabel((string) ($actividad['tipo'] ?? 'aoat'));
         $rows = '';
         foreach ($asistentes as $i => $a) {
             $grupo = $a['grupo_poblacional'] ?? [];
@@ -905,7 +957,7 @@ final class AsistenciaController
             . $header
             . '<h1 style="font-size:18px;margin:0 0 8px;">Listado de Asistencia - ' . $esc((string) ($actividad['code'] ?? '')) . '</h1>'
             . '<p><strong>Fecha:</strong> ' . $esc((string) ($actividad['activity_date'] ?? '')) . ' | <strong>Lugar:</strong> ' . $esc((string) ($actividad['lugar'] ?? '')) . ' | <strong>Asesor:</strong> ' . $esc((string) ($actividad['advisor_name'] ?? '')) . '</p>'
-            . '<p><strong>Tipo(s) de listado:</strong> ' . $esc($tiposStr) . '</p>'
+            . '<p><strong>Tipo:</strong> ' . $esc($tipoLabel) . ' | <strong>Actividad(es):</strong> ' . $esc($tiposStr) . '</p>'
             . '<table><thead><tr><th>#</th><th>Documento</th><th>Nombres</th><th>Entidad</th><th>Cargo</th><th>Teléfono</th><th>Correo</th><th>Zona</th><th>Sexo</th><th>Edad</th><th>Etnia</th><th>Grupo pobl.</th><th>Registro</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>';
     }
 }

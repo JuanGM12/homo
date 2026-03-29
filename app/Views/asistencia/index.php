@@ -4,6 +4,7 @@
 /** @var array $filters */
 /** @var array $pagination */
 /** @var bool $canFilterAdvisor */
+/** @var string $activeTab */
 
 $totalItems  = (int) ($pagination['total_items'] ?? 0);
 $currentPage = (int) ($pagination['current_page'] ?? 1);
@@ -25,6 +26,12 @@ $buildPageHref = static function (int $page) use ($query): string {
 $buildSortHref = static function (string $key) use ($query, $currentSort, $currentDir): string {
     $query['sort'] = $key;
     $query['dir']  = ($currentSort === $key && $currentDir === 'asc') ? 'desc' : 'asc';
+    $query['page'] = 1;
+    return '/asistencia?' . http_build_query($query);
+};
+
+$buildTabHref = static function (string $tab) use ($query): string {
+    $query['tab'] = $tab;
     $query['page'] = 1;
     return '/asistencia?' . http_build_query($query);
 };
@@ -55,6 +62,8 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
     $idx = abs(crc32(strtolower(trim($sub)))) % count($subColors);
     return 'background:' . $subColors[$idx] . ';color:#fff;';
 };
+
+$tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
 ?>
 <section class="mt-5 mb-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
@@ -68,10 +77,21 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
         </a>
     </div>
 
-    <!-- Filtros -->
+    <div class="mb-4">
+        <div class="nav nav-pills gap-2">
+            <a href="<?= htmlspecialchars($buildTabHref('aoat'), ENT_QUOTES, 'UTF-8') ?>" class="btn <?= $activeTab === 'aoat' ? 'btn-primary' : 'btn-outline-primary' ?>">
+                AoAT
+            </a>
+            <a href="<?= htmlspecialchars($buildTabHref('actividad'), ENT_QUOTES, 'UTF-8') ?>" class="btn <?= $activeTab === 'actividad' ? 'btn-primary' : 'btn-outline-primary' ?>">
+                Actividades
+            </a>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body p-4">
             <form method="get" action="/asistencia" id="asi-filter-form" class="row g-3 align-items-end">
+                <input type="hidden" name="tab" value="<?= htmlspecialchars($activeTab, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="col-md-3 col-sm-6">
                     <label class="form-label small fw-semibold text-muted mb-1">Subregión</label>
                     <select name="subregion" class="form-select" data-subregion-filter data-asi-autosubmit>
@@ -113,24 +133,23 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                     <input type="date" name="to_date" class="form-control" value="<?= htmlspecialchars((string) ($filters['to_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" data-asi-autosubmit>
                 </div>
                 <div class="col-md-6 d-flex align-items-end">
-                    <a href="/asistencia" class="asi-filter-clear-link">Limpiar</a>
+                    <a href="/asistencia?<?= http_build_query(['tab' => $activeTab]) ?>" class="asi-filter-clear-link">Limpiar</a>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Tabla -->
     <?php if ($totalItems === 0): ?>
         <div class="asi-empty-state">
             <div class="asi-empty-icon"><i class="bi bi-calendar-x"></i></div>
-            <p class="asi-empty-title">Sin actividades</p>
-            <p class="asi-empty-copy">No hay actividades que coincidan con los filtros aplicados. Crea una nueva con el botón <strong>+ Nueva Actividad</strong>.</p>
+            <p class="asi-empty-title">Sin <?= htmlspecialchars(strtolower($tabLabel), ENT_QUOTES, 'UTF-8') ?></p>
+            <p class="asi-empty-copy">No hay registros en la pestaña actual que coincidan con los filtros aplicados.</p>
         </div>
     <?php else: ?>
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="asi-table-head-bar px-4 py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
                 <p class="mb-0 asi-table-summary">
-                    Mostrando <strong><?= $from ?>–<?= $to ?></strong> de <strong><?= $totalItems ?></strong> actividades
+                    Mostrando <strong><?= $from ?>-<?= $to ?></strong> de <strong><?= $totalItems ?></strong> <?= htmlspecialchars($tabLabel, ENT_QUOTES, 'UTF-8') ?>
                 </p>
                 <span class="asi-page-chip">Página <?= $currentPage ?> de <?= $totalPages ?></span>
             </div>
@@ -143,7 +162,7 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                             <th><a class="asi-sort-link <?= $currentSort === 'subregion' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('subregion'), ENT_QUOTES, 'UTF-8') ?>"><span>Subregión</span><i class="bi <?= $sortIcon('subregion') ?>"></i></a></th>
                             <th><a class="asi-sort-link <?= $currentSort === 'municipality' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('municipality'), ENT_QUOTES, 'UTF-8') ?>"><span>Municipio</span><i class="bi <?= $sortIcon('municipality') ?>"></i></a></th>
                             <th>Lugar</th>
-                            <th>Tipo Listado</th>
+                            <th><?= $activeTab === 'actividad' ? 'Actividad' : 'Listado AoAT' ?></th>
                             <th><a class="asi-sort-link <?= $currentSort === 'advisor_name' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('advisor_name'), ENT_QUOTES, 'UTF-8') ?>"><span>Asesor</span><i class="bi <?= $sortIcon('advisor_name') ?>"></i></a></th>
                             <th class="text-center"><a class="asi-sort-link <?= $currentSort === 'asistentes_count' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('asistentes_count'), ENT_QUOTES, 'UTF-8') ?>"><span>Asistentes</span><i class="bi <?= $sortIcon('asistentes_count') ?>"></i></a></th>
                             <th><a class="asi-sort-link <?= $currentSort === 'status' ? 'is-active' : '' ?>" href="<?= htmlspecialchars($buildSortHref('status'), ENT_QUOTES, 'UTF-8') ?>"><span>Estado</span><i class="bi <?= $sortIcon('status') ?>"></i></a></th>
@@ -155,7 +174,7 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                             <?php
                             $tipos       = $row['actividad_tipos'] ?? [];
                             $tiposList   = is_array($tipos) ? $tipos : [];
-                            $tiposView   = array_slice($tiposList, 0, 2);
+                            $tiposView   = array_slice($tiposList, 0, $activeTab === 'actividad' ? 1 : 2);
                             $tiposExtra  = count($tiposList) - count($tiposView);
                             $statusClass = ($row['status'] ?? '') === 'Activo' ? 'is-active' : 'is-pending';
                             ?>
@@ -167,7 +186,7 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                                             <?= htmlspecialchars((string) $row['subregion'], ENT_QUOTES, 'UTF-8') ?>
                                         </span>
                                     <?php else: ?>
-                                        <span class="text-muted">—</span>
+                                        <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
                                 <td><?= htmlspecialchars((string) ($row['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
@@ -187,7 +206,7 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                                             <?php endif; ?>
                                         </div>
                                     <?php else: ?>
-                                        <span class="text-muted">—</span>
+                                        <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="asi-cell-advisor">
@@ -214,7 +233,7 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
 
             <?php if ($totalPages > 1): ?>
                 <nav class="asi-pagination-wrap" aria-label="Paginación de asistencia">
-                    <p class="asi-pagination-summary mb-0"><?= $totalItems ?> actividades en total</p>
+                    <p class="asi-pagination-summary mb-0"><?= $totalItems ?> registros en total</p>
                     <ul class="pagination asi-pagination mb-0">
                         <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
                             <a class="page-link" href="<?= htmlspecialchars($buildPageHref(max(1, $currentPage - 1)), ENT_QUOTES, 'UTF-8') ?>" aria-label="Anterior">
@@ -226,7 +245,7 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                         foreach ($pages as $pg):
                             if ($prev !== null && $pg > $prev + 1):
                         ?>
-                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
                         <?php endif; ?>
                             <li class="page-item <?= $pg === $currentPage ? 'active' : '' ?>">
                                 <a class="page-link" href="<?= htmlspecialchars($buildPageHref($pg), ENT_QUOTES, 'UTF-8') ?>"><?= $pg ?></a>
@@ -254,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    var subregionSelect   = document.querySelector('[data-subregion-filter]');
+    var subregionSelect = document.querySelector('[data-subregion-filter]');
     var municipalitySelect = document.querySelector('[data-municipality-filter]');
     if (!subregionSelect || !municipalitySelect) return;
 

@@ -4,6 +4,7 @@
 /** @var array $activityOptionsByAdvisor */
 /** @var int $selectedAdvisorId */
 /** @var bool $canChooseAdvisor */
+/** @var string $defaultTipo */
 ?>
 <section class="mb-5">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
@@ -62,16 +63,24 @@
                                 <input type="hidden" name="advisor_user_id" value="<?= (int) $selectedAdvisorId ?>">
                             <?php endif; ?>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-3">
+                            <label for="tipo" class="form-label">Tipo <span class="text-danger">*</span></label>
+                            <select name="tipo" id="tipo" class="form-select" required data-tipo-selector>
+                                <option value="aoat" <?= ($defaultTipo ?? 'aoat') === 'aoat' ? 'selected' : '' ?>>Listado AoAT</option>
+                                <option value="actividad" <?= ($defaultTipo ?? 'aoat') === 'actividad' ? 'selected' : '' ?>>Actividades</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
                             <label for="activity_date" class="form-label">Fecha de la Actividad <span class="text-danger">*</span></label>
                             <input type="date" name="activity_date" id="activity_date" class="form-control" min="2026-01-01" required>
                         </div>
-                        <div class="col-12">
-                            <label class="form-label">Tipo de Listado (Actividad) <span class="text-danger">*</span></label>
+
+                        <div class="col-12" data-actividad-aoat-wrap>
+                            <label class="form-label">Listado AoAT <span class="text-danger">*</span></label>
                             <input
                                 type="text"
                                 class="form-control form-control-sm mb-2"
-                                placeholder="Escribe para filtrar los tipos de listado…"
+                                placeholder="Escribe para filtrar los tipos de listado..."
                                 data-actividad-search
                             >
                             <div class="border rounded-3 p-2 bg-light" style="max-height: 220px; overflow-y: auto;" data-actividad-options>
@@ -90,13 +99,24 @@
                                         </label>
                                     </div>
                                 <?php endforeach; ?>
-                                <?php if ($tiposActividad === []): ?>
-                                    <p class="small text-muted mb-0" data-actividad-empty-message>Selecciona un asesor para ver los tipos de listado disponibles para su rol.</p>
-                                <?php endif; ?>
                             </div>
                             <small class="text-muted d-block mt-1">
-                                Haz clic en cada casilla para seleccionar uno o varios tipos de listado. Usa el buscador de arriba para filtrar las opciones.
-                                No es necesario usar la tecla Shift.
+                                Estas opciones son fijas según el rol del asesor. Puedes usar el buscador para filtrar.
+                            </small>
+                        </div>
+
+                        <div class="col-12 d-none" data-actividad-libre-wrap>
+                            <label for="actividad_libre" class="form-label">Actividad <span class="text-danger">*</span></label>
+                            <input
+                                type="text"
+                                name="actividad_libre"
+                                id="actividad_libre"
+                                class="form-control"
+                                placeholder="Escribe el nombre libre de la actividad"
+                                maxlength="255"
+                            >
+                            <small class="text-muted d-block mt-1">
+                                Este nombre será libre y se mostrará en la pestaña de Actividades.
                             </small>
                         </div>
                     </div>
@@ -117,8 +137,13 @@
 document.addEventListener('DOMContentLoaded', function() {
     var activityOptionsByAdvisor = <?= json_encode($activityOptionsByAdvisor ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     var advisorSelect = document.getElementById('advisor_user_id');
+    var tipoSelect = document.querySelector('[data-tipo-selector]');
+    var aoatWrap = document.querySelector('[data-actividad-aoat-wrap]');
+    var libreWrap = document.querySelector('[data-actividad-libre-wrap]');
+    var libreInput = document.getElementById('actividad_libre');
     var subregionSelect = document.querySelector('[data-subregion-select]');
     var municipalitySelect = document.querySelector('[data-municipality-select]');
+
     if (subregionSelect && municipalitySelect) {
         fetch('/assets/js/municipios.json').then(function(r) { return r.json(); }).then(function(data) {
             Object.keys(data).forEach(function(sub) {
@@ -143,8 +168,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
     var searchInput = document.querySelector('[data-actividad-search]');
     var optionsContainer = document.querySelector('[data-actividad-options]');
+
     var renderActivityOptions = function () {
         if (!optionsContainer) return;
 
@@ -153,7 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
         optionsContainer.innerHTML = '';
 
         if (!tipos.length) {
-            optionsContainer.innerHTML = '<p class=\"small text-muted mb-0\" data-actividad-empty-message>Selecciona un asesor para ver los tipos de listado disponibles para su rol.</p>';
+            optionsContainer.innerHTML = '<p class="small text-muted mb-0">Selecciona un asesor para ver los tipos de listado disponibles para su rol.</p>';
             return;
         }
 
@@ -179,6 +206,34 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
+    var syncTipoUi = function () {
+        var currentTipo = tipoSelect ? tipoSelect.value : 'aoat';
+        var isActividadLibre = currentTipo === 'actividad';
+
+        if (aoatWrap) {
+            aoatWrap.classList.toggle('d-none', isActividadLibre);
+        }
+        if (libreWrap) {
+            libreWrap.classList.toggle('d-none', !isActividadLibre);
+        }
+        if (searchInput) {
+            searchInput.disabled = isActividadLibre;
+            if (isActividadLibre) {
+                searchInput.value = '';
+            }
+        }
+        if (libreInput) {
+            libreInput.required = isActividadLibre;
+        }
+        if (optionsContainer) {
+            optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
+                if (isActividadLibre) {
+                    checkbox.checked = false;
+                }
+            });
+        }
+    };
+
     if (searchInput && optionsContainer) {
         searchInput.addEventListener('input', function () {
             var term = searchInput.value.trim().toLowerCase();
@@ -189,14 +244,24 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
     if (advisorSelect) {
         advisorSelect.addEventListener('change', function () {
             renderActivityOptions();
+            syncTipoUi();
             if (searchInput) {
                 searchInput.value = '';
             }
         });
     }
+
+    if (tipoSelect) {
+        tipoSelect.addEventListener('change', function () {
+            syncTipoUi();
+        });
+    }
+
     renderActivityOptions();
+    syncTipoUi();
 });
 </script>

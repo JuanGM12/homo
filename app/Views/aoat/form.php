@@ -24,6 +24,9 @@ if (isset($oldInput) && is_array($oldInput) && $oldInput !== []) {
 }
 
 $oldPayload = $formData;
+$currentState = $isEdit ? (string) ($record['state'] ?? 'Asignada') : 'Asignada';
+$currentAoatNumber = trim((string) ($oldPayload['aoat_number'] ?? ''));
+$numberOnlyEdit = $isEdit && in_array($currentState, ['Aprobada', 'Realizado'], true) && $currentAoatNumber === '0';
 $prevSuicidio = isset($formData['prev_suicidio']) && is_array($formData['prev_suicidio']) ? $formData['prev_suicidio'] : [];
 $prevViolencias = isset($formData['prev_violencias']) && is_array($formData['prev_violencias']) ? $formData['prev_violencias'] : [];
 $prevAdicciones = isset($formData['prev_adicciones']) && is_array($formData['prev_adicciones']) ? $formData['prev_adicciones'] : [];
@@ -52,7 +55,12 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h4 fw-bold mb-4"><?= $isEdit ? 'Editar AoAT' : 'Registrar nueva AoAT' ?></h1>
 
-                    <form class="aoat-form" method="post" action="<?= $isEdit ? '/aoat/editar' : '/aoat/nueva' ?>">
+                    <form
+                        class="aoat-form"
+                        method="post"
+                        action="<?= $isEdit ? '/aoat/editar' : '/aoat/nueva' ?>"
+                        <?= $numberOnlyEdit ? 'data-number-only-edit="1"' : '' ?>
+                    >
                         <?php if ($isEdit && isset($record['id'])): ?>
                             <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
                         <?php endif; ?>
@@ -98,6 +106,11 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                     value="<?= htmlspecialchars((string) ($oldPayload['aoat_number'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
                                 >
+                                <?php if ($numberOnlyEdit): ?>
+                                    <div class="form-text">
+                                        Puedes actualizar solo este campo porque el registro está en estado <?= htmlspecialchars($currentState, ENT_QUOTES, 'UTF-8') ?> y el número actual es `0`.
+                                    </div>
+                                <?php endif; ?>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Fecha de la actividad <span class="text-danger">*</span></label>
@@ -140,14 +153,16 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                     type="text"
                                     class="form-control"
                                     value="<?= htmlspecialchars(
-                                        $isEdit ? (string) ($record['state'] ?? 'Asignada') : 'Asignada',
+                                        $currentState,
                                         ENT_QUOTES,
                                         'UTF-8'
                                     ) ?>"
                                     disabled
                                 >
                                 <div class="form-text">
-                                    <?php if (!$isEdit): ?>
+                                    <?php if ($numberOnlyEdit): ?>
+                                        Solo el número AoAT está habilitado temporalmente. Los demás campos quedan bloqueados para conservar el registro aprobado o realizado.
+                                    <?php elseif (!$isEdit): ?>
                                         Se registra como <strong>Asignada</strong>. Luego el especialista puede aprobarla o devolverla.
                                     <?php elseif (($record['state'] ?? '') === 'Devuelta'): ?>
                                         <strong>Devuelta</strong> para ajustes. Realiza los cambios y al final usa <strong>Guardar cambios y marcar como realizado</strong>.
@@ -176,6 +191,7 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                     data-subregion-select
                                     data-current-value="<?= htmlspecialchars((string) ($formData['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
+                                    <?= $numberOnlyEdit ? 'disabled' : '' ?>
                                 >
                                     <option value="">Seleccione la subregión que visitó</option>
                                 </select>
@@ -188,7 +204,7 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                     data-municipality-select
                                     data-current-value="<?= htmlspecialchars((string) ($formData['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
-                                    disabled
+                                    <?= $numberOnlyEdit ? 'disabled' : 'disabled' ?>
                                 >
                                     <option value="">Seleccione el municipio visitado</option>
                                 </select>
@@ -863,12 +879,37 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
 
                         <div class="d-flex justify-content-end app-form-submit">
                             <button type="submit" class="btn btn-primary">
-                                <?= $isEdit && (($record['state'] ?? '') === 'Devuelta')
+                                <?= $numberOnlyEdit
+                                    ? 'Guardar número AoAT'
+                                    : ($isEdit && (($record['state'] ?? '') === 'Devuelta')
                                     ? 'Guardar cambios y marcar como realizado'
-                                    : 'Guardar AoAT' ?>
+                                    : 'Guardar AoAT') ?>
                             </button>
                         </div>
                     </form>
+                    <?php if ($numberOnlyEdit): ?>
+                        <script>
+                            document.addEventListener('DOMContentLoaded', function () {
+                                var form = document.querySelector('.aoat-form');
+                                if (!form) {
+                                    return;
+                                }
+
+                                form.querySelectorAll('input, select, textarea').forEach(function (field) {
+                                    if (
+                                        field.name === 'aoat_number' ||
+                                        field.name === 'id' ||
+                                        field.type === 'hidden' ||
+                                        field.type === 'submit'
+                                    ) {
+                                        return;
+                                    }
+
+                                    field.disabled = true;
+                                });
+                            });
+                        </script>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
