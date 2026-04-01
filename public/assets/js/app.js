@@ -449,7 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let html = `<div class="plan-detail-shell">
             <div class="plan-detail-header">
-                <p class="plan-detail-meta"><strong>Ano:</strong> ${escapeHtml(year)}</p>
+                <p class="plan-detail-meta"><strong>Año:</strong> ${escapeHtml(year)}</p>
                 <p class="plan-detail-meta"><strong>Asesor:</strong> ${escapeHtml(professional || 'Sin nombre')}</p>
                 <p class="plan-detail-meta"><strong>Subregion:</strong> ${escapeHtml(subregion)}</p>
                 <p class="plan-detail-meta"><strong>Rol:</strong> ${escapeHtml(professionalRole || 'Sin rol')}</p>
@@ -1212,6 +1212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const entrenamientoFilterForm = document.querySelector('[data-entrenamiento-filters]');
     const entrenamientoResults = document.querySelector('[data-entrenamiento-results]');
     const entrenamientoExportLink = document.querySelector('[data-entrenamiento-export-link]');
+    const entrenamientoExportPdfLink = document.querySelector('[data-entrenamiento-export-pdf-link]');
 
     if (entrenamientoFilterForm && entrenamientoResults) {
         let entrenamientoFilterTimer = null;
@@ -1227,6 +1228,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (entrenamientoExportLink) {
                 entrenamientoExportLink.setAttribute('href', '/entrenamiento/exportar' + (query ? `?${query}` : ''));
+            }
+            if (entrenamientoExportPdfLink) {
+                entrenamientoExportPdfLink.setAttribute('href', '/entrenamiento/exportar-pdf' + (query ? `?${query}` : ''));
             }
         };
 

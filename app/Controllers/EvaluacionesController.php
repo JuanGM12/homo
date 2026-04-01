@@ -18,7 +18,11 @@ use Dompdf\Options;
 
 final class EvaluacionesController
 {
-    private const PDF_EXPORT_MAX_ROWS = 2500;
+    /** Máximo de filas en la tabla detalle del PDF (mPDF escala mejor; el resumen por municipio usa todos los datos filtrados). */
+    private const PDF_EVAL_DETAIL_MAX_ROWS = 750;
+
+    /** Menos filas desde BD que el Excel (8000): suficiente para agrupar PRE/POST y acota memoria/tiempo en PDF. */
+    private const PDF_EVAL_DB_FETCH_LIMIT = 4000;
 
     /** Clave de respuestas correctas: POST - TEST Prevención de Violencias (preguntas 1 a 9) */
     private const POST_VIOLENCIAS_CORRECT = [
@@ -565,24 +569,38 @@ final class EvaluacionesController
         $filters = $this->applyEvaluacionSearchScope($filters, $user);
         $searchFilters = $filters;
         unset($searchFilters['phase'], $searchFilters['impact'], $searchFilters['search']);
-        $searchFilters['limit'] = 8000;
+        $searchFilters['limit'] = self::PDF_EVAL_DB_FETCH_LIMIT;
 
         $repo = new TestResponseRepository();
         $records = (!$canSeeAll && empty($user['document_number']))
             ? []
             : $repo->search($searchFilters);
+        $dbFetchLimited = count($records) >= self::PDF_EVAL_DB_FETCH_LIMIT;
+
         $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
         $comparisonRows = $this->applyComparisonFilters($comparisonRows, $filters);
-        if (count($comparisonRows) > self::PDF_EXPORT_MAX_ROWS) {
-            $comparisonRows = array_slice($comparisonRows, 0, self::PDF_EXPORT_MAX_ROWS);
-        }
+
         $impactSummary = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
+        $totalCompared = count($comparisonRows);
+        $detailTruncated = false;
+        if ($totalCompared > self::PDF_EVAL_DETAIL_MAX_ROWS) {
+            $comparisonRows = array_slice($comparisonRows, 0, self::PDF_EVAL_DETAIL_MAX_ROWS);
+            $detailTruncated = true;
+        }
 
-        @ini_set('memory_limit', '512M');
-        @set_time_limit(180);
+        @ini_set('memory_limit', '256M');
+        @set_time_limit(120);
 
-        $html = $this->buildEvaluacionesPdfHtml($comparisonRows, $impactSummary, $filters);
-        $pdfBinary = PdfService::renderHtml($html, 'L', 'Evaluaciones PRE y POST');
+        $html = $this->buildEvaluacionesPdfHtml(
+            $comparisonRows,
+            $impactSummary,
+            $filters,
+            $testsFull,
+            $totalCompared,
+            $detailTruncated,
+            $dbFetchLimited
+        );
+        $pdfBinary = PdfService::renderHtml($html, 'L', 'Evaluaciones PRE y POST', true);
 
         return new Response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
@@ -1167,19 +1185,28 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
     }
 
     /**
-     * @param array<int, array<string, mixed>> $comparisonRows
-     * @param array{global: ?array, by_municipality: array} $impactSummary
+     * @param array<int, array<string, mixed>> $comparisonRows Filas ya recortadas para la tabla detalle del PDF.
+     * @param array{global: ?array, by_municipality: array} $impactSummary Resumen calculado sobre el conjunto filtrado completo.
      * @param array<string, mixed> $filters
+     * @param array<string, array{name: string, color: string}> $testsFull
      */
-    private function buildEvaluacionesPdfHtml(array $comparisonRows, array $impactSummary, array $filters): string
-    {
+    private function buildEvaluacionesPdfHtml(
+        array $comparisonRows,
+        array $impactSummary,
+        array $filters,
+        array $testsFull,
+        int $totalComparedCount,
+        bool $detailTruncated,
+        bool $dbFetchLimited
+    ): string {
         $esc = static function (string $value): string {
             return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
         };
 
         $meta = [];
         if (!empty($filters['test_key'])) {
-            $meta[] = 'Temática: ' . $esc((string) $filters['test_key']);
+            $tk = (string) $filters['test_key'];
+            $meta[] = 'Temática: ' . $esc((string) ($testsFull[$tk]['name'] ?? $tk));
         }
         if (!empty($filters['document_number'])) {
             $meta[] = 'Documento: ' . $esc((string) $filters['document_number']);
@@ -1197,22 +1224,23 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
             $meta[] = 'Hasta: ' . $esc((string) $filters['date_to']);
         }
 
-        $summaryRows = '';
+        $summaryBuf = [];
         $global = $impactSummary['global'] ?? null;
         if (is_array($global)) {
-            $summaryRows .= '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            $summaryBuf[] = '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
         }
         foreach ($impactSummary['by_municipality'] ?? [] as $mun) {
-            $summaryRows .= '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            $summaryBuf[] = '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
         }
+        $summaryRows = implode('', $summaryBuf);
 
-        $detailRows = '';
+        $detailBuf = [];
         foreach ($comparisonRows as $row) {
             $prePct = $row['pre_score'] !== null ? number_format((float) $row['pre_score'], 1) . '%' : 'Sin PRE';
             $postPct = $row['post_score'] !== null ? number_format((float) $row['post_score'], 1) . '%' : 'Sin POST';
             $delta = isset($row['delta']) && $row['delta'] !== null ? number_format((float) $row['delta'], 1) : '-';
 
-            $detailRows .= '<tr>'
+            $detailBuf[] = '<tr>'
                 . '<td>' . $esc((string) ($row['test_name'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['document_number'] ?? '')) . '</td>'
                 . '<td>' . $esc(trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''))) . '</td>'
@@ -1224,6 +1252,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
                 . '<td>' . $esc((string) ($row['impact_label'] ?? '')) . '</td>'
                 . '</tr>';
         }
+        $detailRows = implode('', $detailBuf);
 
         $base = dirname(__DIR__, 2) . '/public/assets/img';
         $logoAntSrc = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
@@ -1231,24 +1260,44 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
         $logoAnt = $logoAntSrc !== '' ? '<img src="' . $logoAntSrc . '" alt="" class="logo">' : '';
         $logoHomo = $logoHomoSrc !== '' ? '<img src="' . $logoHomoSrc . '" alt="" class="logo">' : '';
 
+        $detailCount = count($comparisonRows);
+        $metaNote = '';
+        if ($detailTruncated) {
+            $metaNote = '<p><strong>Detalle en PDF:</strong> primeras ' . $detailCount . ' filas de ' . $totalComparedCount
+                . ' personas/temática con filtros. Use exportación Excel para el listado completo.</p>';
+        } elseif ($totalComparedCount > 0) {
+            $metaNote = '<p><strong>Filas en detalle:</strong> ' . $detailCount . '</p>';
+        }
+        if ($dbFetchLimited) {
+            $metaNote .= '<p><strong>Atención:</strong> La consulta alcanzó el límite de '
+                . self::PDF_EVAL_DB_FETCH_LIMIT
+                . ' respuestas en base de datos; el resumen y totales pueden estar incompletos. Use Excel (hasta más filas) o filtros más específicos.</p>';
+        }
+
         return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Evaluaciones PRE y POST</title><style>'
-            . 'body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1f2a24;margin:24px 26px;}'
+            . 'body{font-family:DejaVu Sans,Arial,Helvetica,sans-serif;font-size:8.5px;color:#1f2a24;margin:18px 22px;}'
             . 'table{width:100%;border-collapse:collapse;}'
             . '.header td{vertical-align:middle;}'
-            . '.logo{height:38px;}'
-            . '.title{text-align:center;font-size:16px;font-weight:700;color:#2a5543;}'
-            . '.subtitle{text-align:center;font-size:9px;color:#5d6c65;}'
-            . '.meta{margin:10px 0 14px 0;font-size:9px;}'
+            . '.logo{height:34px;}'
+            . '.title{text-align:center;font-size:15px;font-weight:700;color:#2a5543;}'
+            . '.subtitle{text-align:center;font-size:8.5px;color:#5d6c65;}'
+            . '.meta{margin:8px 0 12px 0;font-size:8px;}'
             . '.meta p{margin:2px 0;}'
-            . '.section{margin-top:12px;}'
-            . '.section-title{background:#2a5543;color:#fff;font-weight:700;padding:6px 8px;font-size:10px;}'
-            . 'th{background:#eef5f0;color:#1f2a24;font-weight:700;border:1px solid #cfdad3;padding:4px 5px;text-align:left;}'
-            . 'td{border:1px solid #d9e2dd;padding:4px 5px;}'
+            . '.section{margin-top:10px;}'
+            . '.section-title{background:#2a5543;color:#fff;font-weight:700;padding:5px 8px;font-size:9px;}'
+            . 'th{background:#eef5f0;color:#1f2a24;font-weight:700;border:1px solid #cfdad3;padding:3px 4px;text-align:left;}'
+            . 'td{border:1px solid #d9e2dd;padding:3px 4px;}'
             . '.num{text-align:right;}'
             . '.total-row td{background:#edf5ef;font-weight:700;}'
             . '</style></head><body>'
             . '<table class="header"><tr><td style="width:25%">' . $logoAnt . '</td><td style="width:50%"><div class="title">Resultado de evaluaciones PRE y POST</div><div class="subtitle">Equipo de Promoción y Prevención</div></td><td style="width:25%;text-align:right">' . $logoHomo . '</td></tr></table>'
-            . '<div class="meta"><p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p><p><strong>Filtros:</strong> ' . ($meta !== [] ? implode(' | ', $meta) : 'Sin filtros aplicados') . '</p><p><strong>Registros exportados:</strong> ' . count($comparisonRows) . '</p></div>'
+            . '<div class="meta"><p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p><p><strong>Filtros:</strong> ' . ($meta !== [] ? implode(' | ', $meta) : 'Sin filtros aplicados') . '</p>'
+            . '<p><strong>Personas/temática (filtros):</strong> ' . $totalComparedCount . '</p>'
+            . $metaNote
+            . (($detailTruncated || $dbFetchLimited)
+                ? '<p style="font-size:7.5px;color:#666;">El bloque «Resultado impacto global por municipio» corresponde al mismo conjunto filtrado que los totales anteriores (no solo a las filas de la tabla detalle).</p>'
+                : '')
+            . '</div>'
             . '<div class="section"><div class="section-title">Resultado impacto global por municipio</div><table><thead><tr><th>Municipio</th><th class="num">Con PRE+POST</th><th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>' . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="5">Sin datos de impacto.</td></tr>') . '</tbody></table></div>'
             . '<div class="section"><div class="section-title">Detalle comparativo por persona</div><table><thead><tr><th>Temática</th><th>Documento</th><th>Persona</th><th>Subregión</th><th>Municipio</th><th class="num">PRE</th><th class="num">POST</th><th class="num">Cambio</th><th>Resultado impacto</th></tr></thead><tbody>' . ($detailRows !== '' ? $detailRows : '<tr><td colspan="9">Sin registros.</td></tr>') . '</tbody></table></div>'
             . '</body></html>';

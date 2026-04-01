@@ -7,6 +7,12 @@ $tiposList = is_array($tipos) ? $tipos : [];
 $tipoActividad = (string) ($actividad['tipo'] ?? 'aoat');
 $tipoActividadLabel = $tipoActividad === 'actividad' ? 'Actividades' : 'AoAT';
 $backUrl = '/asistencia?tab=' . rawurlencode($tipoActividad === 'actividad' ? 'actividad' : 'aoat');
+$estadoListado = (string) ($actividad['status'] ?? '');
+$estadoPillClass = match ($estadoListado) {
+    'Activo' => 'is-active',
+    'Cerrado' => 'is-closed',
+    default => 'is-pending',
+};
 $code = (string) ($actividad['code'] ?? '');
 $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . rawurlencode($registrationUrl);
 
@@ -86,17 +92,21 @@ if ($subregion !== '') {
                     </div>
                     <div class="asi-show-field asi-show-field--last">
                         <span class="asi-show-label">Estado</span>
-                        <span class="asi-status-pill <?= ($actividad['status'] ?? '') === 'Activo' ? 'is-active' : 'is-pending' ?> mt-1">
-                            <?= htmlspecialchars((string) ($actividad['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                        <span class="asi-status-pill <?= htmlspecialchars($estadoPillClass, ENT_QUOTES, 'UTF-8') ?> mt-1">
+                            <?= htmlspecialchars($estadoListado, ENT_QUOTES, 'UTF-8') ?>
                         </span>
                     </div>
                 </div>
                 <div class="card-footer bg-transparent border-top px-4 py-3">
-                    <form method="post" action="/asistencia/cambiar-estado" class="d-flex align-items-center gap-2">
+                    <?php if ($estadoListado === 'Cerrado'): ?>
+                        <p class="small text-muted mb-2 mb-md-0">El registro público por QR o enlace está deshabilitado mientras el listado esté cerrado.</p>
+                    <?php endif; ?>
+                    <form method="post" action="/asistencia/cambiar-estado" class="d-flex align-items-center gap-2 flex-wrap">
                         <input type="hidden" name="id" value="<?= (int) ($actividad['id'] ?? 0) ?>">
-                        <select name="status" class="form-select form-select-sm flex-grow-1">
-                            <option value="Pendiente" <?= ($actividad['status'] ?? '') === 'Pendiente' ? 'selected' : '' ?>>Pendiente</option>
-                            <option value="Activo" <?= ($actividad['status'] ?? '') === 'Activo' ? 'selected' : '' ?>>Activo</option>
+                        <select name="status" class="form-select form-select-sm flex-grow-1" style="min-width: 10rem;">
+                            <option value="Pendiente" <?= $estadoListado === 'Pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                            <option value="Activo" <?= $estadoListado === 'Activo' ? 'selected' : '' ?>>Activo</option>
+                            <option value="Cerrado" <?= $estadoListado === 'Cerrado' ? 'selected' : '' ?>>Cerrado</option>
                         </select>
                         <button type="submit" class="btn btn-sm btn-outline-secondary">Cambiar</button>
                     </form>

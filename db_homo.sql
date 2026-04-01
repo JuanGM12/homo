@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS `asistencia_actividades` (
   `advisor_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
   `activity_date` date NOT NULL,
   `actividad_tipos` json NOT NULL COMMENT 'Array de tipos de listado seleccionados (multi-select)',
-  `status` enum('Pendiente','Activo') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Pendiente',
+  `status` enum('Pendiente','Activo','Cerrado') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Pendiente',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),

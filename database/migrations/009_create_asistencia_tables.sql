@@ -14,7 +14,7 @@ CREATE TABLE asistencia_actividades (
     activity_date DATE NOT NULL,
     actividad_tipos JSON NOT NULL COMMENT 'Array de tipos de listado seleccionados (multi-select)',
 
-    status ENUM('Pendiente', 'Activo') NOT NULL DEFAULT 'Pendiente',
+    status ENUM('Pendiente', 'Activo', 'Cerrado') NOT NULL DEFAULT 'Pendiente',
 
     created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
 

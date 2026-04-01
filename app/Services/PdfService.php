@@ -9,10 +9,14 @@ use Mpdf\Output\Destination;
 
 final class PdfService
 {
+    /**
+     * @param bool $optimizedListPdf Si true, ajustes para tablas largas (menos trabajo de maquetación en mPDF).
+     */
     public static function renderHtml(
         string $html,
         string $orientation = 'P',
-        string $title = 'Documento PDF'
+        string $title = 'Documento PDF',
+        bool $optimizedListPdf = false
     ): string {
         $encoding = mb_detect_encoding($html, ['UTF-8', 'Windows-1252', 'ISO-8859-1'], true);
         if ($encoding !== false && $encoding !== 'UTF-8') {
@@ -44,7 +48,12 @@ final class PdfService
         $mpdf->SetTitle($title);
         $mpdf->simpleTables = true;
         $mpdf->packTableData = true;
-        $mpdf->shrink_tables_to_fit = 1;
+        // shrink_tables_to_fit en tablas muy grandes fuerza varios pasos de cálculo; en listados largos es más rápido desactivarlo.
+        $mpdf->shrink_tables_to_fit = $optimizedListPdf ? 0 : 1;
+        if ($optimizedListPdf) {
+            $mpdf->useSubstitutions = false;
+            $mpdf->table_error_report = false;
+        }
         $mpdf->WriteHTML($html);
 
         return $mpdf->Output('', Destination::STRING_RETURN);

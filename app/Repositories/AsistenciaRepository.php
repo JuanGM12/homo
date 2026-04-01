@@ -212,6 +212,20 @@ final class AsistenciaRepository
         $stmt->execute([':status' => $status, ':id' => $id]);
     }
 
+    /** Si el listado estaba Pendiente, pasa a Activo (p. ej. tras el primer registro de asistencia). */
+    public function promoteToActivoIfPending(int $actividadId): void
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare(
+            'UPDATE asistencia_actividades SET status = :activo WHERE id = :id AND status = :pendiente'
+        );
+        $stmt->execute([
+            ':activo' => 'Activo',
+            ':pendiente' => 'Pendiente',
+            ':id' => $actividadId,
+        ]);
+    }
+
     /**
      * Genera un código único de 6 dígitos para la actividad.
      */

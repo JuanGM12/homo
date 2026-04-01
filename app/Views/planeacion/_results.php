@@ -105,7 +105,7 @@ if ($totalPages <= 7) {
                 <tr>
                     <?php
                     $headers = [
-                        'plan_year' => 'Ano',
+                        'plan_year' => 'Año',
                         'professional_name' => 'Asesor',
                         'subregion' => 'Subregion',
                         'municipality' => 'Municipio',

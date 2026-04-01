@@ -17,6 +17,9 @@ final class AsistenciaController
     private const INDEX_PAGE_SIZE = 20;
     private const MIN_ALLOWED_DATE = '2026-01-01';
 
+    /** Estados válidos del listado (asistencia_actividades.status). */
+    private const ASISTENCIA_STATUSES = ['Pendiente', 'Activo', 'Cerrado'];
+
     private AsistenciaRepository $repo;
     private UserRepository $userRepo;
 
@@ -120,11 +123,16 @@ final class AsistenciaController
         $dir         = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
 
+        $statusFilter = trim((string) $request->input('status', ''));
+        if (!in_array($statusFilter, self::ASISTENCIA_STATUSES, true)) {
+            $statusFilter = '';
+        }
+
         $filters = [
             'subregion'       => trim((string) $request->input('subregion', '')),
             'municipality'    => trim((string) $request->input('municipality', '')),
             'advisor_user_id' => $request->input('advisor_user_id') !== '' ? (int) $request->input('advisor_user_id') : null,
-            'status'          => trim((string) $request->input('status', '')),
+            'status'          => $statusFilter,
             'from_date'       => trim((string) $request->input('from_date', '')),
             'to_date'         => trim((string) $request->input('to_date', '')),
             'tipo'            => $activeTab,
@@ -462,7 +470,7 @@ final class AsistenciaController
 
         $id = (int) $request->input('id', 0);
         $status = trim((string) $request->input('status', ''));
-        if ($id <= 0 || !in_array($status, ['Pendiente', 'Activo'], true)) {
+        if ($id <= 0 || !in_array($status, self::ASISTENCIA_STATUSES, true)) {
             Flash::set(['type' => 'error', 'title' => 'Datos inválidos', 'message' => 'Estado no válido.']);
             return Response::redirect('/asistencia');
         }
@@ -806,6 +814,16 @@ final class AsistenciaController
             return Response::view('errors/404', ['pageTitle' => 'Actividad no encontrada'], 404);
         }
 
+        if (($actividad['status'] ?? '') === 'Cerrado') {
+            Flash::set([
+                'type' => 'warning',
+                'title' => 'Listado cerrado',
+                'message' => 'Este listado de asistencia está cerrado y no admite nuevos registros.',
+            ]);
+
+            return Response::redirect('/asistencia/registrar?code=' . rawurlencode($code));
+        }
+
         $errors = $this->validateRegistrarForm($request);
         if ($errors !== []) {
             Flash::set([
@@ -851,6 +869,7 @@ final class AsistenciaController
 
         try {
             $this->repo->createAsistente($data);
+            $this->repo->promoteToActivoIfPending((int) $actividad['id']);
         } catch (\PDOException $e) {
             Flash::set([
                 'type' => 'error',

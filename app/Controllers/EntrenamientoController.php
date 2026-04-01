@@ -9,10 +9,16 @@ use App\Core\Response;
 use App\Repositories\EntrenamientoPlanRepository;
 use App\Services\Auth;
 use App\Services\Flash;
+use App\Services\PdfImageHelper;
+use App\Services\PdfService;
+use DateTimeImmutable;
 
 final class EntrenamientoController
 {
     private const INDEX_PAGE_SIZE = 20;
+
+    /** Límite de filas en PDF para generación rápida y uso de memoria acotado. */
+    private const PDF_EXPORT_MAX_ROWS = 800;
 
     private EntrenamientoPlanRepository $repository;
 
@@ -330,28 +336,7 @@ final class EntrenamientoController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $canViewAll = Auth::canViewAllModuleRecords($user);
-        $isAuditView = $canViewAll;
-
-        if ($isAuditView) {
-            $records = $this->repository->findForAudit($this->resolveAuditRoles($user));
-        } else {
-            $records = $this->repository->findForUser((int) $user['id']);
-        }
-
-        if (!$canViewAll) {
-            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
-        }
-
-        $search = trim((string) $request->input('q', ''));
-        $stateFilter = trim((string) $request->input('state', ''));
-        $fromDate = trim((string) $request->input('from_date', ''));
-        $toDate = trim((string) $request->input('to_date', ''));
-        $sort = trim((string) $request->input('sort', 'created_at'));
-        $dir = strtolower(trim((string) $request->input('dir', 'desc')));
-
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate);
-        $records = $this->sortRecords($records, $sort, $dir);
+        $records = $this->plansForExport($request, $user);
 
         if ($records === []) {
             Flash::set([
@@ -414,6 +399,184 @@ final class EntrenamientoController
             'Content-Type' => 'text/csv; charset=utf-8',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
+    }
+
+    public function exportPdf(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+        if (!$this->userCanAccessModule($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $records = $this->plansForExport($request, $user);
+
+        if ($records === []) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Sin registros para exportar',
+                'message' => 'No hay planes que coincidan con los filtros actuales.',
+            ]);
+
+            return Response::redirect('/entrenamiento');
+        }
+
+        $totalFiltered = count($records);
+        $truncated = false;
+        if ($totalFiltered > self::PDF_EXPORT_MAX_ROWS) {
+            $records = array_slice($records, 0, self::PDF_EXPORT_MAX_ROWS);
+            $truncated = true;
+        }
+
+        @ini_set('memory_limit', '256M');
+        @set_time_limit(120);
+
+        $html = $this->buildEntrenamientoListPdfHtml($request, $records, $totalFiltered, $truncated);
+        $pdfBinary = PdfService::renderHtml($html, 'L', 'Plan de entrenamiento');
+
+        return new Response($pdfBinary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="plan_entrenamiento_' . date('Y-m-d_His') . '.pdf"',
+        ]);
+    }
+
+    /**
+     * Planes visibles para el usuario, con los mismos filtros y orden que el listado / Excel.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function plansForExport(Request $request, array $user): array
+    {
+        $canViewAll = Auth::canViewAllModuleRecords($user);
+        $isAuditView = $canViewAll;
+
+        if ($isAuditView) {
+            $records = $this->repository->findForAudit($this->resolveAuditRoles($user));
+        } else {
+            $records = $this->repository->findForUser((int) $user['id']);
+        }
+
+        if (!$canViewAll) {
+            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
+        }
+
+        $search = trim((string) $request->input('q', ''));
+        $stateFilter = trim((string) $request->input('state', ''));
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+        $sort = trim((string) $request->input('sort', 'created_at'));
+        $dir = strtolower(trim((string) $request->input('dir', 'desc')));
+
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate);
+
+        return $this->sortRecords($records, $sort, $dir);
+    }
+
+    /**
+     * PDF resumido (listado): sin payload JSON extenso, solo columnas de seguimiento.
+     *
+     * @param array<int, array<string, mixed>> $records
+     */
+    private function buildEntrenamientoListPdfHtml(
+        Request $request,
+        array $records,
+        int $totalFiltered,
+        bool $truncated
+    ): string {
+        $esc = static function (string $value): string {
+            return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        };
+
+        $meta = [];
+        $q = trim((string) $request->input('q', ''));
+        if ($q !== '') {
+            $meta[] = 'Búsqueda: ' . $esc($q);
+        }
+        $state = trim((string) $request->input('state', ''));
+        if ($state !== '') {
+            $meta[] = 'Estado: ' . $esc($state);
+        }
+        $fromDate = trim((string) $request->input('from_date', ''));
+        if ($fromDate !== '') {
+            $meta[] = 'Desde: ' . $esc($fromDate);
+        }
+        $toDate = trim((string) $request->input('to_date', ''));
+        if ($toDate !== '') {
+            $meta[] = 'Hasta: ' . $esc($toDate);
+        }
+
+        $rows = '';
+        foreach ($records as $plan) {
+            $createdRaw = trim((string) ($plan['created_at'] ?? ''));
+            $createdFmt = $createdRaw;
+            try {
+                $createdFmt = (new DateTimeImmutable($createdRaw))->format('d/m/Y H:i');
+            } catch (\Throwable) {
+            }
+
+            $name = (string) ($plan['professional_name'] ?? '');
+            $email = (string) ($plan['professional_email'] ?? '');
+            $stateLabel = !empty($plan['editable']) ? 'Editable' : 'Aprobado';
+
+            $rows .= '<tr>'
+                . '<td>' . $esc($createdFmt) . '</td>'
+                . '<td><strong>' . $esc($name) . '</strong><br><span class="sub">' . $esc($email) . '</span></td>'
+                . '<td>' . $esc((string) ($plan['subregion'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($plan['municipality'] ?? '')) . '</td>'
+                . '<td>' . $esc($stateLabel) . '</td>'
+                . '</tr>';
+        }
+
+        $base = dirname(__DIR__, 2) . '/public/assets/img';
+        $logoAntSrc = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
+        $logoHomoSrc = PdfImageHelper::imageDataUri($base . '/logoHomo.png');
+        $logoAnt = $logoAntSrc !== '' ? '<img src="' . $logoAntSrc . '" alt="" class="logo">' : '';
+        $logoHomo = $logoHomoSrc !== '' ? '<img src="' . $logoHomoSrc . '" alt="" class="logo">' : '';
+
+        $truncNote = $truncated
+            ? '<p><strong>Nota:</strong> Se incluyen las primeras ' . self::PDF_EXPORT_MAX_ROWS . ' filas de '
+                . $totalFiltered . ' resultados. Ajuste filtros para un archivo más pequeño.</p>'
+            : '';
+
+        $exportedCount = count($records);
+
+        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Plan de entrenamiento</title><style>'
+            . 'body{font-family:DejaVu Sans,Arial,Helvetica,sans-serif;font-size:8.5pt;color:#1f2a24;margin:18px 22px;}'
+            . 'table{width:100%;border-collapse:collapse;}'
+            . '.header td{vertical-align:middle;}'
+            . '.logo{height:36px;}'
+            . '.title{text-align:center;font-size:14pt;font-weight:700;color:#2a5543;}'
+            . '.subtitle{text-align:center;font-size:8.5pt;color:#4a6fa8;margin-top:2px;}'
+            . '.meta{margin:8px 0 12px 0;font-size:8pt;}'
+            . '.meta p{margin:2px 0;}'
+            . '.section-title{background:#2a5543;color:#fff;font-weight:700;padding:5px 8px;font-size:9pt;margin-top:4px;}'
+            . 'th{background:#eef5f0;color:#1f2a24;font-weight:700;border:1px solid #cfdad3;padding:4px 5px;text-align:left;}'
+            . 'td{border:1px solid #d9e2dd;padding:4px 5px;vertical-align:top;}'
+            . '.sub{font-size:7.5pt;color:#5d6c65;}'
+            . '</style></head><body>'
+            . '<table class="header"><tr><td style="width:25%">' . $logoAnt . '</td><td style="width:50%">'
+            . '<div class="title">Seguimiento de entrenamiento</div>'
+            . '<div class="subtitle">Equipo de Promoción y Prevención · Acción en Territorio</div>'
+            . '</td><td style="width:25%;text-align:right">' . $logoHomo . '</td></tr></table>'
+            . '<div class="meta">'
+            . '<p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p>'
+            . '<p><strong>Filtros:</strong> ' . ($meta !== [] ? implode(' | ', $meta) : 'Sin filtros aplicados') . '</p>'
+            . '<p><strong>Registros en este PDF:</strong> ' . $exportedCount . ($totalFiltered !== $exportedCount ? ' (de ' . $totalFiltered . ' con filtros)' : '') . '</p>'
+            . $truncNote
+            . '</div>'
+            . '<div class="section-title">Planes de entrenamiento</div>'
+            . '<table><thead><tr>'
+            . '<th style="width:11%">Fecha registro</th>'
+            . '<th style="width:32%">Profesional</th>'
+            . '<th style="width:19%">Subregión</th>'
+            . '<th style="width:19%">Municipio</th>'
+            . '<th style="width:10%">Estado</th>'
+            . '</tr></thead><tbody>'
+            . $rows
+            . '</tbody></table>'
+            . '</body></html>';
     }
 
     private function userCanAccessModule(array $user): bool

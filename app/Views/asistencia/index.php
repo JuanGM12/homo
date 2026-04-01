@@ -122,6 +122,7 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
                         <option value="">Todos</option>
                         <option value="Pendiente" <?= ($filters['status'] ?? '') === 'Pendiente' ? 'selected' : '' ?>>Pendiente</option>
                         <option value="Activo" <?= ($filters['status'] ?? '') === 'Activo' ? 'selected' : '' ?>>Activo</option>
+                        <option value="Cerrado" <?= ($filters['status'] ?? '') === 'Cerrado' ? 'selected' : '' ?>>Cerrado</option>
                     </select>
                 </div>
                 <div class="col-md-3 col-sm-6">
@@ -176,7 +177,12 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
                             $tiposList   = is_array($tipos) ? $tipos : [];
                             $tiposView   = array_slice($tiposList, 0, $activeTab === 'actividad' ? 1 : 2);
                             $tiposExtra  = count($tiposList) - count($tiposView);
-                            $statusClass = ($row['status'] ?? '') === 'Activo' ? 'is-active' : 'is-pending';
+                            $stRow = (string) ($row['status'] ?? '');
+                            $statusClass = match ($stRow) {
+                                'Activo' => 'is-active',
+                                'Cerrado' => 'is-closed',
+                                default => 'is-pending',
+                            };
                             ?>
                             <tr>
                                 <td class="asi-date"><?= htmlspecialchars((string) ($row['activity_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>

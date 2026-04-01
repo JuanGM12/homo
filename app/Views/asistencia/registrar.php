@@ -4,6 +4,7 @@
 $code = (string) ($actividad['code'] ?? '');
 $tipos = $actividad['actividad_tipos'] ?? [];
 $tiposList = is_array($tipos) ? $tipos : [];
+$listadoCerrado = ((string) ($actividad['status'] ?? '')) === 'Cerrado';
 ?>
 <style>
     .attendance-public {
@@ -451,6 +452,11 @@ $tiposList = is_array($tipos) ? $tipos : [];
             </div>
 
             <div class="attendance-form-card">
+                <?php if ($listadoCerrado): ?>
+                    <div class="alert alert-secondary border-0 rounded-3 mb-0" role="alert">
+                        <strong>Listado cerrado.</strong> El responsable cerró este listado de asistencia; ya no es posible registrar nuevos asistentes por este enlace.
+                    </div>
+                <?php else: ?>
                 <form method="post" action="/asistencia/registrar" id="form-registro-asistencia" class="attendance-form-section">
                     <input type="hidden" name="code" value="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>">
 
@@ -573,6 +579,7 @@ $tiposList = is_array($tipos) ? $tipos : [];
                         Registrar asistencia
                     </button>
                 </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>

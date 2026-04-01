@@ -2921,6 +2921,11 @@ body {
     color: #186d4c;
 }
 
+.asi-status-pill.is-closed {
+    background: rgba(73, 80, 96, 0.14);
+    color: #3d424d;
+}
+
 .asi-btn-view {
     display: inline-flex;
     align-items: center;

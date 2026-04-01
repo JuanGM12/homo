@@ -94,6 +94,7 @@ final class App
         $this->router->get('/entrenamiento/editar', [\App\Controllers\EntrenamientoController::class, 'edit'])->middleware('auth');
         $this->router->post('/entrenamiento/editar', [\App\Controllers\EntrenamientoController::class, 'update'])->middleware('auth');
         $this->router->get('/entrenamiento/exportar', [\App\Controllers\EntrenamientoController::class, 'export'])->middleware('auth');
+        $this->router->get('/entrenamiento/exportar-pdf', [\App\Controllers\EntrenamientoController::class, 'exportPdf'])->middleware('auth');
 
         // Módulo 7: Listado de Asistencia (solo usuarios con rol)
         $this->router->get('/asistencia', [\App\Controllers\AsistenciaController::class, 'index'])->middleware('auth');

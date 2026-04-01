@@ -29,18 +29,20 @@ final class Connection
                 $db['charset']
             );
 
+            $tz = (string) ($db['timezone'] ?? '');
+            if (!preg_match('/^[+\-]\d{2}:\d{2}$/', $tz)) {
+                $tz = '-05:00';
+            }
+
             $options = [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
+                // Primera operación al conectar: misma referencia horaria que PHP (Bogotá por defecto).
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '" . $tz . "'",
             ];
 
             self::$pdo = new PDO($dsn, (string) $db['username'], (string) $db['password'], $options);
-
-            // Forzar zona horaria de la sesión de la base de datos (ej: Bogotá -05:00)
-            if (!empty($db['timezone'])) {
-                self::$pdo->exec(sprintf("SET time_zone = '%s'", addslashes((string) $db['timezone'])));
-            }
         }
 
         return self::$pdo;

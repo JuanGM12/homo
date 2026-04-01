@@ -10,8 +10,11 @@ $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 
 $exportQuery = $_GET;
 unset($exportQuery['partial']);
 $exportHref = '/entrenamiento/exportar';
+$exportPdfHref = '/entrenamiento/exportar-pdf';
 if ($exportQuery !== []) {
-    $exportHref .= '?' . http_build_query($exportQuery);
+    $qs = http_build_query($exportQuery);
+    $exportHref .= '?' . $qs;
+    $exportPdfHref .= '?' . $qs;
 }
 ?>
 
@@ -32,6 +35,10 @@ if ($exportQuery !== []) {
             <a href="<?= htmlspecialchars($exportHref, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-success" data-entrenamiento-export-link>
                 <i class="bi bi-file-earmark-excel me-1"></i>
                 Exportar (Excel)
+            </a>
+            <a href="<?= htmlspecialchars($exportPdfHref, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-danger" data-entrenamiento-export-pdf-link>
+                <i class="bi bi-file-earmark-pdf me-1"></i>
+                Exportar (PDF)
             </a>
             <?php if (!empty($canCreateOwnRecord)): ?>
                 <a href="/entrenamiento/nuevo" class="btn btn-primary">

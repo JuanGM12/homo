@@ -25,8 +25,8 @@ $exportPdfHref = '/planeacion/exportar?' . http_build_query($exportPdfQuery);
             </h1>
             <p class="text-muted mb-0">
                 <?= $isAudit
-                    ? 'Visualiza las planeaciones registradas por asesor, ano, subregion y municipio de los profesionales a tu cargo.'
-                    : 'Visualiza tus planeaciones registradas por ano, subregion y municipio.'
+                    ? 'Visualiza las planeaciones registradas por asesor, año, subregion y municipio de los profesionales a tu cargo.'
+                    : 'Visualiza tus planeaciones registradas por año, subregion y municipio.'
                 ?>
             </p>
         </div>
@@ -58,7 +58,7 @@ $exportPdfHref = '/planeacion/exportar?' . http_build_query($exportPdfQuery);
                 type="text"
                 name="q"
                 class="form-control"
-                placeholder="Asesor, subregion, municipio, ano..."
+                placeholder="Asesor, subregion, municipio, año..."
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
         </div>

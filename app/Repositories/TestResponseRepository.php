@@ -132,7 +132,7 @@ final class TestResponseRepository
      * Filtros soportados (todas las claves son opcionales):
      *  - test_key: string
      *  - phase: 'pre'|'post'
-     *  - document_number: string
+     *  - document_number: string (coincidencia exacta en document_number; no usar LIKE para no filtrar por subcadena)
      *  - search: string
      *  - subregion: string
      *  - municipality: string
@@ -175,8 +175,8 @@ final class TestResponseRepository
         }
 
         if (!empty($filters['document_number'])) {
-            $where[] = 'document_number LIKE :document_number';
-            $params[':document_number'] = '%' . trim((string) $filters['document_number']) . '%';
+            $where[] = 'TRIM(document_number) = :document_number';
+            $params[':document_number'] = trim((string) $filters['document_number']);
         }
 
         if (!empty($filters['search'])) {
