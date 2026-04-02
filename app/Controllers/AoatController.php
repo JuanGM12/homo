@@ -42,7 +42,7 @@ final class AoatController
         $stateFilter = trim((string) $request->input('state', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
-        $sort = trim((string) $request->input('sort', 'created_at'));
+        $sort = trim((string) $request->input('sort', 'activity_date'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
 
@@ -76,6 +76,8 @@ final class AoatController
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
+        $records = $this->attachActivityDateToRecords($records);
+
         // Filtros en memoria (suficiente para el volumen esperado)
         if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
             $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
@@ -83,15 +85,14 @@ final class AoatController
                     return false;
                 }
 
-                // Filtro por rango de fechas (usamos created_at, formato YYYY-MM-DD HH:MM:SS)
-                $created = (string) ($row['created_at'] ?? '');
-                $createdDate = $created !== '' ? substr($created, 0, 10) : '';
+                // Filtro por rango de fechas usando la fecha de la actividad.
+                $activityDate = trim((string) ($row['activity_date'] ?? ''));
 
-                if ($fromDate !== '' && $createdDate !== '' && $createdDate < $fromDate) {
+                if ($fromDate !== '' && $activityDate !== '' && $activityDate < $fromDate) {
                     return false;
                 }
 
-                if ($toDate !== '' && $createdDate !== '' && $createdDate > $toDate) {
+                if ($toDate !== '' && $activityDate !== '' && $activityDate > $toDate) {
                     return false;
                 }
 
@@ -464,20 +465,21 @@ final class AoatController
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
+        $records = $this->attachActivityDateToRecords($records);
+
         if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
             $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
 
-                $created = (string) ($row['created_at'] ?? '');
-                $createdDate = $created !== '' ? substr($created, 0, 10) : '';
+                $activityDate = trim((string) ($row['activity_date'] ?? ''));
 
-                if ($fromDate !== '' && $createdDate !== '' && $createdDate < $fromDate) {
+                if ($fromDate !== '' && $activityDate !== '' && $activityDate < $fromDate) {
                     return false;
                 }
 
-                if ($toDate !== '' && $createdDate !== '' && $createdDate > $toDate) {
+                if ($toDate !== '' && $activityDate !== '' && $activityDate > $toDate) {
                     return false;
                 }
 
@@ -510,7 +512,7 @@ final class AoatController
         $lines = [];
         $lines[] = implode(';', [
             'ID',
-            'Fecha registro',
+            'Fecha actividad',
             'Profesional',
             'Subregión',
             'Municipio',
@@ -523,7 +525,7 @@ final class AoatController
             $professionalFullName = trim(((string) ($row['professional_name'] ?? '')) . ' ' . ((string) ($row['professional_last_name'] ?? '')));
             $line = [
                 (string) ($row['id'] ?? ''),
-                (string) ($row['created_at'] ?? ''),
+                (string) ($row['activity_date'] ?? ''),
                 $professionalFullName,
                 (string) ($row['subregion'] ?? ''),
                 (string) ($row['municipality'] ?? ''),
@@ -1096,9 +1098,9 @@ final class AoatController
      */
     private function sortRecords(array $records, string $sort, string $dir): array
     {
-        $allowedSorts = ['created_at', 'professional', 'subregion', 'municipality', 'state'];
+        $allowedSorts = ['activity_date', 'professional', 'subregion', 'municipality', 'state'];
         if (!in_array($sort, $allowedSorts, true)) {
-            $sort = 'created_at';
+            $sort = 'activity_date';
         }
 
         $dir = $dir === 'asc' ? 'asc' : 'desc';
@@ -1108,8 +1110,8 @@ final class AoatController
             $valueB = $this->extractSortValue($b, $sort);
 
             if ($valueA === $valueB) {
-                $fallbackA = (string) ($a['created_at'] ?? '');
-                $fallbackB = (string) ($b['created_at'] ?? '');
+                $fallbackA = (string) ($a['activity_date'] ?? ($a['created_at'] ?? ''));
+                $fallbackB = (string) ($b['activity_date'] ?? ($b['created_at'] ?? ''));
                 $cmpFallback = $fallbackA <=> $fallbackB;
                 if ($cmpFallback !== 0) {
                     return $dir === 'asc' ? $cmpFallback : -$cmpFallback;
@@ -1134,12 +1136,59 @@ final class AoatController
         }
 
         return match ($sort) {
-            'created_at' => (string) ($row['created_at'] ?? ''),
+            'activity_date' => (string) ($row['activity_date'] ?? ''),
             'subregion' => $this->normalizeSortText((string) ($row['subregion'] ?? '')),
             'municipality' => $this->normalizeSortText((string) ($row['municipality'] ?? '')),
             'state' => $this->normalizeSortText((string) ($row['state'] ?? '')),
             default => '',
         };
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function attachActivityDateToRecords(array $records): array
+    {
+        foreach ($records as &$record) {
+            $record['activity_date'] = $this->extractActivityDateFromRecord($record);
+        }
+        unset($record);
+
+        return $records;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function extractActivityDateFromRecord(array $record): string
+    {
+        $payload = $this->decodeAoatPayload($record);
+        $rawDate = trim((string) ($payload['activity_date'] ?? ''));
+        if ($rawDate === '') {
+            return '';
+        }
+
+        try {
+            return (new \DateTimeImmutable($rawDate))->format('Y-m-d');
+        } catch (\Exception) {
+            return substr($rawDate, 0, 10);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @return array<string, mixed>
+     */
+    private function decodeAoatPayload(array $record): array
+    {
+        if (!isset($record['payload']) || $record['payload'] === null) {
+            return [];
+        }
+
+        $decoded = json_decode((string) $record['payload'], true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function normalizeSortText(string $value): string

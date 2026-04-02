@@ -273,7 +273,7 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
 </section>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('select[data-asi-autosubmit]').forEach(function (el) {
+    document.querySelectorAll('[data-asi-autosubmit]').forEach(function (el) {
         el.addEventListener('change', function () {
             document.getElementById('asi-filter-form').submit();
         });

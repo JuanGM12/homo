@@ -741,7 +741,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                const fecha = data.created_at || '';
+                const fechaActividad = data.activity_date || data.created_at || '';
+                const fechaRegistro = data.created_at || '';
                 const profesional = data.professional || '';
                 const rol = data.professional_role || '';
                 const subregion = data.subregion || '';
@@ -752,7 +753,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const exportPdfUrl = data.export_pdf_url || '';
                 const exportExcelUrl = data.export_excel_url || '';
 
-                let html = `<div class="text-start"><p class="mb-0"><strong>Fecha registro:</strong> ${escapeHtml(fecha)}<br>
+                let html = `<div class="text-start"><p class="mb-0"><strong>Fecha de la actividad:</strong> ${escapeHtml(fechaActividad)}<br>
+<strong>Fecha registro:</strong> ${escapeHtml(fechaRegistro)}<br>
 <strong>Profesional:</strong> ${escapeHtml(profesional)}<br>
 <strong>Rol:</strong> ${escapeHtml(rol)}<br>
 <strong>Subregion:</strong> ${escapeHtml(subregion)}<br>
@@ -850,7 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                const fecha = data.created_at || '';
+                const fechaActividad = data.activity_date || data.created_at || '';
+                const fechaRegistro = data.created_at || '';
                 const profesional = data.professional || '';
                 const rol = data.professional_role || '';
                 const subregion = data.subregion || '';
@@ -861,7 +864,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const exportPdfUrl = data.export_pdf_url || '';
                 const exportExcelUrl = data.export_excel_url || '';
 
-                let html = `<div class="text-start"><p class="mb-0"><strong>Fecha registro:</strong> ${escapeHtml(fecha)}<br>
+                let html = `<div class="text-start"><p class="mb-0"><strong>Fecha de la actividad:</strong> ${escapeHtml(fechaActividad)}<br>
+<strong>Fecha registro:</strong> ${escapeHtml(fechaRegistro)}<br>
 <strong>Profesional:</strong> ${escapeHtml(profesional)}<br>
 <strong>Rol:</strong> ${escapeHtml(rol)}<br>
 <strong>Subregion:</strong> ${escapeHtml(subregion)}<br>
@@ -1804,7 +1808,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             event.preventDefault();
-            const nextSort = sortLink.getAttribute('data-aoat-sort') || 'created_at';
+            const nextSort = sortLink.getAttribute('data-aoat-sort') || 'activity_date';
             const nextDir = sortLink.getAttribute('data-aoat-dir') || 'asc';
             if (!nextSort) {
                 return;

@@ -8,7 +8,7 @@ $currentPage = (int) ($pagination['current_page'] ?? 1);
 $totalPages = (int) ($pagination['total_pages'] ?? 1);
 $from = (int) ($pagination['from'] ?? 0);
 $to = (int) ($pagination['to'] ?? 0);
-$currentSort = (string) ($_GET['sort'] ?? 'created_at');
+$currentSort = (string) ($_GET['sort'] ?? 'activity_date');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 
 $query = $_GET;
@@ -86,7 +86,7 @@ if ($totalPages <= 7) {
                 <tr>
                     <?php
                     $headers = [
-                        'created_at' => 'Fecha',
+                        'activity_date' => 'Fecha',
                         'professional' => 'Profesional',
                         'subregion' => 'Subregión',
                         'municipality' => 'Municipio',

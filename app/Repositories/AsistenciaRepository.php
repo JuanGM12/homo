@@ -122,7 +122,7 @@ final class AsistenciaRepository
         if ($where !== []) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
-        $sql .= ' ORDER BY created_at DESC, id DESC';
+        $sql .= ' ORDER BY activity_date DESC, created_at DESC, id DESC';
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);

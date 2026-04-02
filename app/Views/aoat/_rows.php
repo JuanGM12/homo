@@ -14,7 +14,7 @@ $isCoordinator = in_array('coordinadora', $userRoles ?? [], true) || in_array('c
 $isAdmin = in_array('admin', $userRoles ?? [], true);
 $canAuditRole = $isSpecialist || $isCoordinator || $isAdmin;
 
-$formatCreatedAt = static function (?string $value): array {
+$formatActivityDate = static function (?string $value): array {
     if ($value === null || trim($value) === '') {
         return ['date' => 'Sin fecha', 'time' => ''];
     }
@@ -23,7 +23,7 @@ $formatCreatedAt = static function (?string $value): array {
         $dt = new DateTimeImmutable($value);
         return [
             'date' => $dt->format('d/m/Y'),
-            'time' => $dt->format('H:i'),
+            'time' => '',
         ];
     } catch (Exception) {
         return ['date' => $value, 'time' => ''];
@@ -72,6 +72,7 @@ $formatCreatedAt = static function (?string $value): array {
 
     $details = [
         'id' => (int) $record['id'],
+        'activity_date' => (string) ($record['activity_date'] ?? ''),
         'created_at' => (string) ($record['created_at'] ?? ''),
         'professional' => trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? ''))),
         'professional_role' => (string) ($record['professional_role'] ?? ''),
@@ -98,7 +99,7 @@ $formatCreatedAt = static function (?string $value): array {
         $badgeClass = 'aoat-status-pill is-pending';
     }
 
-    $dateParts = $formatCreatedAt(isset($record['created_at']) ? (string) $record['created_at'] : null);
+    $dateParts = $formatActivityDate(isset($record['activity_date']) ? (string) $record['activity_date'] : null);
     $professionalName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
     ?>
     <tr class="aoat-row">

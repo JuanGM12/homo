@@ -57,7 +57,7 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
     </div>
 
     <form class="row g-2 mb-4 align-items-end aoat-filter-bar" method="get" data-aoat-filters>
-        <input type="hidden" name="sort" value="<?= htmlspecialchars((string) ($_GET['sort'] ?? 'created_at'), ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="sort" value="<?= htmlspecialchars((string) ($_GET['sort'] ?? 'activity_date'), ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="dir" value="<?= htmlspecialchars((string) ($_GET['dir'] ?? 'desc'), ENT_QUOTES, 'UTF-8') ?>">
         <div class="col-md-4">
             <label class="form-label small text-muted">Buscar</label>
@@ -83,7 +83,7 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
         <div class="col-md-4">
             <div class="row g-2">
                 <div class="col-6">
-                    <label class="form-label small text-muted">Desde (fecha registro)</label>
+                    <label class="form-label small text-muted">Desde (fecha actividad)</label>
                     <input
                         type="date"
                         name="from_date"
@@ -92,7 +92,7 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
                     >
                 </div>
                 <div class="col-6">
-                    <label class="form-label small text-muted">Hasta (fecha registro)</label>
+                    <label class="form-label small text-muted">Hasta (fecha actividad)</label>
                     <input
                         type="date"
                         name="to_date"
