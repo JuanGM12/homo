@@ -59,7 +59,7 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
     <form class="row g-2 mb-4 align-items-end aoat-filter-bar" method="get" data-aoat-filters>
         <input type="hidden" name="sort" value="<?= htmlspecialchars((string) ($_GET['sort'] ?? 'activity_date'), ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="dir" value="<?= htmlspecialchars((string) ($_GET['dir'] ?? 'desc'), ENT_QUOTES, 'UTF-8') ?>">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label class="form-label small text-muted">Buscar</label>
             <input
                 type="text"
@@ -69,7 +69,7 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label small text-muted">Estado AoAT</label>
             <?php $currentState = (string) ($_GET['state'] ?? ''); ?>
             <select name="state" class="form-select form-select-sm">
@@ -80,7 +80,17 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
                 <option value="Aprobada" <?= $currentState === 'Aprobada' ? 'selected' : '' ?>>Aprobada</option>
             </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <label class="form-label small text-muted">Actividad que realizó</label>
+            <?php $currentActivityType = (string) ($_GET['activity_type'] ?? ''); ?>
+            <select name="activity_type" class="form-select form-select-sm">
+                <option value="">Todas</option>
+                <option value="Asistencia técnica" <?= $currentActivityType === 'Asistencia técnica' ? 'selected' : '' ?>>Asistencia técnica</option>
+                <option value="Asesoría" <?= $currentActivityType === 'Asesoría' ? 'selected' : '' ?>>Asesoría</option>
+                <option value="Actividad" <?= $currentActivityType === 'Actividad' ? 'selected' : '' ?>>Actividad</option>
+            </select>
+        </div>
+        <div class="col-md-3">
             <div class="row g-2">
                 <div class="col-6">
                     <label class="form-label small text-muted">Desde (fecha actividad)</label>

@@ -1043,6 +1043,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     '<option value="">Selecciona un motivo</option>' +
                     '<option value="Sin Cargar en AoAT">Sin Cargar en AoAT</option>' +
                     '<option value="Sin cargar en Drive">Sin cargar en Drive</option>' +
+                    '<option value="Errores calidad del dato">Errores calidad del dato</option>' +
                     '</select>' +
                     '<textarea id="swal-aoat-observation" class="form-control" rows="3" placeholder="Describe el motivo de la devolución"></textarea>',
                 focusConfirm: false,
@@ -1777,6 +1778,8 @@ document.addEventListener('DOMContentLoaded', () => {
             stateSelect.addEventListener('change', () => applyAoatFilters(1));
         }
 
+        aoatFilterForm.querySelector('select[name="activity_type"]')?.addEventListener('change', () => applyAoatFilters(1));
+
         if (fromDateInput) {
             fromDateInput.addEventListener('change', () => applyAoatFilters(1));
         }
@@ -1817,6 +1820,117 @@ document.addEventListener('DOMContentLoaded', () => {
             sortInput.value = nextSort;
             dirInput.value = nextDir;
             applyAoatFilters(1);
+        });
+    }
+
+    const evalQrModalEl = document.getElementById('evalQrModal');
+    if (evalQrModalEl && typeof QRCode !== 'undefined') {
+        const titleEl = evalQrModalEl.querySelector('[data-eval-qr-modal-title]');
+        const preHost = evalQrModalEl.querySelector('[data-eval-qr-pre]');
+        const postHost = evalQrModalEl.querySelector('[data-eval-qr-post]');
+        const preUrlInput = evalQrModalEl.querySelector('[data-eval-qr-url-pre]');
+        const postUrlInput = evalQrModalEl.querySelector('[data-eval-qr-url-post]');
+        const shareBtns = evalQrModalEl.querySelectorAll('[data-eval-qr-share]');
+
+        const buildAbsoluteUrl = (path) => {
+            if (!path) {
+                return '';
+            }
+            try {
+                return new URL(path, window.location.origin).href;
+            } catch {
+                return path;
+            }
+        };
+
+        const clearQrHosts = () => {
+            if (preHost) {
+                preHost.innerHTML = '';
+            }
+            if (postHost) {
+                postHost.innerHTML = '';
+            }
+        };
+
+        evalQrModalEl.addEventListener('show.bs.modal', (event) => {
+            const btn = event.relatedTarget;
+            if (!btn || !btn.hasAttribute('data-eval-qr-open')) {
+                return;
+            }
+            const name = btn.getAttribute('data-eval-name') || '';
+            const prePath = btn.getAttribute('data-eval-pre-path') || '';
+            const postPath = btn.getAttribute('data-eval-post-path') || '';
+            const preUrl = buildAbsoluteUrl(prePath);
+            const postUrl = buildAbsoluteUrl(postPath);
+
+            evalQrModalEl.dataset.evalThemeName = name;
+
+            if (titleEl) {
+                titleEl.textContent = name ? `Códigos QR · ${name}` : 'Códigos QR';
+            }
+            if (preUrlInput) {
+                preUrlInput.value = preUrl;
+            }
+            if (postUrlInput) {
+                postUrlInput.value = postUrl;
+            }
+
+            shareBtns.forEach((el) => {
+                el.classList.toggle('d-none', typeof navigator.share !== 'function');
+            });
+
+            clearQrHosts();
+
+            if (preHost && preUrl) {
+                new QRCode(preHost, {
+                    text: preUrl,
+                    width: 200,
+                    height: 200,
+                    correctLevel: QRCode.CorrectLevel.M,
+                });
+            }
+            if (postHost && postUrl) {
+                new QRCode(postHost, {
+                    text: postUrl,
+                    width: 200,
+                    height: 200,
+                    correctLevel: QRCode.CorrectLevel.M,
+                });
+            }
+        });
+
+        evalQrModalEl.addEventListener('hidden.bs.modal', () => {
+            clearQrHosts();
+        });
+
+        evalQrModalEl.addEventListener('click', (e) => {
+            const copyBtn = e.target.closest('[data-eval-qr-copy]');
+            if (copyBtn) {
+                const which = copyBtn.getAttribute('data-eval-qr-copy');
+                const input = which === 'post' ? postUrlInput : preUrlInput;
+                if (!input || !input.value) {
+                    return;
+                }
+                navigator.clipboard.writeText(input.value).then(() => {
+                    copyBtn.textContent = 'Copiado';
+                    setTimeout(() => {
+                        copyBtn.textContent = 'Copiar enlace';
+                    }, 1800);
+                }).catch(() => {});
+                return;
+            }
+
+            const shareBtn = e.target.closest('[data-eval-qr-share]');
+            if (shareBtn && typeof navigator.share === 'function') {
+                const which = shareBtn.getAttribute('data-eval-qr-share');
+                const input = which === 'post' ? postUrlInput : preUrlInput;
+                const theme = evalQrModalEl.dataset.evalThemeName || 'Evaluación';
+                if (!input || !input.value) {
+                    return;
+                }
+                const title = which === 'post' ? `${theme} — POST` : `${theme} — PRE`;
+                navigator.share({ title, text: title, url: input.value }).catch(() => {});
+            }
         });
     }
 });

@@ -40,6 +40,7 @@ final class AoatController
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
+        $activityTypeFilter = trim((string) $request->input('activity_type', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $sort = trim((string) $request->input('sort', 'activity_date'));
@@ -77,11 +78,16 @@ final class AoatController
         }
 
         $records = $this->attachActivityDateToRecords($records);
+        $records = $this->attachActivityTypeToRecords($records);
 
         // Filtros en memoria (suficiente para el volumen esperado)
-        if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '') {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
+                    return false;
+                }
+
+                if ($activityTypeFilter !== '' && (string) ($row['activity_type'] ?? '') !== $activityTypeFilter) {
                     return false;
                 }
 
@@ -437,6 +443,7 @@ final class AoatController
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
+        $activityTypeFilter = trim((string) $request->input('activity_type', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
 
@@ -466,10 +473,15 @@ final class AoatController
         }
 
         $records = $this->attachActivityDateToRecords($records);
+        $records = $this->attachActivityTypeToRecords($records);
 
-        if ($search !== '' || $stateFilter !== '' || $fromDate !== '' || $toDate !== '') {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '') {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
+                    return false;
+                }
+
+                if ($activityTypeFilter !== '' && (string) ($row['activity_type'] ?? '') !== $activityTypeFilter) {
                     return false;
                 }
 
@@ -516,6 +528,7 @@ final class AoatController
             'Profesional',
             'Subregión',
             'Municipio',
+            'Actividad que realizó',
             'Estado AoAT',
             'Motivo auditoría',
             'Observación auditoría',
@@ -529,6 +542,7 @@ final class AoatController
                 $professionalFullName,
                 (string) ($row['subregion'] ?? ''),
                 (string) ($row['municipality'] ?? ''),
+                (string) ($row['activity_type'] ?? ''),
                 (string) ($row['state'] ?? ''),
                 (string) ($row['audit_motive'] ?? ''),
                 (string) ($row['audit_observation'] ?? ''),
@@ -869,7 +883,7 @@ final class AoatController
                 return Response::redirect('/aoat');
             }
 
-            $allowedMotives = ['Sin Cargar en AoAT', 'Sin cargar en Drive'];
+            $allowedMotives = ['Sin Cargar en AoAT', 'Sin cargar en Drive', 'Errores calidad del dato'];
             if ($observation === '' || !in_array($motive, $allowedMotives, true)) {
                 Flash::set([
                     'type' => 'error',
@@ -1098,7 +1112,7 @@ final class AoatController
      */
     private function sortRecords(array $records, string $sort, string $dir): array
     {
-        $allowedSorts = ['activity_date', 'professional', 'subregion', 'municipality', 'state'];
+        $allowedSorts = ['activity_date', 'professional', 'subregion', 'municipality', 'activity_type', 'state'];
         if (!in_array($sort, $allowedSorts, true)) {
             $sort = 'activity_date';
         }
@@ -1139,6 +1153,7 @@ final class AoatController
             'activity_date' => (string) ($row['activity_date'] ?? ''),
             'subregion' => $this->normalizeSortText((string) ($row['subregion'] ?? '')),
             'municipality' => $this->normalizeSortText((string) ($row['municipality'] ?? '')),
+            'activity_type' => $this->normalizeSortText((string) ($row['activity_type'] ?? '')),
             'state' => $this->normalizeSortText((string) ($row['state'] ?? '')),
             default => '',
         };
@@ -1152,6 +1167,21 @@ final class AoatController
     {
         foreach ($records as &$record) {
             $record['activity_date'] = $this->extractActivityDateFromRecord($record);
+        }
+        unset($record);
+
+        return $records;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function attachActivityTypeToRecords(array $records): array
+    {
+        foreach ($records as &$record) {
+            $payload = $this->decodeAoatPayload($record);
+            $record['activity_type'] = trim((string) ($payload['activity_type'] ?? ''));
         }
         unset($record);
 
@@ -1327,14 +1357,8 @@ final class AoatController
     private function canEditApprovedOrRealizadoAoatNumber(array $record): bool
     {
         $state = (string) ($record['state'] ?? '');
-        if (!in_array($state, ['Aprobada', 'Realizado'], true)) {
-            return false;
-        }
 
-        $payload = $this->decodePayload($record);
-        $aoatNumber = trim((string) ($payload['aoat_number'] ?? ''));
-
-        return $aoatNumber === '0';
+        return in_array($state, ['Aprobada', 'Realizado'], true);
     }
 
     /**

@@ -52,8 +52,7 @@ $formatActivityDate = static function (?string $value): array {
 
     $canEditNumberOnly = !$isAudit
         && $isOwner
-        && in_array($state, ['Aprobada', 'Realizado'], true)
-        && trim((string) ($payloadArray['aoat_number'] ?? '')) === '0';
+        && in_array($state, ['Aprobada', 'Realizado'], true);
     $canEditForm = $canEditForm || $canEditNumberOnly;
 
     $auditMotive = trim((string) ($record['audit_motive'] ?? ''));
@@ -78,6 +77,7 @@ $formatActivityDate = static function (?string $value): array {
         'professional_role' => (string) ($record['professional_role'] ?? ''),
         'subregion' => (string) ($record['subregion'] ?? ''),
         'municipality' => (string) ($record['municipality'] ?? ''),
+        'activity_type' => trim((string) ($record['activity_type'] ?? '')),
         'state' => $state,
         'audit_motive' => $auditMotive,
         'audit_observation' => $auditObservation,
@@ -101,6 +101,7 @@ $formatActivityDate = static function (?string $value): array {
 
     $dateParts = $formatActivityDate(isset($record['activity_date']) ? (string) $record['activity_date'] : null);
     $professionalName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
+    $activityTypeLabel = trim((string) ($record['activity_type'] ?? ''));
     ?>
     <tr class="aoat-row">
         <td class="aoat-cell-date">
@@ -121,6 +122,11 @@ $formatActivityDate = static function (?string $value): array {
         </td>
         <td class="aoat-cell-territory"><?= htmlspecialchars((string) ($record['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
         <td class="aoat-cell-territory"><?= htmlspecialchars((string) ($record['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+        <td class="aoat-cell-activity-type">
+            <?= $activityTypeLabel !== ''
+                ? htmlspecialchars($activityTypeLabel, ENT_QUOTES, 'UTF-8')
+                : '<span class="text-muted">—</span>' ?>
+        </td>
         <td>
             <span class="<?= $badgeClass ?>">
                 <?= htmlspecialchars($state, ENT_QUOTES, 'UTF-8') ?>

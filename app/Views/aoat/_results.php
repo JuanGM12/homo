@@ -90,6 +90,7 @@ if ($totalPages <= 7) {
                         'professional' => 'Profesional',
                         'subregion' => 'Subregión',
                         'municipality' => 'Municipio',
+                        'activity_type' => 'Actividad que realizó',
                         'state' => 'Estado',
                     ];
                     foreach ($headers as $sortKey => $label):

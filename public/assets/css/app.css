@@ -1073,6 +1073,22 @@ body {
     transform: translateX(3px);
 }
 
+.eval-qr-box {
+    width: 200px;
+    height: 200px;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.eval-qr-box img,
+.eval-qr-box canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
 /* --------------------------------------------------------------------------
    Cards genéricas (Bootstrap override)
    -------------------------------------------------------------------------- */

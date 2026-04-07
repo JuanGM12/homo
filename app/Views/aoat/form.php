@@ -25,8 +25,7 @@ if (isset($oldInput) && is_array($oldInput) && $oldInput !== []) {
 
 $oldPayload = $formData;
 $currentState = $isEdit ? (string) ($record['state'] ?? 'Asignada') : 'Asignada';
-$currentAoatNumber = trim((string) ($oldPayload['aoat_number'] ?? ''));
-$numberOnlyEdit = $isEdit && in_array($currentState, ['Aprobada', 'Realizado'], true) && $currentAoatNumber === '0';
+$numberOnlyEdit = $isEdit && in_array($currentState, ['Aprobada', 'Realizado'], true);
 $prevSuicidio = isset($formData['prev_suicidio']) && is_array($formData['prev_suicidio']) ? $formData['prev_suicidio'] : [];
 $prevViolencias = isset($formData['prev_violencias']) && is_array($formData['prev_violencias']) ? $formData['prev_violencias'] : [];
 $prevAdicciones = isset($formData['prev_adicciones']) && is_array($formData['prev_adicciones']) ? $formData['prev_adicciones'] : [];
@@ -108,7 +107,7 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                 >
                                 <?php if ($numberOnlyEdit): ?>
                                     <div class="form-text">
-                                        Puedes actualizar solo este campo porque el registro está en estado <?= htmlspecialchars($currentState, ENT_QUOTES, 'UTF-8') ?> y el número actual es `0`.
+                                        Puedes corregir o actualizar el número de la AoAT o actividad en cualquier momento; el resto del formulario permanece bloqueado mientras el registro esté en estado <?= htmlspecialchars($currentState, ENT_QUOTES, 'UTF-8') ?>.
                                     </div>
                                 <?php endif; ?>
                             </div>
