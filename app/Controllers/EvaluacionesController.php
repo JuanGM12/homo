@@ -13,6 +13,7 @@ use App\Services\EvaluacionesReportService;
 use App\Services\Flash;
 use App\Services\PdfService;
 use App\Services\PdfImageHelper;
+use App\Support\MunicipalityListRequest;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
@@ -440,10 +441,7 @@ final class EvaluacionesController
                 $impactSummary  = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
             }
 
-            $exportQuery = http_build_query(array_filter(
-                $filters,
-                static fn (mixed $v): bool => $v !== null && $v !== ''
-            ));
+            $exportQuery = $this->buildEvaluacionesExportQuery($filters);
         }
 
         $comparisonRows = $this->sortComparisonRows($comparisonRows, $testsFull, $sort, $dir);
@@ -700,10 +698,48 @@ final class EvaluacionesController
         return is_string($html) ? $html : '';
     }
 
+    /**
+     * @param array<string, mixed> $filters
+     */
+    private function buildEvaluacionesExportQuery(array $filters): string
+    {
+        $parts = [];
+        foreach (['test_key', 'phase', 'search', 'document_number', 'impact', 'subregion', 'date_from', 'date_to'] as $k) {
+            $v = $filters[$k] ?? '';
+            if ($v === null || $v === '') {
+                continue;
+            }
+            $parts[] = rawurlencode((string) $k) . '=' . rawurlencode((string) $v);
+        }
+        if (!empty($filters['municipalities']) && is_array($filters['municipalities'])) {
+            foreach ($filters['municipalities'] as $m) {
+                $m = trim((string) $m);
+                if ($m !== '') {
+                    $parts[] = rawurlencode('municipality[]') . '=' . rawurlencode($m);
+                }
+            }
+        }
+
+        return implode('&', $parts);
+    }
+
+    /** @param array<string, mixed> $filters */
+    private function evalMunicipalityFilterLabel(array $filters): string
+    {
+        $m = $filters['municipalities'] ?? [];
+        if (is_array($m) && $m !== []) {
+            return implode(', ', $m);
+        }
+
+        return trim((string) ($filters['municipality'] ?? ''));
+    }
+
     private function collectEvaluacionFiltersFromRequest(Request $request, ?array $user, bool $canSeeAll): array
     {
         $phaseRaw = trim((string) $request->input('phase', ''));
         $phase = in_array($phaseRaw, ['pre', 'post'], true) ? $phaseRaw : '';
+
+        $municipalities = MunicipalityListRequest::parse($request);
 
         $filters = [
             'test_key' => (string) $request->input('test_key', ''),
@@ -712,7 +748,7 @@ final class EvaluacionesController
             'document_number' => trim((string) $request->input('document_number', '')),
             'impact' => trim((string) $request->input('impact', '')),
             'subregion' => trim((string) $request->input('subregion', '')),
-            'municipality' => trim((string) $request->input('municipality', '')),
+            'municipalities' => $municipalities,
             'date_from' => (string) $request->input('date_from', ''),
             'date_to' => (string) $request->input('date_to', ''),
         ];
@@ -833,7 +869,10 @@ final class EvaluacionesController
         if (!empty($filters['test_key']))        $metaParts[] = 'Temática: ' . $filters['test_key'];
         if (!empty($filters['document_number'])) $metaParts[] = 'Documento: ' . $filters['document_number'];
         if (!empty($filters['subregion']))       $metaParts[] = 'Subregión: ' . $filters['subregion'];
-        if (!empty($filters['municipality']))    $metaParts[] = 'Municipio: ' . $filters['municipality'];
+        $munMeta = $this->evalMunicipalityFilterLabel($filters);
+        if ($munMeta !== '') {
+            $metaParts[] = 'Municipio(s): ' . $munMeta;
+        }
         if (!empty($filters['date_from']))       $metaParts[] = 'Desde: ' . $filters['date_from'];
         if (!empty($filters['date_to']))         $metaParts[] = 'Hasta: ' . $filters['date_to'];
         if (!empty($filters['phase'])) {
@@ -929,8 +968,9 @@ final class EvaluacionesController
         if (!empty($filters['subregion'])) {
             $filterParts[] = 'Subregión: ' . (string) $filters['subregion'];
         }
-        if (!empty($filters['municipality'])) {
-            $filterParts[] = 'Municipio: ' . (string) $filters['municipality'];
+        $munExcel = $this->evalMunicipalityFilterLabel($filters);
+        if ($munExcel !== '') {
+            $filterParts[] = 'Municipio(s): ' . $munExcel;
         }
         if (!empty($filters['date_from'])) {
             $filterParts[] = 'Desde: ' . (string) $filters['date_from'];
@@ -1273,8 +1313,9 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
         if (!empty($filters['subregion'])) {
             $meta[] = 'Subregión: ' . $esc((string) $filters['subregion']);
         }
-        if (!empty($filters['municipality'])) {
-            $meta[] = 'Municipio: ' . $esc((string) $filters['municipality']);
+        $munPdf = $this->evalMunicipalityFilterLabel($filters);
+        if ($munPdf !== '') {
+            $meta[] = 'Municipio(s): ' . $esc($munPdf);
         }
         if (!empty($filters['date_from'])) {
             $meta[] = 'Desde: ' . $esc((string) $filters['date_from']);
@@ -1760,18 +1801,6 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
 
         $repo = new TestResponseRepository();
 
-        // Debe existir un PRE previo para poder diligenciar el POST
-        $pre = $repo->findByPerson($testKey, 'pre', $documentNumber);
-        if ($pre === null) {
-            Flash::set([
-                'type' => 'error',
-                'title' => 'PRE - TEST no encontrado',
-                'message' => 'Para diligenciar el POST - TEST debes haber completado primero el PRE - TEST con el mismo número de documento.',
-            ]);
-
-            return Response::redirect('/evaluaciones/hospitales/post');
-        }
-
         // No permitir más de un POST para la misma persona
         if ($repo->existsForPerson($testKey, $phase, $documentNumber)) {
             Flash::set([
@@ -1783,12 +1812,30 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
             return Response::redirect('/evaluaciones/hospitales/post');
         }
 
-        // Usamos los datos personales del PRE (regla: migrar datos)
-        $firstName = (string) ($pre['first_name'] ?? '');
-        $lastName = (string) ($pre['last_name'] ?? '');
-        $profession = (string) ($pre['profession'] ?? '');
-        $subregion = (string) ($pre['subregion'] ?? '');
-        $municipality = (string) ($pre['municipality'] ?? '');
+        $pre = $repo->findByPerson($testKey, 'pre', $documentNumber);
+        if ($pre !== null) {
+            $firstName = (string) ($pre['first_name'] ?? '');
+            $lastName = (string) ($pre['last_name'] ?? '');
+            $profession = (string) ($pre['profession'] ?? '');
+            $subregion = (string) ($pre['subregion'] ?? '');
+            $municipality = (string) ($pre['municipality'] ?? '');
+        } else {
+            $firstName = trim((string) $request->input('first_name', ''));
+            $lastName = trim((string) $request->input('last_name', ''));
+            $profession = trim((string) $request->input('profession', ''));
+            $subregion = trim((string) $request->input('subregion', ''));
+            $municipality = trim((string) $request->input('municipality', ''));
+
+            if ($firstName === '' || $lastName === '' || $profession === '' || $subregion === '' || $municipality === '') {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Campos obligatorios incompletos',
+                    'message' => 'Si no hay PRE - TEST previo para este documento, completa nombres, profesión, subregión y municipio.',
+                ]);
+
+                return Response::redirect('/evaluaciones/hospitales/post');
+            }
+        }
 
         // Recoger respuestas a preguntas (q1..q20) y comparar con la clave correcta
         $answers = [];
@@ -2576,6 +2623,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
             'last_name' => '',
             'subregion' => '',
             'municipality' => '',
+            'profession' => '',
         ];
 
         if ($currentUser !== null) {

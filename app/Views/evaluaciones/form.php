@@ -8,6 +8,7 @@ $prefill = $prefill ?? [
     'last_name' => '',
     'subregion' => '',
     'municipality' => '',
+    'profession' => '',
 ];
 ?>
 
@@ -31,9 +32,15 @@ $prefill = $prefill ?? [
                                 <?= htmlspecialchars($config['title'], ENT_QUOTES, 'UTF-8') ?>
                             </h1>
                             <p class="text-muted mb-0 small">
-                                <?= $isPre
-                                    ? 'Este formulario se diligencia antes de la charla o intervención.'
-                                    : 'Este formulario se diligencia después de la charla o intervención, usando el mismo número de documento del PRE - TEST.' ?>
+                                <?php
+                                if ($isPre) {
+                                    echo 'Este formulario se diligencia antes de la charla o intervención.';
+                                } elseif (($config['key'] ?? '') === 'hospitales') {
+                                    echo 'Este formulario se diligencia después de la charla o intervención. Si ya existe un PRE - TEST con el mismo documento, los datos personales y de territorio se completan automáticamente; si no, complételos manualmente (el cálculo por municipio no exige PRE previo).';
+                                } else {
+                                    echo 'Este formulario se diligencia después de la charla o intervención, usando el mismo número de documento del PRE - TEST.';
+                                }
+                                ?>
                             </p>
                         </div>
                         <span class="badge rounded-pill text-bg-light">
@@ -111,7 +118,13 @@ $prefill = $prefill ?? [
                             <?php if ($config['isHospital']): ?>
                                 <div class="col-md-6">
                                     <label class="form-label">Profesión <span class="text-danger">*</span></label>
-                                    <input type="text" name="profession" class="form-control" required>
+                                    <input
+                                        type="text"
+                                        name="profession"
+                                        class="form-control"
+                                        required
+                                        value="<?= htmlspecialchars((string) ($prefill['profession'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    >
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -795,7 +808,7 @@ $prefill = $prefill ?? [
                                     <?php endforeach; ?>
                                 </div>
                             <?php endforeach; ?>
-                        <?php elseif ($config['key'] === 'hospitales' && $config['phase'] === 'pre'): ?>
+                        <?php elseif ($config['key'] === 'hospitales' && ($config['phase'] === 'pre' || $config['phase'] === 'post')): ?>
                             <div class="mb-4 app-form-question">
                                 <p class="fw-semibold mb-1">
                                     1. Llega a urgencias un joven de 22 años con antecedente de epilepsia, debido a que se le acabó la

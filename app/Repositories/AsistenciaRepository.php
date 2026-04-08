@@ -66,7 +66,7 @@ final class AsistenciaRepository
     /**
      * Lista actividades con filtros opcionales.
      *
-     * @param array{subregion?: string, municipality?: string, advisor_user_id?: int, advisor_user_ids?: array<int, int>, status?: string, tipo?: string} $filters
+     * @param array{subregion?: string, municipality?: string, municipalities?: list<string>, advisor_user_id?: int, advisor_user_ids?: array<int, int>, status?: string, tipo?: string} $filters
      * @return array
      */
     public function findWithFilters(array $filters = []): array
@@ -79,9 +79,26 @@ final class AsistenciaRepository
             $where[] = 'subregion = :subregion';
             $params[':subregion'] = $filters['subregion'];
         }
-        if (!empty($filters['municipality'])) {
-            $where[] = 'municipality = :municipality';
-            $params[':municipality'] = $filters['municipality'];
+        $municipalities = [];
+        if (!empty($filters['municipalities']) && is_array($filters['municipalities'])) {
+            $municipalities = array_values(array_unique(array_filter(
+                array_map(static fn (mixed $m): string => trim((string) $m), $filters['municipalities']),
+                static fn (string $m): bool => $m !== ''
+            )));
+        } elseif (!empty($filters['municipality'])) {
+            $one = trim((string) $filters['municipality']);
+            if ($one !== '') {
+                $municipalities = [$one];
+            }
+        }
+        if ($municipalities !== []) {
+            $placeholders = [];
+            foreach ($municipalities as $i => $mun) {
+                $ph = ':mun_as_' . $i;
+                $placeholders[] = $ph;
+                $params[$ph] = $mun;
+            }
+            $where[] = 'municipality IN (' . implode(', ', $placeholders) . ')';
         }
         if (!empty($filters['advisor_user_id'])) {
             $where[] = 'advisor_user_id = :advisor_user_id';

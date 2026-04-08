@@ -12,6 +12,7 @@ use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Support\MunicipalityListRequest;
 
 final class AsistenciaController
 {
@@ -130,14 +131,15 @@ final class AsistenciaController
             $statusFilter = '';
         }
 
+        $municipalities = MunicipalityListRequest::parse($request);
         $filters = [
             'subregion'       => trim((string) $request->input('subregion', '')),
-            'municipality'    => trim((string) $request->input('municipality', '')),
             'advisor_user_id' => $request->input('advisor_user_id') !== '' ? (int) $request->input('advisor_user_id') : null,
             'status'          => $statusFilter,
             'from_date'       => trim((string) $request->input('from_date', '')),
             'to_date'         => trim((string) $request->input('to_date', '')),
             'tipo'            => $activeTab,
+            'municipalities'  => $municipalities,
         ];
 
         $advisors = $this->visibleAdvisorsForUser($user);
@@ -159,7 +161,13 @@ final class AsistenciaController
             $filters['advisor_user_id'] = (int) $user['id'];
         }
 
-        $records = $this->repo->findWithFilters(array_filter($filters));
+        $records = $this->repo->findWithFilters(array_filter($filters, static function (mixed $v): bool {
+            if (is_array($v)) {
+                return $v !== [];
+            }
+
+            return $v !== null && $v !== '';
+        }));
 
         foreach ($records as &$row) {
             $row['asistentes_count'] = $this->repo->countAsistentesByActividad((int) $row['id']);

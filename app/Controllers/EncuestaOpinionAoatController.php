@@ -12,6 +12,7 @@ use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Support\MunicipalityListRequest;
 
 final class EncuestaOpinionAoatController
 {
@@ -153,12 +154,13 @@ final class EncuestaOpinionAoatController
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
 
+        $municipalities = MunicipalityListRequest::parse($request);
         $filters = [
             'q' => trim((string) $request->input('q', '')),
             'from_date' => trim((string) $request->input('from_date', '')),
             'to_date' => trim((string) $request->input('to_date', '')),
             'subregion' => trim((string) $request->input('subregion', '')),
-            'municipality' => trim((string) $request->input('municipality', '')),
+            'municipalities' => $municipalities,
             'advisor' => trim((string) $request->input('advisor', '')),
         ];
 
@@ -198,12 +200,13 @@ final class EncuestaOpinionAoatController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
+        $municipalities = MunicipalityListRequest::parse($request);
         $filters = [
             'q' => trim((string) $request->input('q', '')),
             'from_date' => trim((string) $request->input('from_date', '')),
             'to_date' => trim((string) $request->input('to_date', '')),
             'subregion' => trim((string) $request->input('subregion', '')),
-            'municipality' => trim((string) $request->input('municipality', '')),
+            'municipalities' => $municipalities,
             'advisor' => trim((string) $request->input('advisor', '')),
         ];
 
@@ -235,12 +238,16 @@ final class EncuestaOpinionAoatController
     {
         $q = strtolower($filters['q'] ?? '');
         $sub = strtolower($filters['subregion'] ?? '');
-        $mun = strtolower($filters['municipality'] ?? '');
+        $munList = $filters['municipalities'] ?? [];
+        if (!is_array($munList)) {
+            $munList = [];
+        }
+        $munListLower = array_map(strtolower(...), $munList);
         $adv = strtolower($filters['advisor'] ?? '');
         $from = $filters['from_date'] ?? '';
         $to = $filters['to_date'] ?? '';
 
-        return array_values(array_filter($records, static function (array $row) use ($q, $sub, $mun, $adv, $from, $to): bool {
+        return array_values(array_filter($records, static function (array $row) use ($q, $sub, $munListLower, $adv, $from, $to): bool {
             if ($q !== '') {
                 $hay = strtolower(
                     ($row['advisor_name'] ?? '') . ' ' .
@@ -256,7 +263,7 @@ final class EncuestaOpinionAoatController
             if ($sub !== '' && strtolower((string) ($row['subregion'] ?? '')) !== $sub) {
                 return false;
             }
-            if ($mun !== '' && strtolower((string) ($row['municipality'] ?? '')) !== $mun) {
+            if ($munListLower !== [] && !in_array(strtolower((string) ($row['municipality'] ?? '')), $munListLower, true)) {
                 return false;
             }
             if ($adv !== '' && strtolower((string) ($row['advisor_name'] ?? '')) !== $adv) {
@@ -558,7 +565,6 @@ final class EncuestaOpinionAoatController
             'q' => 'Buscar',
             'advisor' => 'Asesor',
             'subregion' => 'Subregión',
-            'municipality' => 'Municipio',
             'from_date' => 'Desde',
             'to_date' => 'Hasta',
         ];
@@ -568,6 +574,10 @@ final class EncuestaOpinionAoatController
             if ($value !== '') {
                 $parts[] = $label . ': ' . $value;
             }
+        }
+        $muns = $filters['municipalities'] ?? [];
+        if (is_array($muns) && $muns !== []) {
+            $parts[] = 'Municipio(s): ' . implode(', ', $muns);
         }
 
         return implode(' | ', $parts);

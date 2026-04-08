@@ -15,6 +15,14 @@ $exportPdfQuery = $exportQuery;
 $exportPdfQuery['format'] = 'pdf';
 $exportExcelHref = '/planeacion/exportar?' . http_build_query($exportExcelQuery);
 $exportPdfHref = '/planeacion/exportar?' . http_build_query($exportPdfQuery);
+
+$filterSubregion = (string) ($_GET['subregion'] ?? '');
+$filterMunicipalities = $_GET['municipality'] ?? [];
+if (!is_array($filterMunicipalities)) {
+    $filterMunicipalities = $filterMunicipalities !== '' && $filterMunicipalities !== null ? [(string) $filterMunicipalities] : [];
+}
+$filterMunicipalities = array_values(array_filter(array_map('strval', $filterMunicipalities), static fn (string $m): bool => $m !== ''));
+$municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 ?>
 
 <div class="py-4">
@@ -48,19 +56,42 @@ $exportPdfHref = '/planeacion/exportar?' . http_build_query($exportPdfQuery);
         </div>
     </div>
 
-    <form class="row g-2 mb-4 align-items-end planeacion-filter-bar" method="get" data-planeacion-filters>
+    <form class="row g-2 mb-4 align-items-end planeacion-filter-bar" method="get" data-planeacion-filters data-territory-filter>
         <input type="hidden" name="sort" value="<?= htmlspecialchars($currentSort, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="dir" value="<?= htmlspecialchars($currentDir, ENT_QUOTES, 'UTF-8') ?>">
 
-        <div class="col-lg-4">
+        <div class="col-lg-2">
             <label class="form-label small text-muted">Buscar</label>
             <input
                 type="text"
                 name="q"
                 class="form-control"
-                placeholder="Asesor, subregion, municipio, año..."
+                placeholder="Asesor, año..."
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
+        </div>
+        <div class="col-lg-2">
+            <label class="form-label small text-muted">Subregión</label>
+            <select
+                name="subregion"
+                class="form-select"
+                data-subregion-select
+                data-current-value="<?= htmlspecialchars($filterSubregion, ENT_QUOTES, 'UTF-8') ?>"
+            >
+                <option value="">Todas</option>
+            </select>
+        </div>
+        <div class="col-lg-2">
+            <label class="form-label small text-muted">Municipio(s)</label>
+            <select
+                name="municipality[]"
+                class="form-select"
+                multiple
+                data-municipality-select
+                data-municipality-multi="1"
+                data-current-values="<?= $municipalitiesJson ?>"
+                disabled
+            ></select>
         </div>
 
         <div class="col-lg-4">

@@ -16,6 +16,13 @@ $canUseWeeklyReport = $isAdmin || $isCoordinator;
 $exportParams = $_GET;
 unset($exportParams['partial']);
 $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
+
+$filterSubregion = (string) ($filterSubregion ?? ($_GET['subregion'] ?? ''));
+$filterMunicipalities = $filterMunicipalities ?? [];
+if (!is_array($filterMunicipalities)) {
+    $filterMunicipalities = [];
+}
+$municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 ?>
 
 <section class="mt-5 mb-4">
@@ -56,18 +63,41 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
         </div>
     </div>
 
-    <form class="row g-2 mb-4 align-items-end aoat-filter-bar" method="get" data-aoat-filters>
+    <form class="row g-2 mb-4 align-items-end aoat-filter-bar" method="get" data-aoat-filters data-territory-filter>
         <input type="hidden" name="sort" value="<?= htmlspecialchars((string) ($_GET['sort'] ?? 'activity_date'), ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="dir" value="<?= htmlspecialchars((string) ($_GET['dir'] ?? 'desc'), ENT_QUOTES, 'UTF-8') ?>">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label small text-muted">Buscar</label>
             <input
                 type="text"
                 name="q"
                 class="form-control form-control-sm"
-                placeholder="Profesional, subregión, municipio..."
+                placeholder="Profesional, ID..."
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Subregión</label>
+            <select
+                name="subregion"
+                class="form-select form-select-sm"
+                data-subregion-select
+                data-current-value="<?= htmlspecialchars($filterSubregion, ENT_QUOTES, 'UTF-8') ?>"
+            >
+                <option value="">Todas</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Municipio(s)</label>
+            <select
+                name="municipality[]"
+                class="form-select form-select-sm"
+                multiple
+                data-municipality-select
+                data-municipality-multi="1"
+                data-current-values="<?= $municipalitiesJson ?>"
+                disabled
+            ></select>
         </div>
         <div class="col-md-2">
             <label class="form-label small text-muted">Estado AoAT</label>
@@ -127,4 +157,15 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
     <input type="hidden" name="state" id="aoat-state-value">
     <input type="hidden" name="observation" id="aoat-state-observation">
     <input type="hidden" name="motive" id="aoat-state-motive">
+</form>
+
+<form id="aoat-state-bulk-form" method="post" action="/aoat/cambiar-estado-masivo" class="d-none">
+    <div id="aoat-state-bulk-ids"></div>
+    <input type="hidden" name="state" id="aoat-bulk-state-value">
+    <input type="hidden" name="observation" id="aoat-bulk-observation-value">
+    <input type="hidden" name="motive" id="aoat-bulk-motive-value">
+</form>
+
+<form id="aoat-delete-form" method="post" action="/aoat/eliminar" class="d-none">
+    <input type="hidden" name="id" id="aoat-delete-id" value="">
 </form>

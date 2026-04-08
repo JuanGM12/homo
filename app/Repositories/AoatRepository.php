@@ -145,5 +145,12 @@ final class AoatRepository
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public function deleteById(int $id): void
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare('DELETE FROM aoat_records WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+    }
 }
 

@@ -80,10 +80,38 @@ if ($totalPages <= 7) {
             <p class="aoat-empty-copy mb-0">Ajusta la búsqueda o limpia los filtros para volver a ver registros.</p>
         </div>
     <?php else: ?>
+        <?php if (!empty($isAudit)): ?>
+            <div class="aoat-bulk-toolbar card border-0 shadow-sm mb-3" data-aoat-bulk-toolbar>
+                <div class="card-body py-3 d-flex flex-wrap align-items-center gap-2 justify-content-between">
+                    <div class="small text-muted mb-0">
+                        <span data-aoat-bulk-count>0</span> seleccionado(s) en esta página
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-primary" data-aoat-bulk-aprobar disabled>
+                            <i class="bi bi-patch-check me-1"></i>
+                            Aprobar seleccionadas
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning" data-aoat-bulk-devolver disabled>
+                            <i class="bi bi-arrow-return-left me-1"></i>
+                            Devolver seleccionadas
+                        </button>
+                    </div>
+                </div>
+                <p class="px-3 pb-3 mb-0 small text-muted">
+                    Solo se incluyen filas en estado <strong>Asignada</strong> o <strong>Realizado</strong> que puedas auditar.
+                    La devolución aplica únicamente a las que estén en <strong>Asignada</strong>.
+                </p>
+            </div>
+        <?php endif; ?>
         <div class="table-responsive aoat-table-wrap">
             <table class="table aoat-table align-middle mb-0">
                 <thead>
                 <tr>
+                    <?php if (!empty($isAudit)): ?>
+                        <th scope="col" class="aoat-bulk-col text-center" style="width:2.5rem" title="Selección masiva">
+                            <input type="checkbox" class="form-check-input" data-aoat-bulk-select-all aria-label="Seleccionar todos en esta página">
+                        </th>
+                    <?php endif; ?>
                     <?php
                     $headers = [
                         'activity_date' => 'Fecha',

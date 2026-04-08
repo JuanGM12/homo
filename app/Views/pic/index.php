@@ -20,6 +20,13 @@ $exportPdfHref = '/pic/exportar' . ($exportPdfQuery !== [] ? '?' . http_build_qu
 $exportExcelQuery = $exportQuery;
 $exportExcelQuery['format'] = 'excel';
 $exportExcelHref = '/pic/exportar' . ($exportExcelQuery !== [] ? '?' . http_build_query($exportExcelQuery) : '');
+
+$filterSubregion = (string) ($filterSubregion ?? ($_GET['subregion'] ?? ''));
+$filterMunicipalities = $filterMunicipalities ?? [];
+if (!is_array($filterMunicipalities)) {
+    $filterMunicipalities = [];
+}
+$municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 ?>
 
 <section class="mt-5 mb-4">
@@ -51,22 +58,45 @@ $exportExcelHref = '/pic/exportar' . ($exportExcelQuery !== [] ? '?' . http_buil
         </div>
     </div>
 
-    <form class="row g-2 mb-4 align-items-end pic-filter-bar" method="get" data-pic-filters>
+    <form class="row g-2 mb-4 align-items-end pic-filter-bar" method="get" data-pic-filters data-territory-filter>
         <input type="hidden" name="sort" value="<?= htmlspecialchars($currentSort, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="dir" value="<?= htmlspecialchars($currentDir, ENT_QUOTES, 'UTF-8') ?>">
 
-        <div class="col-lg-4">
+        <div class="col-lg-2">
             <label class="form-label small text-muted">Buscar</label>
             <input
                 type="text"
                 name="q"
                 class="form-control"
-                placeholder="Profesional, subregion, municipio..."
+                placeholder="Profesional, correo..."
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
         </div>
+        <div class="col-lg-2">
+            <label class="form-label small text-muted">Subregión</label>
+            <select
+                name="subregion"
+                class="form-select"
+                data-subregion-select
+                data-current-value="<?= htmlspecialchars($filterSubregion, ENT_QUOTES, 'UTF-8') ?>"
+            >
+                <option value="">Todas</option>
+            </select>
+        </div>
+        <div class="col-lg-2">
+            <label class="form-label small text-muted">Municipio(s)</label>
+            <select
+                name="municipality[]"
+                class="form-select"
+                multiple
+                data-municipality-select
+                data-municipality-multi="1"
+                data-current-values="<?= $municipalitiesJson ?>"
+                disabled
+            ></select>
+        </div>
 
-        <div class="col-lg-3">
+        <div class="col-lg-2">
             <label class="form-label small text-muted">Estado</label>
             <?php $currentState = (string) ($_GET['state'] ?? ''); ?>
             <select name="state" class="form-select">

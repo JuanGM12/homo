@@ -14,6 +14,12 @@ $lockEvalSearchToDocument = (bool) ($lockEvalSearchToDocument ?? false);
 
 $currentSort = (string) ($_GET['sort'] ?? 'municipality');
 $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
+
+$evalMunicipalities = $filters['municipalities'] ?? [];
+if (!is_array($evalMunicipalities)) {
+    $evalMunicipalities = [];
+}
+$evalMunicipalitiesJson = htmlspecialchars(json_encode($evalMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 ?>
 
 <section class="mb-5">
@@ -44,9 +50,9 @@ $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' 
     </div>
 
     <!-- Filtros -->
-    <div class="card border-0 shadow-sm rounded-4 mb-4" data-territory-filter>
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body p-4">
-            <form method="get" action="/evaluaciones" id="eval-filter-form" data-eval-filters class="row g-3 align-items-end">
+            <form method="get" action="/evaluaciones" id="eval-filter-form" data-eval-filters data-territory-filter class="row g-3 align-items-end">
                 <input type="hidden" name="sort" value="<?= htmlspecialchars($currentSort, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="dir"  value="<?= htmlspecialchars($currentDir,  ENT_QUOTES, 'UTF-8') ?>">
                 <div class="col-sm-6 col-md-4 col-lg-2">
@@ -75,11 +81,16 @@ $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' 
                     </select>
                 </div>
                 <div class="col-sm-6 col-md-4 col-lg-2">
-                    <label class="form-label small fw-semibold text-muted mb-1">Municipio</label>
-                    <select name="municipality" class="form-select" data-municipality-select
-                        data-current-value="<?= htmlspecialchars((string) ($filters['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
-                        <option value="">Todos</option>
-                    </select>
+                    <label class="form-label small fw-semibold text-muted mb-1">Municipio(s)</label>
+                    <select
+                        name="municipality[]"
+                        class="form-select"
+                        multiple
+                        data-municipality-select
+                        data-municipality-multi="1"
+                        data-current-values="<?= $evalMunicipalitiesJson ?>"
+                        disabled
+                    ></select>
                 </div>
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <label class="form-label small fw-semibold text-muted mb-1">Impacto</label>

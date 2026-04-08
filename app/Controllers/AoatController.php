@@ -12,6 +12,7 @@ use App\Services\Flash;
 use App\Services\Mailer;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Support\MunicipalityListRequest;
 
 final class AoatController
 {
@@ -43,6 +44,8 @@ final class AoatController
         $activityTypeFilter = trim((string) $request->input('activity_type', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
+        $subregionFilter = trim((string) $request->input('subregion', ''));
+        $municipalityFilters = MunicipalityListRequest::parse($request);
         $sort = trim((string) $request->input('sort', 'activity_date'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
@@ -81,13 +84,21 @@ final class AoatController
         $records = $this->attachActivityTypeToRecords($records);
 
         // Filtros en memoria (suficiente para el volumen esperado)
-        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '') {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
 
                 if ($activityTypeFilter !== '' && (string) ($row['activity_type'] ?? '') !== $activityTypeFilter) {
+                    return false;
+                }
+
+                if ($subregionFilter !== '' && (string) ($row['subregion'] ?? '') !== $subregionFilter) {
+                    return false;
+                }
+
+                if ($municipalityFilters !== [] && !in_array((string) ($row['municipality'] ?? ''), $municipalityFilters, true)) {
                     return false;
                 }
 
@@ -135,6 +146,8 @@ final class AoatController
             'records' => $paginatedRecords,
             'pagination' => $pagination,
             'isAuditView' => $isAuditView,
+            'filterSubregion' => $subregionFilter,
+            'filterMunicipalities' => $municipalityFilters,
         ]);
     }
 
@@ -446,6 +459,8 @@ final class AoatController
         $activityTypeFilter = trim((string) $request->input('activity_type', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
+        $subregionFilter = trim((string) $request->input('subregion', ''));
+        $municipalityFilters = MunicipalityListRequest::parse($request);
 
         if ($isAuditView) {
             $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
@@ -475,13 +490,21 @@ final class AoatController
         $records = $this->attachActivityDateToRecords($records);
         $records = $this->attachActivityTypeToRecords($records);
 
-        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '') {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
 
                 if ($activityTypeFilter !== '' && (string) ($row['activity_type'] ?? '') !== $activityTypeFilter) {
+                    return false;
+                }
+
+                if ($subregionFilter !== '' && (string) ($row['subregion'] ?? '') !== $subregionFilter) {
+                    return false;
+                }
+
+                if ($municipalityFilters !== [] && !in_array((string) ($row['municipality'] ?? ''), $municipalityFilters, true)) {
                     return false;
                 }
 
@@ -977,6 +1000,168 @@ final class AoatController
     }
 
     /**
+     * Cambio de estado masivo (auditoría): aprueba o devuelve varios registros en una sola acción.
+     * Mismas reglas que {@see updateState()} por registro.
+     */
+    public function updateStateBulk(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+
+        $roles = $user['roles'] ?? [];
+        $canAudit = in_array('especialista', $roles, true)
+            || in_array('coordinadora', $roles, true)
+            || in_array('coordinador', $roles, true)
+            || in_array('admin', $roles, true);
+        if (!$canAudit) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $idsRaw = $request->input('ids', []);
+        if (!is_array($idsRaw)) {
+            $idsRaw = [];
+        }
+        $uniqueIds = [];
+        foreach ($idsRaw as $v) {
+            $id = (int) $v;
+            if ($id > 0) {
+                $uniqueIds[$id] = true;
+            }
+        }
+        $ids = array_keys($uniqueIds);
+        if (count($ids) > 80) {
+            $ids = array_slice($ids, 0, 80);
+        }
+
+        $newState = (string) $request->input('state', '');
+        $observation = trim((string) $request->input('observation', ''));
+        $motive = trim((string) $request->input('motive', ''));
+
+        if ($ids === [] || !in_array($newState, ['Aprobada', 'Devuelta'], true)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Datos no válidos',
+                'message' => 'Selecciona al menos un registro e indica una acción válida.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if ($newState === 'Devuelta') {
+            $allowedMotives = ['Sin Cargar en AoAT', 'Sin cargar en Drive', 'Errores calidad del dato'];
+            if ($observation === '' || !in_array($motive, $allowedMotives, true)) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Información requerida',
+                    'message' => 'Para devolver en bloque debes indicar motivo y observación.',
+                ]);
+
+                return Response::redirect('/aoat');
+            }
+        }
+
+        $repo = new AoatRepository();
+        $userId = (int) ($user['id'] ?? 0);
+        $ok = 0;
+        $skipped = 0;
+
+        foreach ($ids as $id) {
+            $record = $repo->findById($id);
+            if ($record === null) {
+                $skipped++;
+
+                continue;
+            }
+
+            if ((int) ($record['user_id'] ?? 0) === $userId) {
+                $skipped++;
+
+                continue;
+            }
+
+            $current = (string) ($record['state'] ?? '');
+
+            if ($newState === 'Devuelta') {
+                if ($current !== 'Asignada') {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $repo->update($id, [
+                    'state' => 'Devuelta',
+                    'audit_observation' => $observation,
+                    'audit_motive' => $motive,
+                ]);
+
+                $toEmail = (string) ($record['professional_email'] ?? '');
+                $toName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
+                $payload = [];
+                if (isset($record['payload'])) {
+                    $decodedPayload = json_decode((string) $record['payload'], true);
+                    if (is_array($decodedPayload)) {
+                        $payload = $decodedPayload;
+                    }
+                }
+
+                Mailer::scheduleAoatReturnedNotification(
+                    $toEmail,
+                    $toName,
+                    $observation,
+                    $motive,
+                    $id,
+                    (string) ($record['subregion'] ?? ''),
+                    (string) ($record['municipality'] ?? ''),
+                    (string) ($payload['activity_date'] ?? '')
+                );
+                $ok++;
+
+                continue;
+            }
+
+            // Aprobada
+            if ($current === 'Asignada' || $current === 'Realizado') {
+                $repo->update($id, [
+                    'state' => 'Aprobada',
+                    'audit_observation' => null,
+                    'audit_motive' => null,
+                ]);
+                $ok++;
+
+                continue;
+            }
+
+            $skipped++;
+        }
+
+        if ($ok === 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Sin cambios aplicados',
+                'message' => 'Ningún registro cumplía las condiciones para esta acción (estado o permisos).',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $verb = $newState === 'Devuelta' ? 'devueltos' : 'aprobados';
+        $msg = "Se actualizaron {$ok} registro(s) correctamente ({$verb}).";
+        if ($skipped > 0) {
+            $msg .= " {$skipped} registro(s) no se modificaron porque no aplicaban.";
+        }
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Auditoría masiva',
+            'message' => $msg,
+        ]);
+
+        return Response::redirect('/aoat');
+    }
+
+    /**
      * El profesional marca su AoAT como "Realizado" tras los ajustes solicitados (solo desde "Devuelta").
      */
     public function markAsRealizado(Request $request): Response
@@ -1023,6 +1208,104 @@ final class AoatController
         ]);
 
         return Response::redirect('/aoat');
+    }
+
+    /**
+     * Elimina un registro de AoAT (solo admin, coordinación o especialista con alcance acorde).
+     */
+    public function destroy(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (!$this->userCanAccessAoat($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'No se indicó un registro de AoAT válido.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $repo = new AoatRepository();
+        $record = $repo->findById($id);
+        if ($record === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'La AoAT indicada no existe.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        if (!self::canUserDeleteAoatRecord($user, $record)) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Acción no permitida',
+                'message' => 'No tienes permiso para eliminar este registro de AoAT.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $repo->deleteById($id);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Registro eliminado',
+            'message' => 'La AoAT se eliminó del sistema.',
+        ]);
+
+        return Response::redirect('/aoat');
+    }
+
+    /**
+     * Admin y coordinación pueden eliminar cualquier registro en vista de auditoría.
+     * Especialista: mismo alcance que la auditoría y no sobre sus propios registros.
+     */
+    public static function canUserDeleteAoatRecord(array $user, array $record): bool
+    {
+        $roles = $user['roles'] ?? [];
+        $hasElevatedRole = in_array('admin', $roles, true)
+            || in_array('coordinadora', $roles, true)
+            || in_array('coordinador', $roles, true)
+            || in_array('especialista', $roles, true);
+        if (!$hasElevatedRole) {
+            return false;
+        }
+
+        if (in_array('admin', $roles, true)
+            || in_array('coordinadora', $roles, true)
+            || in_array('coordinador', $roles, true)) {
+            return true;
+        }
+
+        if ((int) ($record['user_id'] ?? 0) === (int) ($user['id'] ?? 0)) {
+            return false;
+        }
+
+        $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
+        $profRole = strtolower(trim((string) ($record['professional_role'] ?? '')));
+
+        if ($primaryRole === 'medico') {
+            return $profRole === 'medico';
+        }
+        if ($primaryRole === 'abogado') {
+            return $profRole === 'abogado';
+        }
+        if ($primaryRole === 'psicologo') {
+            return in_array($profRole, ['psicologo', 'profesional social', 'profesional_social'], true);
+        }
+
+        return false;
     }
 
     private function userCanAccessAoat(array $user): bool

@@ -11,6 +11,7 @@ use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Support\MunicipalityListRequest;
 
 final class PicController
 {
@@ -59,8 +60,10 @@ final class PicController
         $records = $this->hydrateProfessionalRoles($records);
         $roleOptions = $this->extractRoleOptions($records);
         $roleFilter = trim((string) $request->input('role', ''));
+        $subregionFilter = trim((string) $request->input('subregion', ''));
+        $municipalityFilters = MunicipalityListRequest::parse($request);
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
         $records = $this->sortRecords($records, $sort, $dir);
         $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
         $paginatedRecords = $pagination['items'];
@@ -78,6 +81,8 @@ final class PicController
             'isAuditView' => $isAuditView,
             'canCreateOwnRecord' => $this->userCanCreateOwnRecord($user),
             'roleOptions' => $roleOptions,
+            'filterSubregion' => $subregionFilter,
+            'filterMunicipalities' => $municipalityFilters,
         ]);
     }
 
@@ -285,8 +290,10 @@ final class PicController
         $sort = trim((string) $request->input('sort', 'created_at'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $format = strtolower(trim((string) $request->input('format', 'excel')));
+        $subregionFilter = trim((string) $request->input('subregion', ''));
+        $municipalityFilters = MunicipalityListRequest::parse($request);
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
         $records = $this->sortRecords($records, $sort, $dir);
 
         if ($records === []) {
@@ -305,6 +312,8 @@ final class PicController
                 'role' => $roleFilter,
                 'from_date' => $fromDate,
                 'to_date' => $toDate,
+                'subregion' => $subregionFilter,
+                'municipalities' => $municipalityFilters,
             ]);
 
             $pdfBinary = PdfService::renderHtml($html, 'L', 'Seguimiento PIC');
@@ -547,19 +556,24 @@ final class PicController
      * @param array<int, array<string, mixed>> $records
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * @param list<string> $municipalityFilters
+     */
     private function applyIndexFilters(
         array $records,
         string $search,
         string $stateFilter,
         string $roleFilter,
         string $fromDate,
-        string $toDate
+        string $toDate,
+        string $subregionFilter = '',
+        array $municipalityFilters = []
     ): array {
-        if ($search === '' && $stateFilter === '' && $roleFilter === '' && $fromDate === '' && $toDate === '') {
+        if ($search === '' && $stateFilter === '' && $roleFilter === '' && $fromDate === '' && $toDate === '' && $subregionFilter === '' && $municipalityFilters === []) {
             return $records;
         }
 
-        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $roleFilter, $fromDate, $toDate): bool {
+        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
             if ($stateFilter !== '') {
                 $state = !empty($row['editable']) ? 'Editable' : 'Aprobado';
                 if ($state !== $stateFilter) {
@@ -568,6 +582,14 @@ final class PicController
             }
 
             if ($roleFilter !== '' && (string) ($row['professional_role'] ?? '') !== $roleFilter) {
+                return false;
+            }
+
+            if ($subregionFilter !== '' && (string) ($row['subregion'] ?? '') !== $subregionFilter) {
+                return false;
+            }
+
+            if ($municipalityFilters !== [] && !in_array((string) ($row['municipality'] ?? ''), $municipalityFilters, true)) {
                 return false;
             }
 
@@ -614,12 +636,17 @@ final class PicController
             'q' => 'Buscar',
             'state' => 'Estado',
             'role' => 'Rol',
+            'subregion' => 'Subregión',
             'from_date' => 'Desde',
             'to_date' => 'Hasta',
         ] as $key => $label) {
             if (($filters[$key] ?? '') !== '') {
                 $filterLabels[] = $label . ': ' . (string) $filters[$key];
             }
+        }
+        $muns = $filters['municipalities'] ?? [];
+        if (is_array($muns) && $muns !== []) {
+            $filterLabels[] = 'Municipio(s): ' . implode(', ', $muns);
         }
 
         $rowsHtml = '';

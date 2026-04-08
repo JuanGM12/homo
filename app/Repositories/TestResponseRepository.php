@@ -135,7 +135,8 @@ final class TestResponseRepository
      *  - document_number: string (coincidencia exacta en document_number; no usar LIKE para no filtrar por subcadena)
      *  - search: string
      *  - subregion: string
-     *  - municipality: string
+     *  - municipality: string (un solo valor; compatibilidad)
+     *  - municipalities: list<string> (varios municipios; tiene prioridad sobre municipality)
      *  - date_from: 'Y-m-d'
      *  - date_to: 'Y-m-d'
      *
@@ -192,9 +193,26 @@ final class TestResponseRepository
             $params[':subregion'] = $filters['subregion'];
         }
 
-        if (!empty($filters['municipality'])) {
-            $where[] = 'municipality = :municipality';
-            $params[':municipality'] = $filters['municipality'];
+        $municipalities = [];
+        if (!empty($filters['municipalities']) && is_array($filters['municipalities'])) {
+            $municipalities = array_values(array_unique(array_filter(
+                array_map(static fn (mixed $m): string => trim((string) $m), $filters['municipalities']),
+                static fn (string $m): bool => $m !== ''
+            )));
+        } elseif (!empty($filters['municipality'])) {
+            $one = trim((string) $filters['municipality']);
+            if ($one !== '') {
+                $municipalities = [$one];
+            }
+        }
+        if ($municipalities !== []) {
+            $placeholders = [];
+            foreach ($municipalities as $i => $mun) {
+                $ph = ':mun_f_' . $i;
+                $placeholders[] = $ph;
+                $params[$ph] = $mun;
+            }
+            $where[] = 'municipality IN (' . implode(', ', $placeholders) . ')';
         }
 
         if (!empty($filters['date_from'])) {

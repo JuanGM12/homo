@@ -15,6 +15,12 @@ $exportPdfParams = $exportParams;
 $exportPdfParams['format'] = 'pdf';
 $exportExcelQuery = '?' . http_build_query($exportExcelParams);
 $exportPdfQuery = '?' . http_build_query($exportPdfParams);
+
+$encMunicipalities = $filters['municipalities'] ?? [];
+if (!is_array($encMunicipalities)) {
+    $encMunicipalities = [];
+}
+$encMunicipalitiesJson = htmlspecialchars(json_encode($encMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 ?>
 
 <section class="mt-5 mb-4">
@@ -37,7 +43,7 @@ $exportPdfQuery = '?' . http_build_query($exportPdfParams);
 
     <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body p-4">
-            <form method="get" action="/encuesta-opinion-aoat" id="enc-filter-form" data-encuesta-filters class="row g-3 align-items-end">
+            <form method="get" action="/encuesta-opinion-aoat" id="enc-filter-form" data-encuesta-filters data-territory-filter class="row g-3 align-items-end">
                 <input type="hidden" name="sort" value="<?= htmlspecialchars($currentSort, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="dir" value="<?= htmlspecialchars($currentDir, ENT_QUOTES, 'UTF-8') ?>">
 
@@ -66,10 +72,16 @@ $exportPdfQuery = '?' . http_build_query($exportPdfParams);
                     </select>
                 </div>
                 <div class="col-sm-6 col-md-4 col-lg-2">
-                    <label class="form-label small fw-semibold text-muted mb-1">Municipio</label>
-                    <select name="municipality" class="form-select" data-municipality-select data-current-value="<?= htmlspecialchars((string) ($filters['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
-                        <option value="">Todos</option>
-                    </select>
+                    <label class="form-label small fw-semibold text-muted mb-1">Municipio(s)</label>
+                    <select
+                        name="municipality[]"
+                        class="form-select"
+                        multiple
+                        data-municipality-select
+                        data-municipality-multi="1"
+                        data-current-values="<?= $encMunicipalitiesJson ?>"
+                        disabled
+                    ></select>
                 </div>
                 <div class="col-sm-6 col-md-4 col-lg-2">
                     <label class="form-label small fw-semibold text-muted mb-1">Desde</label>

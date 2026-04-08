@@ -3,6 +3,7 @@
 /** @var bool $isAudit */
 /** @var array|null $currentUserLocal */
 
+use App\Controllers\AoatController;
 use App\Services\Auth;
 
 $user = $currentUserLocal ?? Auth::user();
@@ -39,8 +40,10 @@ $formatActivityDate = static function (?string $value): array {
     $canEditForm = !$isAudit && $isOwner && !in_array($state, ['Aprobada', 'Realizado'], true);
     $canAuditState = $isAudit && !$isOwner && $state === 'Asignada' && $canAuditRole;
     $canApproveFromRealizado = $isAudit && !$isOwner && $state === 'Realizado' && $canAuditRole;
+    $canBulkSelect = $canAuditState || $canApproveFromRealizado;
     $canMarkRealizado = !$isAudit && $isOwner && $state === 'Devuelta';
     $canExportSingle = ($isAdmin || $isCoordinator || $isSpecialist) || ($isOwner && $state === 'Aprobada');
+    $canDeleteThisRow = $isAudit && is_array($user) && AoatController::canUserDeleteAoatRecord($user, $record);
 
     $payloadArray = [];
     if (!empty($record['payload'])) {
@@ -104,6 +107,22 @@ $formatActivityDate = static function (?string $value): array {
     $activityTypeLabel = trim((string) ($record['activity_type'] ?? ''));
     ?>
     <tr class="aoat-row">
+        <?php if ($isAudit): ?>
+            <td class="aoat-bulk-col text-center align-middle">
+                <?php if ($canBulkSelect): ?>
+                    <input
+                        type="checkbox"
+                        class="form-check-input"
+                        data-aoat-bulk-check
+                        value="<?= (int) $record['id'] ?>"
+                        data-aoat-bulk-row-state="<?= htmlspecialchars($state, ENT_QUOTES, 'UTF-8') ?>"
+                        aria-label="Seleccionar registro <?= (int) $record['id'] ?>"
+                    >
+                <?php else: ?>
+                    <span class="text-muted small">—</span>
+                <?php endif; ?>
+            </td>
+        <?php endif; ?>
         <td class="aoat-cell-date">
             <div class="aoat-date-stack">
                 <span class="aoat-date-main"><?= htmlspecialchars($dateParts['date'], ENT_QUOTES, 'UTF-8') ?></span>
@@ -171,7 +190,19 @@ $formatActivityDate = static function (?string $value): array {
                         Aprobar revisión
                     </button>
                 <?php endif; ?>
-                <?php if (!$canExportSingle && !$canEditForm && !$canAuditState && !$canApproveFromRealizado): ?>
+                <?php if ($canDeleteThisRow): ?>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger"
+                        data-aoat-delete
+                        data-aoat-id="<?= (int) $record['id'] ?>"
+                        aria-label="Eliminar AoAT <?= (int) $record['id'] ?>"
+                    >
+                        <i class="bi bi-trash me-1"></i>
+                        Eliminar
+                    </button>
+                <?php endif; ?>
+                <?php if (!$canExportSingle && !$canEditForm && !$canAuditState && !$canApproveFromRealizado && !$canDeleteThisRow): ?>
                     <span class="aoat-no-actions">Sin acciones adicionales</span>
                 <?php endif; ?>
             </div>

@@ -11,6 +11,7 @@ use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Support\MunicipalityListRequest;
 use DateTimeImmutable;
 
 final class EntrenamientoController
@@ -44,6 +45,8 @@ final class EntrenamientoController
         $stateFilter = trim((string) $request->input('state', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
+        $subregionFilter = trim((string) $request->input('subregion', ''));
+        $municipalityFilters = MunicipalityListRequest::parse($request);
         $sort = trim((string) $request->input('sort', 'created_at'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
@@ -58,7 +61,7 @@ final class EntrenamientoController
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
         $records = $this->sortRecords($records, $sort, $dir);
         $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
         $paginatedRecords = $pagination['items'];
@@ -466,10 +469,12 @@ final class EntrenamientoController
         $stateFilter = trim((string) $request->input('state', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
+        $subregionFilter = trim((string) $request->input('subregion', ''));
+        $municipalityFilters = MunicipalityListRequest::parse($request);
         $sort = trim((string) $request->input('sort', 'created_at'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
 
         return $this->sortRecords($records, $sort, $dir);
     }
@@ -505,6 +510,14 @@ final class EntrenamientoController
         $toDate = trim((string) $request->input('to_date', ''));
         if ($toDate !== '') {
             $meta[] = 'Hasta: ' . $esc($toDate);
+        }
+        $subregion = trim((string) $request->input('subregion', ''));
+        if ($subregion !== '') {
+            $meta[] = 'Subregión: ' . $esc($subregion);
+        }
+        $muns = MunicipalityListRequest::parse($request);
+        if ($muns !== []) {
+            $meta[] = 'Municipio(s): ' . $esc(implode(', ', $muns));
         }
 
         $rows = '';
@@ -689,23 +702,36 @@ final class EntrenamientoController
      * @param array<int, array<string, mixed>> $records
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * @param list<string> $municipalityFilters
+     */
     private function applyIndexFilters(
         array $records,
         string $search,
         string $stateFilter,
         string $fromDate,
-        string $toDate
+        string $toDate,
+        string $subregionFilter = '',
+        array $municipalityFilters = []
     ): array {
-        if ($search === '' && $stateFilter === '' && $fromDate === '' && $toDate === '') {
+        if ($search === '' && $stateFilter === '' && $fromDate === '' && $toDate === '' && $subregionFilter === '' && $municipalityFilters === []) {
             return $records;
         }
 
-        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate): bool {
+        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
             if ($stateFilter !== '') {
                 $state = !empty($row['editable']) ? 'Editable' : 'Aprobado';
                 if ($state !== $stateFilter) {
                     return false;
                 }
+            }
+
+            if ($subregionFilter !== '' && (string) ($row['subregion'] ?? '') !== $subregionFilter) {
+                return false;
+            }
+
+            if ($municipalityFilters !== [] && !in_array((string) ($row['municipality'] ?? ''), $municipalityFilters, true)) {
+                return false;
             }
 
             $created = trim((string) ($row['created_at'] ?? ''));

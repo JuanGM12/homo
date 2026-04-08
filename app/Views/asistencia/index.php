@@ -64,6 +64,13 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
 };
 
 $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
+
+$asiSubregion = (string) ($filters['subregion'] ?? '');
+$asiMunicipalities = $filters['municipalities'] ?? [];
+if (!is_array($asiMunicipalities)) {
+    $asiMunicipalities = [];
+}
+$asiMunicipalitiesJson = htmlspecialchars(json_encode($asiMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 ?>
 <section class="mt-5 mb-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
@@ -90,19 +97,32 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
 
     <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body p-4">
-            <form method="get" action="/asistencia" id="asi-filter-form" class="row g-3 align-items-end">
+            <form method="get" action="/asistencia" id="asi-filter-form" class="row g-3 align-items-end" data-territory-filter>
                 <input type="hidden" name="tab" value="<?= htmlspecialchars($activeTab, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="col-md-3 col-sm-6">
                     <label class="form-label small fw-semibold text-muted mb-1">Subregión</label>
-                    <select name="subregion" class="form-select" data-subregion-filter data-asi-autosubmit>
+                    <select
+                        name="subregion"
+                        class="form-select"
+                        data-subregion-select
+                        data-asi-autosubmit
+                        data-current-value="<?= htmlspecialchars($asiSubregion, ENT_QUOTES, 'UTF-8') ?>"
+                    >
                         <option value="">Todas</option>
                     </select>
                 </div>
                 <div class="col-md-3 col-sm-6">
-                    <label class="form-label small fw-semibold text-muted mb-1">Municipio</label>
-                    <select name="municipality" class="form-select" data-municipality-filter data-asi-autosubmit disabled>
-                        <option value="">Todos</option>
-                    </select>
+                    <label class="form-label small fw-semibold text-muted mb-1">Municipio(s)</label>
+                    <select
+                        name="municipality[]"
+                        class="form-select"
+                        multiple
+                        data-municipality-select
+                        data-municipality-multi="1"
+                        data-current-values="<?= $asiMunicipalitiesJson ?>"
+                        data-asi-autosubmit
+                        disabled
+                    ></select>
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <label class="form-label small fw-semibold text-muted mb-1">Asesor</label>
@@ -271,53 +291,3 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
         </div>
     <?php endif; ?>
 </section>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    // Defer tras app.js (restauración de filtros en sessionStorage puede actualizar la URL antes).
-    setTimeout(function () {
-        document.querySelectorAll('[data-asi-autosubmit]').forEach(function (el) {
-            el.addEventListener('change', function () {
-                document.getElementById('asi-filter-form').submit();
-            });
-        });
-
-        var subregionSelect = document.querySelector('[data-subregion-filter]');
-        var municipalitySelect = document.querySelector('[data-municipality-filter]');
-        if (!subregionSelect || !municipalitySelect) return;
-
-        fetch('/assets/js/municipios.json').then(function (r) { return r.json(); }).then(function (data) {
-            Object.keys(data).forEach(function (sub) {
-                var opt = document.createElement('option');
-                opt.value = sub;
-                opt.textContent = sub;
-                subregionSelect.appendChild(opt);
-            });
-            var currentSub = new URLSearchParams(window.location.search).get('subregion');
-            var currentMun = new URLSearchParams(window.location.search).get('municipality');
-            if (currentSub) {
-                subregionSelect.value = currentSub;
-                municipalitySelect.disabled = false;
-                (data[currentSub] || []).forEach(function (m) {
-                    var o = document.createElement('option');
-                    o.value = m;
-                    o.textContent = m;
-                    if (m === currentMun) o.selected = true;
-                    municipalitySelect.appendChild(o);
-                });
-            }
-            subregionSelect.addEventListener('change', function () {
-                municipalitySelect.innerHTML = '<option value="">Todos</option>';
-                municipalitySelect.disabled = !subregionSelect.value;
-                if (subregionSelect.value && data[subregionSelect.value]) {
-                    data[subregionSelect.value].forEach(function (m) {
-                        var o = document.createElement('option');
-                        o.value = m;
-                        o.textContent = m;
-                        municipalitySelect.appendChild(o);
-                    });
-                }
-            });
-        });
-    }, 0);
-});
-</script>

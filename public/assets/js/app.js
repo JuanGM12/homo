@@ -54,32 +54,73 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function homoSyncFormFromSearchParams(form, sp) {
-        if (!form) {
-            return;
-        }
+    function homoParamsGroupedByName(sp) {
+        const map = new Map();
         sp.forEach((value, name) => {
             if (name === 'partial') {
                 return;
             }
-            const el = form.elements.namedItem(name);
-            if (!el) {
+            if (!map.has(name)) {
+                map.set(name, []);
+            }
+            map.get(name).push(value);
+        });
+        return map;
+    }
+
+    /** Valores de municipio desde query (municipality[], municipality, municipality[0]…). */
+    function homoGetAllMunicipalityValues(sp) {
+        const out = [];
+        const seen = new Set();
+        const push = (v) => {
+            if (v === null || v === '') {
                 return;
             }
+            if (!seen.has(v)) {
+                seen.add(v);
+                out.push(v);
+            }
+        };
+        sp.getAll('municipality[]').forEach(push);
+        sp.getAll('municipality').forEach(push);
+        sp.forEach((v, name) => {
+            if (/^municipality\[\d+\]$/.test(name)) {
+                push(v);
+            }
+        });
+        return out;
+    }
+
+    function homoSyncFormFromSearchParams(form, sp) {
+        if (!form) {
+            return;
+        }
+        const grouped = homoParamsGroupedByName(sp);
+        for (const [name, values] of grouped) {
+            const el = form.elements.namedItem(name);
+            if (!el) {
+                continue;
+            }
             if (el instanceof RadioNodeList) {
+                const last = values[values.length - 1];
                 for (let i = 0; i < el.length; i++) {
-                    if (el[i].value === value) {
+                    if (el[i].value === last) {
                         el[i].checked = true;
                     }
+                }
+            } else if (el instanceof HTMLSelectElement && el.multiple) {
+                const want = new Set(values.filter(Boolean));
+                for (let i = 0; i < el.options.length; i++) {
+                    el.options[i].selected = want.has(el.options[i].value);
                 }
             } else if (
                 el instanceof HTMLSelectElement ||
                 el instanceof HTMLInputElement ||
                 el instanceof HTMLTextAreaElement
             ) {
-                el.value = value;
+                el.value = values[values.length - 1] ?? '';
             }
-        });
+        }
     }
 
     const homoPendingAjaxRefresh = {};
@@ -120,12 +161,19 @@ document.addEventListener('DOMContentLoaded', () => {
         window.history.replaceState({}, '', path + `?${stored}`);
 
         const sr = sp.get('subregion') || '';
-        const mu = sp.get('municipality') || '';
+        const muns = homoGetAllMunicipalityValues(sp);
+        const muSingle = muns.length > 0 ? muns[0] : sp.get('municipality') || '';
         document.querySelectorAll('[data-subregion-select]').forEach((sel) => {
             sel.dataset.currentValue = sr;
         });
         document.querySelectorAll('[data-municipality-select]').forEach((sel) => {
-            sel.dataset.currentValue = mu;
+            if (sel.multiple || sel.getAttribute('data-municipality-multi') === '1') {
+                sel.dataset.currentValues = JSON.stringify(muns);
+                delete sel.dataset.currentValue;
+            } else {
+                sel.dataset.currentValue = muSingle;
+                delete sel.dataset.currentValues;
+            }
         });
 
         const selectors = homoFilterFormsByPath[path] || [];
@@ -257,7 +305,169 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Subregión / Municipio dinámicos (Evaluaciones, AoAT, Planeación, etc.)
+    /** Limpieza de listeners del desplegable de municipios (checkboxes). */
+    const homoMuniWidgetCleanup = new WeakMap();
+
+    function homoUnmountMunicipalityMultiWidget(sel) {
+        if (!(sel instanceof HTMLSelectElement) || sel.dataset.homoMuniWidget !== '1') {
+            return;
+        }
+        const root = sel.closest('.homo-muni-multiselect');
+        const cleanup = root ? homoMuniWidgetCleanup.get(root) : null;
+        if (cleanup) {
+            document.removeEventListener('click', cleanup.onDocClick);
+            document.removeEventListener('keydown', cleanup.onKey);
+            homoMuniWidgetCleanup.delete(root);
+        }
+        if (root && root.parentNode) {
+            root.parentNode.insertBefore(sel, root);
+            root.remove();
+        }
+        sel.classList.remove('homo-muni-native', 'visually-hidden');
+        sel.removeAttribute('tabindex');
+        delete sel.dataset.homoMuniWidget;
+    }
+
+    /**
+     * Sustituye el &lt;select multiple&gt; por un botón + panel con casillas (clic sin Ctrl).
+     */
+    function homoMountMunicipalityMultiWidget(sel, emptyLabel) {
+        if (!(sel instanceof HTMLSelectElement)) {
+            return;
+        }
+        const isMulti = sel.multiple === true || sel.getAttribute('data-municipality-multi') === '1';
+        if (!isMulti) {
+            return;
+        }
+
+        homoUnmountMunicipalityMultiWidget(sel);
+
+        const root = document.createElement('div');
+        root.className = 'homo-muni-multiselect w-100';
+        if (sel.classList.contains('form-select-sm')) {
+            root.classList.add('homo-muni-multiselect--sm');
+        }
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'homo-muni-multiselect__toggle';
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-haspopup', 'listbox');
+        btn.setAttribute('title', 'Elija uno o varios municipios');
+
+        const panel = document.createElement('div');
+        panel.className = 'homo-muni-multiselect__panel';
+        panel.setAttribute('role', 'listbox');
+        panel.hidden = true;
+
+        const parent = sel.parentNode;
+        parent.insertBefore(root, sel);
+        root.appendChild(btn);
+        root.appendChild(panel);
+        root.appendChild(sel);
+
+        sel.classList.add('homo-muni-native', 'visually-hidden');
+        sel.setAttribute('tabindex', '-1');
+        sel.dataset.homoMuniWidget = '1';
+
+        const chevronIcon = () => {
+            const i = document.createElement('i');
+            i.className = 'bi bi-chevron-down homo-muni-multiselect__chevron';
+            i.setAttribute('aria-hidden', 'true');
+            return i;
+        };
+
+        const updateButton = () => {
+            const values = Array.from(sel.selectedOptions)
+                .map((o) => o.value)
+                .filter(Boolean);
+            const labelEl = document.createElement('span');
+            labelEl.className = 'text-truncate flex-grow-1 text-start';
+            if (values.length === 0) {
+                labelEl.textContent = emptyLabel;
+                labelEl.classList.add('text-muted');
+            } else if (values.length === 1) {
+                labelEl.textContent = values[0];
+            } else {
+                labelEl.textContent = `${values.length} municipios`;
+            }
+            btn.replaceChildren(labelEl, chevronIcon());
+            btn.disabled = sel.disabled;
+        };
+
+        const syncPanelFromSelect = () => {
+            panel.innerHTML = '';
+            Array.from(sel.options).forEach((opt) => {
+                if (!opt.value) {
+                    return;
+                }
+                const row = document.createElement('label');
+                row.className = 'homo-muni-multiselect__option';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = opt.selected;
+                const text = document.createElement('span');
+                text.textContent = opt.textContent || opt.value;
+                row.appendChild(cb);
+                row.appendChild(text);
+                cb.addEventListener('change', () => {
+                    opt.selected = cb.checked;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    updateButton();
+                });
+                panel.appendChild(row);
+            });
+        };
+
+        const close = () => {
+            root.classList.remove('is-open');
+            panel.hidden = true;
+            btn.setAttribute('aria-expanded', 'false');
+        };
+
+        const open = () => {
+            syncPanelFromSelect();
+            root.classList.add('is-open');
+            panel.hidden = false;
+            btn.setAttribute('aria-expanded', 'true');
+        };
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (sel.disabled) {
+                return;
+            }
+            if (root.classList.contains('is-open')) {
+                close();
+            } else {
+                open();
+            }
+        });
+
+        const onDocClick = (e) => {
+            if (!(e.target instanceof Node)) {
+                return;
+            }
+            if (!root.contains(e.target)) {
+                close();
+            }
+        };
+
+        const onKey = (e) => {
+            if (e.key === 'Escape' && root.classList.contains('is-open')) {
+                close();
+            }
+        };
+
+        document.addEventListener('click', onDocClick);
+        document.addEventListener('keydown', onKey);
+        homoMuniWidgetCleanup.set(root, { onDocClick, onKey });
+
+        updateButton();
+    }
+
+    // Subregión / Municipio dinámicos (Evaluaciones, AoAT, Asistencia, etc.)
     const subregionSelects = document.querySelectorAll('[data-subregion-select]');
 
     if (subregionSelects.length > 0) {
@@ -272,10 +482,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     const isNumberOnlyEdit = !!(form.dataset && form.dataset.numberOnlyEdit === '1');
 
-                    const isTerritoryFilter = form.hasAttribute && form.hasAttribute('data-territory-filter');
+                    const territoryRoot = subregionSelect.closest('[data-territory-filter]') || form;
+                    const isTerritoryFilter = territoryRoot.hasAttribute('data-territory-filter');
                     const municipalityEmptyLabel = isTerritoryFilter
                         ? 'Todos los municipios'
                         : 'Seleccione el municipio de pertenencia';
+
+                    const isMulti =
+                        municipalitySelect.multiple === true ||
+                        municipalitySelect.getAttribute('data-municipality-multi') === '1';
+
+                    const parseSelectedMulti = () => {
+                        try {
+                            const raw = municipalitySelect.dataset.currentValues || '[]';
+                            const parsed = JSON.parse(raw);
+                            return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+                        } catch {
+                            return [];
+                        }
+                    };
 
                     // Llenar opciones de subregión
                     if (subregionSelect.options.length <= 1) {
@@ -287,9 +512,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
 
-                    const fillMunicipalities = (subregionValue, selectedMunicipality) => {
-                        municipalitySelect.innerHTML =
-                            '<option value="">' + municipalityEmptyLabel + '</option>';
+                    const fillMunicipalities = (subregionValue, resetSelection) => {
+                        if (isMulti) {
+                            homoUnmountMunicipalityMultiWidget(municipalitySelect);
+                        }
+
+                        const selectedMulti = resetSelection ? [] : parseSelectedMulti();
+                        const selectedSingle = resetSelection ? '' : municipalitySelect.dataset.currentValue || '';
+
+                        if (isMulti) {
+                            municipalitySelect.innerHTML = '';
+                        } else {
+                            municipalitySelect.innerHTML =
+                                '<option value="">' + municipalityEmptyLabel + '</option>';
+                        }
                         municipalitySelect.disabled = isNumberOnlyEdit || !subregionValue;
 
                         if (subregionValue && data[subregionValue]) {
@@ -297,31 +533,50 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const option = document.createElement('option');
                                 option.value = municipio;
                                 option.textContent = municipio;
-                                if (municipio === selectedMunicipality) {
+                                if (isMulti) {
+                                    if (selectedMulti.includes(municipio)) {
+                                        option.selected = true;
+                                    }
+                                } else if (municipio === selectedSingle) {
                                     option.selected = true;
                                 }
                                 municipalitySelect.appendChild(option);
                             });
                         }
+
+                        if (isMulti) {
+                            homoMountMunicipalityMultiWidget(municipalitySelect, municipalityEmptyLabel);
+                        }
                     };
 
                     const currentSubregion = subregionSelect.dataset.currentValue || '';
-                    const currentMunicipality = municipalitySelect.dataset.currentValue || '';
 
                     if (currentSubregion) {
                         subregionSelect.value = currentSubregion;
-                        fillMunicipalities(currentSubregion, currentMunicipality);
+                        fillMunicipalities(currentSubregion, false);
+                    } else if (isMulti) {
+                        fillMunicipalities('', true);
                     }
 
                     if (isNumberOnlyEdit) {
                         subregionSelect.disabled = true;
                         municipalitySelect.disabled = true;
+                        if (isMulti && municipalitySelect.dataset.homoMuniWidget === '1') {
+                            const t = municipalitySelect
+                                .closest('.homo-muni-multiselect')
+                                ?.querySelector('.homo-muni-multiselect__toggle');
+                            if (t instanceof HTMLButtonElement) {
+                                t.disabled = true;
+                            }
+                        }
                         return;
                     }
 
                     subregionSelect.addEventListener('change', () => {
                         const selected = subregionSelect.value;
-                        fillMunicipalities(selected, '');
+                        municipalitySelect.dataset.currentValues = JSON.stringify([]);
+                        municipalitySelect.dataset.currentValue = '';
+                        fillMunicipalities(selected, true);
                     });
                 });
             })
@@ -330,10 +585,20 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
+    document.querySelectorAll('#asi-filter-form[data-territory-filter] [data-asi-autosubmit]').forEach((el) => {
+        el.addEventListener('change', () => {
+            const f = document.getElementById('asi-filter-form');
+            if (f) {
+                f.requestSubmit();
+            }
+        });
+    });
+
     // Validación en POST: exigir PRE existente por documento
     const postForms = document.querySelectorAll('form[data-phase="post"][data-test-key]');
 
     postForms.forEach((form) => {
+        const allowPostWithoutPre = (form.dataset.testKey || '') === 'hospitales';
         const docInput = form.querySelector('input[name="document_number"]');
         const firstNameInput = form.querySelector('input[name="first_name"]');
         const lastNameInput = form.querySelector('input[name="last_name"]');
@@ -400,10 +665,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (subregionSelect) subregionSelect.value = '';
                         if (municipalitySelect) municipalitySelect.value = '';
                         if (professionInput) professionInput.value = '';
-                        if (submitButton) {
-                            submitButton.disabled = true;
+                        if (allowPostWithoutPre) {
+                            if (submitButton) {
+                                submitButton.disabled = false;
+                            }
+                        } else {
+                            if (submitButton) {
+                                submitButton.disabled = true;
+                            }
+                            showPreRequiredAlert();
                         }
-                        showPreRequiredAlert();
                     } else {
                         preExists = true;
                         const pre = data.pre || {};
@@ -436,7 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
         docInput.addEventListener('blur', validateDocument);
 
         form.addEventListener('submit', (event) => {
-            if (!preExists) {
+            if (!preExists && !allowPostWithoutPre) {
                 event.preventDefault();
                 showPreRequiredAlert();
             }
@@ -1234,6 +1505,224 @@ document.addEventListener('DOMContentLoaded', () => {
         stateForm.submit();
     });
 
+    document.body.addEventListener('click', async (e) => {
+        const delBtn = e.target.closest('[data-aoat-delete]');
+        if (!delBtn) {
+            return;
+        }
+        e.preventDefault();
+        const deleteForm = document.getElementById('aoat-delete-form');
+        const deleteIdInput = document.getElementById('aoat-delete-id');
+        if (!deleteForm || !deleteIdInput) {
+            return;
+        }
+        const id = delBtn.getAttribute('data-aoat-id') || '';
+        if (!id) {
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: '¿Eliminar esta AoAT?',
+            html: '<p class="small mb-0">Esta acción no se puede deshacer. El registro se eliminará de forma permanente.</p>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#c0392b',
+        });
+
+        if (!result.isConfirmed) {
+            return;
+        }
+
+        deleteIdInput.value = id;
+        deleteForm.submit();
+    });
+
+    const syncAoatBulkToolbar = (panel) => {
+        if (!panel) {
+            return;
+        }
+        const toolbar = panel.querySelector('[data-aoat-bulk-toolbar]');
+        if (!toolbar) {
+            return;
+        }
+        const checks = [...panel.querySelectorAll('[data-aoat-bulk-check]:checked')];
+        const countEl = toolbar.querySelector('[data-aoat-bulk-count]');
+        const btnAprobar = toolbar.querySelector('[data-aoat-bulk-aprobar]');
+        const btnDevolver = toolbar.querySelector('[data-aoat-bulk-devolver]');
+        const selectAll = panel.querySelector('[data-aoat-bulk-select-all]');
+
+        if (countEl) {
+            countEl.textContent = String(checks.length);
+        }
+
+        const hasSelection = checks.length > 0;
+        const hasAsignada = checks.some((cb) => (cb.getAttribute('data-aoat-bulk-row-state') || '') === 'Asignada');
+
+        if (btnAprobar) {
+            btnAprobar.disabled = !hasSelection;
+        }
+        if (btnDevolver) {
+            btnDevolver.disabled = !hasAsignada;
+        }
+
+        if (selectAll) {
+            const all = [...panel.querySelectorAll('[data-aoat-bulk-check]')];
+            if (all.length === 0) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            } else {
+                const nChecked = all.filter((c) => c.checked).length;
+                selectAll.checked = nChecked === all.length;
+                selectAll.indeterminate = nChecked > 0 && nChecked < all.length;
+            }
+        }
+    };
+
+    document.body.addEventListener('change', (e) => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        if (target.matches('[data-aoat-bulk-select-all]')) {
+            const panel = target.closest('[data-aoat-results]');
+            if (!panel) {
+                return;
+            }
+            const on = target.checked;
+            panel.querySelectorAll('[data-aoat-bulk-check]').forEach((cb) => {
+                cb.checked = on;
+            });
+            syncAoatBulkToolbar(panel);
+            return;
+        }
+
+        if (target.matches('[data-aoat-bulk-check]')) {
+            const panel = target.closest('[data-aoat-results]');
+            if (panel) {
+                syncAoatBulkToolbar(panel);
+            }
+        }
+    });
+
+    document.body.addEventListener('click', async (e) => {
+        const btnAprobar = e.target.closest('[data-aoat-bulk-aprobar]');
+        const btnDevolver = e.target.closest('[data-aoat-bulk-devolver]');
+        if (!btnAprobar && !btnDevolver) {
+            return;
+        }
+
+        const panel = (btnAprobar || btnDevolver)?.closest('[data-aoat-results]');
+        if (!panel) {
+            return;
+        }
+
+        const bulkForm = document.getElementById('aoat-state-bulk-form');
+        const bulkIdsWrap = document.getElementById('aoat-state-bulk-ids');
+        const bulkState = document.getElementById('aoat-bulk-state-value');
+        const bulkObs = document.getElementById('aoat-bulk-observation-value');
+        const bulkMotive = document.getElementById('aoat-bulk-motive-value');
+        if (!bulkForm || !bulkIdsWrap || !bulkState || !bulkObs || !bulkMotive) {
+            return;
+        }
+
+        e.preventDefault();
+
+        const checked = [...panel.querySelectorAll('[data-aoat-bulk-check]:checked')];
+        if (checked.length === 0) {
+            return;
+        }
+
+        if (btnAprobar) {
+            const result = await Swal.fire({
+                title: 'Aprobar AoAT en bloque',
+                html: `<p class="small mb-0">Se aprobarán <strong>${checked.length}</strong> registro(s) seleccionado(s) que estén en estado <strong>Asignada</strong> o <strong>Realizado</strong> (los demás se omitirán en el servidor).</p>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, aprobar',
+                cancelButtonText: 'Cancelar',
+                width: '42rem',
+            });
+
+            if (!result.isConfirmed) {
+                return;
+            }
+
+            bulkIdsWrap.innerHTML = '';
+            checked.forEach((cb) => {
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'ids[]';
+                inp.value = cb.value;
+                bulkIdsWrap.appendChild(inp);
+            });
+            bulkState.value = 'Aprobada';
+            bulkObs.value = '';
+            bulkMotive.value = '';
+            bulkForm.submit();
+            return;
+        }
+
+        const asignadaChecks = checked.filter((cb) => (cb.getAttribute('data-aoat-bulk-row-state') || '') === 'Asignada');
+        if (asignadaChecks.length === 0) {
+            await Swal.fire({
+                icon: 'info',
+                title: 'Sin registros en Asignada',
+                text: 'La devolución masiva solo aplica a AoAT en estado Asignada.',
+            });
+            return;
+        }
+
+        const { value: formValues } = await Swal.fire({
+            title: 'Devolver AoAT en bloque',
+            html:
+                `<p class="small text-start mb-2">Se devolverán <strong>${asignadaChecks.length}</strong> registro(s) en estado <strong>Asignada</strong>. Las filas en Realizado no se incluyen.</p>` +
+                '<div class="mb-2 text-start small">Motivo y observación (mismos para todos los seleccionados en Asignada):</div>' +
+                '<select id="swal-aoat-bulk-motive" class="form-select mb-2">' +
+                '<option value="">Selecciona un motivo</option>' +
+                '<option value="Sin Cargar en AoAT">Sin Cargar en AoAT</option>' +
+                '<option value="Sin cargar en Drive">Sin cargar en Drive</option>' +
+                '<option value="Errores calidad del dato">Errores calidad del dato</option>' +
+                '</select>' +
+                '<textarea id="swal-aoat-bulk-observation" class="form-control" rows="3" placeholder="Describe el motivo de la devolución"></textarea>',
+            focusConfirm: false,
+            preConfirm: () => {
+                const motiveEl = document.getElementById('swal-aoat-bulk-motive');
+                const obsEl = document.getElementById('swal-aoat-bulk-observation');
+                const m = motiveEl ? motiveEl.value : '';
+                const o = obsEl ? obsEl.value.trim() : '';
+                if (!m || !o) {
+                    Swal.showValidationMessage('Debes seleccionar un motivo y escribir una observación.');
+                    return null;
+                }
+                return { motive: m, observation: o };
+            },
+            showCancelButton: true,
+            cancelButtonText: 'Cancelar',
+            confirmButtonText: 'Enviar devoluciones',
+            width: '42rem',
+        });
+
+        if (!formValues) {
+            return;
+        }
+
+        bulkIdsWrap.innerHTML = '';
+        asignadaChecks.forEach((cb) => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'ids[]';
+            inp.value = cb.value;
+            bulkIdsWrap.appendChild(inp);
+        });
+        bulkState.value = 'Devuelta';
+        bulkObs.value = formValues.observation;
+        bulkMotive.value = formValues.motive;
+        bulkForm.submit();
+    });
+
     // Filtros AJAX para Seguimiento PIC
     const picFilterForm = document.querySelector('[data-pic-filters]');
     const picResults = document.querySelector('[data-pic-results]');
@@ -1332,6 +1821,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (picToDateInput) {
             picToDateInput.addEventListener('change', () => applyPicFilters(1));
         }
+
+        picFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () => applyPicFilters(1));
+        picFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () => applyPicFilters(1));
 
         document.body.addEventListener('click', (event) => {
             const pageLink = event.target.closest('[data-pic-page]');
@@ -1458,6 +1950,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (entrenamientoStateSelect) {
             entrenamientoStateSelect.addEventListener('change', () => applyEntrenamientoFilters(1));
         }
+
+        entrenamientoFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () =>
+            applyEntrenamientoFilters(1)
+        );
+        entrenamientoFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () =>
+            applyEntrenamientoFilters(1)
+        );
 
         if (entrenamientoFromDateInput) {
             entrenamientoFromDateInput.addEventListener('change', () => applyEntrenamientoFilters(1));
@@ -1596,6 +2095,13 @@ document.addEventListener('DOMContentLoaded', () => {
             planeacionToDateInput.addEventListener('change', () => applyPlaneacionFilters(1));
         }
 
+        planeacionFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () =>
+            applyPlaneacionFilters(1)
+        );
+        planeacionFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () =>
+            applyPlaneacionFilters(1)
+        );
+
         document.body.addEventListener('click', (event) => {
             const pageLink = event.target.closest('[data-planeacion-page]');
             if (pageLink) {
@@ -1704,8 +2210,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         encuestaFilterForm.querySelector('input[name="q"]')?.addEventListener('input', scheduleEncuestaFilters);
         encuestaFilterForm.querySelector('select[name="advisor"]')?.addEventListener('change', () => applyEncuestaFilters(1));
-        encuestaFilterForm.querySelector('select[name="subregion"]')?.addEventListener('change', () => applyEncuestaFilters(1));
-        encuestaFilterForm.querySelector('select[name="municipality"]')?.addEventListener('change', () => applyEncuestaFilters(1));
+        encuestaFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () => applyEncuestaFilters(1));
+        encuestaFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () => applyEncuestaFilters(1));
         encuestaFilterForm.querySelector('input[name="from_date"]')?.addEventListener('change', () => applyEncuestaFilters(1));
         encuestaFilterForm.querySelector('input[name="to_date"]')?.addEventListener('change', () => applyEncuestaFilters(1));
         encuestaExportLinks.forEach((link) => {
@@ -1846,8 +2352,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         evalFilterForm.querySelector('select[name="test_key"]')?.addEventListener('change', () => applyEvalFilters(1));
         evalSearchInput?.addEventListener('input', scheduleApplyEvalFilters);
-        evalFilterForm.querySelector('select[name="subregion"]')?.addEventListener('change', () => applyEvalFilters(1));
-        evalFilterForm.querySelector('select[name="municipality"]')?.addEventListener('change', () => applyEvalFilters(1));
+        evalFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () => applyEvalFilters(1));
+        evalFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () => applyEvalFilters(1));
         evalImpactInput?.addEventListener('change', () => applyEvalFilters(1));
         evalFilterForm.querySelector('select[name="phase"]')?.addEventListener('change', () => applyEvalFilters(1));
         evalFilterForm.querySelector('input[name="date_from"]')?.addEventListener('change', () => applyEvalFilters(1));
@@ -1928,6 +2434,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (typeof data.html === 'string') {
                         aoatResults.innerHTML = data.html;
                         bindAoatDetailButtons(aoatResults);
+                        syncAoatBulkToolbar(aoatResults);
                         updateAoatUrl(params);
                     }
                 })
@@ -1967,6 +2474,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         aoatFilterForm.querySelector('select[name="activity_type"]')?.addEventListener('change', () => applyAoatFilters(1));
+
+        aoatFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () => applyAoatFilters(1));
+        aoatFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () => applyAoatFilters(1));
 
         if (fromDateInput) {
             fromDateInput.addEventListener('change', () => applyAoatFilters(1));

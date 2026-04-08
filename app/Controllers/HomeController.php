@@ -18,18 +18,40 @@ final class HomeController
         $user = Auth::user();
         $userId = (int) ($user['id'] ?? 0);
         $canSeeGlobal = Auth::canViewAllModuleRecords($user);
-        $scopeIsGlobal = $canSeeGlobal;
 
         $pdo = Connection::getPdo();
 
-        $whereAoat = $scopeIsGlobal ? '' : ' WHERE user_id = :user_id';
-        $whereEvaluaciones = $scopeIsGlobal ? '' : ' WHERE document_number = :document_number';
-        $whereAsistencia = $scopeIsGlobal ? '' : ' WHERE advisor_user_id = :user_id';
-        $wherePlan = $scopeIsGlobal ? '' : ' WHERE user_id = :user_id';
-        $wherePic = $scopeIsGlobal ? '' : ' WHERE user_id = :user_id';
+        $filterUserId = null;
+        if ($canSeeGlobal) {
+            $rawProf = trim((string) $request->input('profesional', ''));
+            if ($rawProf !== '' && ctype_digit($rawProf)) {
+                $candidate = (int) $rawProf;
+                if ($this->userExistsActive($pdo, $candidate)) {
+                    $filterUserId = $candidate;
+                }
+            }
+        }
 
-        $paramsUser = [':user_id' => $userId];
-        $paramsDoc = [':document_number' => (string) ($user['document_number'] ?? '')];
+        $consolidatedGlobal = $canSeeGlobal && $filterUserId === null;
+        $scopeIsGlobal = $consolidatedGlobal;
+
+        $effectiveUserId = $filterUserId ?? $userId;
+        $effectiveDocument = $consolidatedGlobal
+            ? ''
+            : ($filterUserId !== null
+                ? $this->fetchUserDocument($pdo, $filterUserId)
+                : (string) ($user['document_number'] ?? ''));
+
+        $whereAoat = $consolidatedGlobal ? '' : ' WHERE user_id = :user_id';
+        $whereEvaluaciones = $consolidatedGlobal ? '' : ' WHERE document_number = :document_number';
+        $whereAsistencia = $consolidatedGlobal ? '' : ' WHERE advisor_user_id = :user_id';
+        $wherePlan = $consolidatedGlobal ? '' : ' WHERE user_id = :user_id';
+        $wherePic = $consolidatedGlobal ? '' : ' WHERE user_id = :user_id';
+
+        $paramsUser = [':user_id' => $effectiveUserId];
+        $paramsDoc = [':document_number' => $effectiveDocument];
+
+        $aoatStates = $this->countAoatStates($pdo, $consolidatedGlobal, $effectiveUserId);
 
         $kpis = [
             'aoat_total' => $this->scalar(
@@ -37,11 +59,10 @@ final class HomeController
                 'SELECT COUNT(*) FROM aoat_records' . $whereAoat,
                 $whereAoat !== '' ? $paramsUser : []
             ),
-            'aoat_aprobadas' => $this->scalar(
-                $pdo,
-                "SELECT COUNT(*) FROM aoat_records" . ($whereAoat === '' ? ' WHERE state = :state' : $whereAoat . ' AND state = :state'),
-                ($whereAoat !== '' ? $paramsUser : []) + [':state' => 'Aprobada']
-            ),
+            'aoat_aprobadas' => $aoatStates['Aprobada'],
+            'aoat_asignadas' => $aoatStates['Asignada'],
+            'aoat_devueltas' => $aoatStates['Devuelta'],
+            'aoat_revisadas' => $aoatStates['Realizado'],
             'evaluaciones_total' => $this->scalar(
                 $pdo,
                 'SELECT COUNT(*) FROM test_responses' . $whereEvaluaciones,
@@ -97,13 +118,35 @@ final class HomeController
             ['label' => 'PIC', 'value' => $kpis['pic_total']],
         ];
 
-        $recentActivities = $this->recentActivities($pdo, $scopeIsGlobal, $userId, (string) ($user['document_number'] ?? ''));
+        $recentActivities = $this->recentActivities(
+            $pdo,
+            $consolidatedGlobal,
+            $effectiveUserId,
+            $effectiveDocument
+        );
+
+        $professionalOptions = [];
+        if ($canSeeGlobal) {
+            $stmt = $pdo->query('SELECT id, name FROM users WHERE active = 1 ORDER BY name ASC');
+            $professionalOptions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $filterProfessionalName = '';
+        if ($filterUserId !== null) {
+            $stmt = $pdo->prepare('SELECT name FROM users WHERE id = :id LIMIT 1');
+            $stmt->execute([':id' => $filterUserId]);
+            $filterProfessionalName = (string) ($stmt->fetchColumn() ?: '');
+        }
 
         return Response::view('home/index', [
             'pageTitle' => 'Equipo de Promoción y Prevención',
             'tests' => EvaluacionesController::getTestsListForUser($user),
             'dashboard' => [
                 'scope_is_global' => $scopeIsGlobal,
+                'can_filter_professional' => $canSeeGlobal,
+                'filter_professional_id' => $filterUserId,
+                'filter_professional_name' => $filterProfessionalName,
+                'professional_options' => $professionalOptions,
                 'kpis' => $kpis,
                 'aoat_completion_pct' => $aoatCompletionPct,
                 'evaluaciones_pre' => $evaluacionesPre,
@@ -112,6 +155,53 @@ final class HomeController
                 'recent_activities' => $recentActivities,
             ],
         ]);
+    }
+
+    /**
+     * @return array{Asignada: int, Devuelta: int, Realizado: int, Aprobada: int}
+     */
+    private function countAoatStates(PDO $pdo, bool $consolidatedGlobal, int $userIdForScope): array
+    {
+        $out = [
+            'Asignada' => 0,
+            'Devuelta' => 0,
+            'Realizado' => 0,
+            'Aprobada' => 0,
+        ];
+        $sql = 'SELECT state, COUNT(*) AS c FROM aoat_records';
+        $params = [];
+        if (!$consolidatedGlobal) {
+            $sql .= ' WHERE user_id = :user_id';
+            $params[':user_id'] = $userIdForScope;
+        }
+        $sql .= ' GROUP BY state';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $st = (string) ($row['state'] ?? '');
+            if (array_key_exists($st, $out)) {
+                $out[$st] = (int) ($row['c'] ?? 0);
+            }
+        }
+
+        return $out;
+    }
+
+    private function fetchUserDocument(PDO $pdo, int $userId): string
+    {
+        $stmt = $pdo->prepare('SELECT document_number FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $col = $stmt->fetchColumn();
+
+        return $col !== false ? trim((string) $col) : '';
+    }
+
+    private function userExistsActive(PDO $pdo, int $userId): bool
+    {
+        $stmt = $pdo->prepare('SELECT 1 FROM users WHERE id = :id AND active = 1 LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+
+        return (bool) $stmt->fetchColumn();
     }
 
     private function scalar(PDO $pdo, string $sql, array $params = []): int
