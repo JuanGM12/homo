@@ -87,7 +87,7 @@ $exportPdfHref = '/planeacion/exportar?' . http_build_query($exportPdfQuery);
         </div>
 
         <div class="col-lg-1 d-grid">
-            <a href="/planeacion" class="btn btn-outline-secondary">Limpiar</a>
+            <a href="/planeacion" class="btn btn-outline-secondary" data-homo-filter-clear="/planeacion">Limpiar</a>
         </div>
     </form>
 

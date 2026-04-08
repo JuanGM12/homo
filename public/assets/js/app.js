@@ -1,4 +1,153 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const HOMO_FILTER_STORAGE_PREFIX = 'homoFilters:v1:';
+    const homoFilterPaths = new Set([
+        '/aoat',
+        '/evaluaciones',
+        '/pic',
+        '/entrenamiento',
+        '/planeacion',
+        '/encuesta-opinion-aoat/listar',
+        '/asistencia',
+        '/admin/usuarios',
+    ]);
+    const homoFullPageFilterPaths = new Set(['/asistencia', '/admin/usuarios']);
+    const homoAjaxFilterPaths = new Set([
+        '/aoat',
+        '/evaluaciones',
+        '/pic',
+        '/entrenamiento',
+        '/planeacion',
+        '/encuesta-opinion-aoat/listar',
+    ]);
+
+    const homoFilterFormsByPath = {
+        '/aoat': ['[data-aoat-filters]'],
+        '/evaluaciones': ['[data-eval-filters]'],
+        '/pic': ['[data-pic-filters]'],
+        '/entrenamiento': ['[data-entrenamiento-filters]'],
+        '/planeacion': ['[data-planeacion-filters]'],
+        '/encuesta-opinion-aoat/listar': ['[data-encuesta-filters]'],
+        '/asistencia': ['#asi-filter-form'],
+        '/admin/usuarios': ['form[action="/admin/usuarios"]'],
+    };
+
+    function homoFilterStorageKey(pathname) {
+        return HOMO_FILTER_STORAGE_PREFIX + pathname;
+    }
+
+    function homoNormalizeQueryString(search) {
+        const q = search.startsWith('?') ? search.slice(1) : search;
+        const params = new URLSearchParams(q);
+        params.delete('partial');
+        return params.toString();
+    }
+
+    function homoSaveFiltersForPath(pathname, queryString) {
+        if (!homoFilterPaths.has(pathname)) {
+            return;
+        }
+        const norm = homoNormalizeQueryString(queryString || '');
+        if (norm) {
+            sessionStorage.setItem(homoFilterStorageKey(pathname), norm);
+        } else {
+            sessionStorage.removeItem(homoFilterStorageKey(pathname));
+        }
+    }
+
+    function homoSyncFormFromSearchParams(form, sp) {
+        if (!form) {
+            return;
+        }
+        sp.forEach((value, name) => {
+            if (name === 'partial') {
+                return;
+            }
+            const el = form.elements.namedItem(name);
+            if (!el) {
+                return;
+            }
+            if (el instanceof RadioNodeList) {
+                for (let i = 0; i < el.length; i++) {
+                    if (el[i].value === value) {
+                        el[i].checked = true;
+                    }
+                }
+            } else if (
+                el instanceof HTMLSelectElement ||
+                el instanceof HTMLInputElement ||
+                el instanceof HTMLTextAreaElement
+            ) {
+                el.value = value;
+            }
+        });
+    }
+
+    const homoPendingAjaxRefresh = {};
+
+    function homoTryRestoreFullPageFilters() {
+        const path = window.location.pathname;
+        if (!homoFullPageFilterPaths.has(path)) {
+            return false;
+        }
+        const flashRaw = document.body.dataset.flash;
+        if (flashRaw !== undefined && String(flashRaw).trim() !== '') {
+            return false;
+        }
+        const stored = sessionStorage.getItem(homoFilterStorageKey(path));
+        if (!stored) {
+            return false;
+        }
+        if (homoNormalizeQueryString(window.location.search)) {
+            return false;
+        }
+        window.location.replace(path + `?${stored}`);
+        return true;
+    }
+
+    function homoRestoreAjaxFiltersFromStorage() {
+        const path = window.location.pathname;
+        if (!homoAjaxFilterPaths.has(path)) {
+            return;
+        }
+        const stored = sessionStorage.getItem(homoFilterStorageKey(path));
+        if (!stored) {
+            return;
+        }
+        if (homoNormalizeQueryString(window.location.search)) {
+            return;
+        }
+        const sp = new URLSearchParams(stored);
+        window.history.replaceState({}, '', path + `?${stored}`);
+
+        const sr = sp.get('subregion') || '';
+        const mu = sp.get('municipality') || '';
+        document.querySelectorAll('[data-subregion-select]').forEach((sel) => {
+            sel.dataset.currentValue = sr;
+        });
+        document.querySelectorAll('[data-municipality-select]').forEach((sel) => {
+            sel.dataset.currentValue = mu;
+        });
+
+        const selectors = homoFilterFormsByPath[path] || [];
+        selectors.forEach((sel) => {
+            const form = document.querySelector(sel);
+            homoSyncFormFromSearchParams(form, sp);
+        });
+
+        homoPendingAjaxRefresh[path] = true;
+    }
+
+    document.body.addEventListener('click', (e) => {
+        const clearBtn = e.target.closest('[data-homo-filter-clear]');
+        if (!clearBtn || !clearBtn.hasAttribute('href')) {
+            return;
+        }
+        const pathKey = clearBtn.getAttribute('data-homo-filter-clear') || '';
+        if (pathKey && homoFilterPaths.has(pathKey)) {
+            sessionStorage.removeItem(homoFilterStorageKey(pathKey));
+        }
+    });
+
     const platformMinDate = '2026-01-01';
 
     document.querySelectorAll('input[type="date"]').forEach((input) => {
@@ -60,6 +209,11 @@ document.addEventListener('DOMContentLoaded', () => {
             text: data.message || '',
         });
     }
+
+    if (homoTryRestoreFullPageFilters()) {
+        return;
+    }
+    homoRestoreAjaxFiltersFromStorage();
 
     // AoAT: enlazar cada <label> con su checkbox/radio (clic en todo el texto marca la opción)
     let aoatFieldSeq = 0;
@@ -1096,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = cleanParams.toString();
             const url = '/pic' + (query ? `?${query}` : '');
             window.history.replaceState({}, '', url);
+            homoSaveFiltersForPath('/pic', '?' + query);
 
             picExportLinks.forEach((link) => {
                 const format = link.getAttribute('data-pic-export-link') || 'excel';
@@ -1211,6 +1366,11 @@ document.addEventListener('DOMContentLoaded', () => {
             picDirInput.value = nextDir;
             applyPicFilters(1);
         });
+
+        if (homoPendingAjaxRefresh['/pic']) {
+            applyPicFilters(1);
+            delete homoPendingAjaxRefresh['/pic'];
+        }
     }
 
     // Filtros AJAX para Entrenamiento
@@ -1230,6 +1390,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = cleanParams.toString();
             const url = '/entrenamiento' + (query ? `?${query}` : '');
             window.history.replaceState({}, '', url);
+            homoSaveFiltersForPath('/entrenamiento', '?' + query);
 
             if (entrenamientoExportLink) {
                 entrenamientoExportLink.setAttribute('href', '/entrenamiento/exportar' + (query ? `?${query}` : ''));
@@ -1339,6 +1500,11 @@ document.addEventListener('DOMContentLoaded', () => {
             entrenamientoDirInput.value = nextDir;
             applyEntrenamientoFilters(1);
         });
+
+        if (homoPendingAjaxRefresh['/entrenamiento']) {
+            applyEntrenamientoFilters(1);
+            delete homoPendingAjaxRefresh['/entrenamiento'];
+        }
     }
 
     // Filtros AJAX para Planeacion anual
@@ -1357,6 +1523,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = cleanParams.toString();
             const url = '/planeacion' + (query ? `?${query}` : '');
             window.history.replaceState({}, '', url);
+            homoSaveFiltersForPath('/planeacion', '?' + query);
 
             planeacionExportLinks.forEach((link) => {
                 const format = link.getAttribute('data-planeacion-export-link') || 'excel';
@@ -1462,6 +1629,11 @@ document.addEventListener('DOMContentLoaded', () => {
             planeacionDirInput.value = nextDir;
             applyPlaneacionFilters(1);
         });
+
+        if (homoPendingAjaxRefresh['/planeacion']) {
+            applyPlaneacionFilters(1);
+            delete homoPendingAjaxRefresh['/planeacion'];
+        }
     }
 
     // Filtros AJAX para Encuesta Opinión AoAT
@@ -1480,6 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = cleanParams.toString();
             const url = '/encuesta-opinion-aoat/listar' + (query ? `?${query}` : '');
             window.history.replaceState({}, '', url);
+            homoSaveFiltersForPath('/encuesta-opinion-aoat/listar', '?' + query);
 
             encuestaExportLinks.forEach((link) => {
                 const format = link.getAttribute('data-encuesta-export-link') || 'excel';
@@ -1573,6 +1746,11 @@ document.addEventListener('DOMContentLoaded', () => {
             encDirInput.value  = nextDir;
             applyEncuestaFilters(1);
         });
+
+        if (homoPendingAjaxRefresh['/encuesta-opinion-aoat/listar']) {
+            applyEncuestaFilters(1);
+            delete homoPendingAjaxRefresh['/encuesta-opinion-aoat/listar'];
+        }
     }
 
     // Filtros AJAX para Evaluaciones
@@ -1608,6 +1786,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const cleanParams = new URLSearchParams(params);
             cleanParams.delete('partial');
             const query = cleanParams.toString();
+
+            window.history.replaceState({}, '', '/evaluaciones' + (query ? `?${query}` : ''));
+            homoSaveFiltersForPath('/evaluaciones', '?' + query);
 
             if (evalExportLink) {
                 evalExportLink.setAttribute('href', '/evaluaciones/exportar-csv' + (query ? `?${query}` : ''));
@@ -1668,6 +1849,7 @@ document.addEventListener('DOMContentLoaded', () => {
         evalFilterForm.querySelector('select[name="subregion"]')?.addEventListener('change', () => applyEvalFilters(1));
         evalFilterForm.querySelector('select[name="municipality"]')?.addEventListener('change', () => applyEvalFilters(1));
         evalImpactInput?.addEventListener('change', () => applyEvalFilters(1));
+        evalFilterForm.querySelector('select[name="phase"]')?.addEventListener('change', () => applyEvalFilters(1));
         evalFilterForm.querySelector('input[name="date_from"]')?.addEventListener('change', () => applyEvalFilters(1));
         evalFilterForm.querySelector('input[name="date_to"]')?.addEventListener('change', () => applyEvalFilters(1));
 
@@ -1694,6 +1876,11 @@ document.addEventListener('DOMContentLoaded', () => {
             evalDirInput.value  = nextDir;
             applyEvalFilters(1);
         });
+
+        if (homoPendingAjaxRefresh['/evaluaciones']) {
+            applyEvalFilters(1);
+            delete homoPendingAjaxRefresh['/evaluaciones'];
+        }
     }
 
     // Filtros AJAX para AoAT
@@ -1712,6 +1899,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = cleanParams.toString();
             const url = '/aoat' + (query ? `?${query}` : '');
             window.history.replaceState({}, '', url);
+            homoSaveFiltersForPath('/aoat', '?' + query);
 
             if (aoatExportLink) {
                 aoatExportLink.setAttribute('href', '/aoat/exportar' + (query ? `?${query}` : ''));
@@ -1821,6 +2009,11 @@ document.addEventListener('DOMContentLoaded', () => {
             dirInput.value = nextDir;
             applyAoatFilters(1);
         });
+
+        if (homoPendingAjaxRefresh['/aoat']) {
+            applyAoatFilters(1);
+            delete homoPendingAjaxRefresh['/aoat'];
+        }
     }
 
     const evalQrModalEl = document.getElementById('evalQrModal');
@@ -1933,5 +2126,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    (function homoPersistCurrentUrlIfNeeded() {
+        const path = window.location.pathname;
+        if (!homoFilterPaths.has(path)) {
+            return;
+        }
+        const q = homoNormalizeQueryString(window.location.search);
+        if (q) {
+            homoSaveFiltersForPath(path, '?' + q);
+        }
+    })();
 });
 

@@ -8,6 +8,9 @@
 /** @var string $exportQuery */
 /** @var array|null $currentUser */
 /** @var bool $canSeeAll */
+/** @var bool $lockEvalSearchToDocument */
+
+$lockEvalSearchToDocument = (bool) ($lockEvalSearchToDocument ?? false);
 
 $currentSort = (string) ($_GET['sort'] ?? 'municipality');
 $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
@@ -27,7 +30,7 @@ $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' 
 <section class="mb-5">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
         <div>
-            <h2 class="section-title mb-1"><?= $canSeeAll ? 'Todas las evaluaciones registradas' : 'Mis evaluaciones registradas' ?></h2>
+            <h2 class="section-title mb-1"><?= $canSeeAll ? 'Todas las evaluaciones registradas' : ($lockEvalSearchToDocument ? 'Mis evaluaciones registradas' : 'Evaluaciones registradas (tus temáticas)') ?></h2>
             <p class="section-subtitle mb-0">Vista comparativa por persona (PRE y POST). Usa los filtros y exporta con el mismo criterio.</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -61,7 +64,7 @@ $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' 
                     <label class="form-label small fw-semibold text-muted mb-1">Persona o documento</label>
                     <input type="text" name="search" class="form-control"
                         value="<?= htmlspecialchars((string) ($filters['search'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                        <?= !$canSeeAll && !empty($currentUser['document_number']) ? 'readonly' : '' ?>
+                        <?= $lockEvalSearchToDocument ? 'readonly' : '' ?>
                         placeholder="Nombre o documento">
                 </div>
                 <div class="col-sm-6 col-md-4 col-lg-2">
@@ -97,9 +100,18 @@ $currentDir  = strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc' ? 'desc' 
                     <label class="form-label small fw-semibold text-muted mb-1">Hasta</label>
                     <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars((string) ($filters['date_to'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                 </div>
+                <div class="col-sm-6 col-md-4 col-lg-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Tipo de Test</label>
+                    <?php $phaseFilter = (string) ($filters['phase'] ?? ''); ?>
+                    <select name="phase" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="pre" <?= $phaseFilter === 'pre' ? 'selected' : '' ?>>PRE-TEST</option>
+                        <option value="post" <?= $phaseFilter === 'post' ? 'selected' : '' ?>>POST-TEST</option>
+                    </select>
+                </div>
                 <div class="col-12 d-flex align-items-center gap-3">
-                    <a href="/evaluaciones" class="asi-filter-clear-link">Limpiar</a>
-                    <?php if (!$canSeeAll && !empty($currentUser['document_number'])): ?>
+                    <a href="/evaluaciones" class="asi-filter-clear-link" data-homo-filter-clear="/evaluaciones">Limpiar</a>
+                    <?php if ($lockEvalSearchToDocument && !empty($currentUser['document_number'])): ?>
                         <span class="text-muted small">Mostrando resultados de: <strong><?= htmlspecialchars((string) $currentUser['document_number'], ENT_QUOTES, 'UTF-8') ?></strong></span>
                     <?php endif; ?>
                 </div>

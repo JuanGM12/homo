@@ -134,7 +134,7 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
                     <input type="date" name="to_date" class="form-control" value="<?= htmlspecialchars((string) ($filters['to_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" data-asi-autosubmit>
                 </div>
                 <div class="col-md-6 d-flex align-items-end">
-                    <a href="/asistencia?<?= http_build_query(['tab' => $activeTab]) ?>" class="asi-filter-clear-link">Limpiar</a>
+                    <a href="/asistencia?<?= http_build_query(['tab' => $activeTab]) ?>" class="asi-filter-clear-link" data-homo-filter-clear="/asistencia">Limpiar</a>
                 </div>
             </form>
         </div>
@@ -273,48 +273,51 @@ $tabLabel = $activeTab === 'actividad' ? 'Actividades' : 'AoAT';
 </section>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('[data-asi-autosubmit]').forEach(function (el) {
-        el.addEventListener('change', function () {
-            document.getElementById('asi-filter-form').submit();
-        });
-    });
-
-    var subregionSelect = document.querySelector('[data-subregion-filter]');
-    var municipalitySelect = document.querySelector('[data-municipality-filter]');
-    if (!subregionSelect || !municipalitySelect) return;
-
-    fetch('/assets/js/municipios.json').then(function (r) { return r.json(); }).then(function (data) {
-        Object.keys(data).forEach(function (sub) {
-            var opt = document.createElement('option');
-            opt.value = sub;
-            opt.textContent = sub;
-            subregionSelect.appendChild(opt);
-        });
-        var currentSub = new URLSearchParams(window.location.search).get('subregion');
-        var currentMun = new URLSearchParams(window.location.search).get('municipality');
-        if (currentSub) {
-            subregionSelect.value = currentSub;
-            municipalitySelect.disabled = false;
-            (data[currentSub] || []).forEach(function (m) {
-                var o = document.createElement('option');
-                o.value = m;
-                o.textContent = m;
-                if (m === currentMun) o.selected = true;
-                municipalitySelect.appendChild(o);
+    // Defer tras app.js (restauración de filtros en sessionStorage puede actualizar la URL antes).
+    setTimeout(function () {
+        document.querySelectorAll('[data-asi-autosubmit]').forEach(function (el) {
+            el.addEventListener('change', function () {
+                document.getElementById('asi-filter-form').submit();
             });
-        }
-        subregionSelect.addEventListener('change', function () {
-            municipalitySelect.innerHTML = '<option value="">Todos</option>';
-            municipalitySelect.disabled = !subregionSelect.value;
-            if (subregionSelect.value && data[subregionSelect.value]) {
-                data[subregionSelect.value].forEach(function (m) {
+        });
+
+        var subregionSelect = document.querySelector('[data-subregion-filter]');
+        var municipalitySelect = document.querySelector('[data-municipality-filter]');
+        if (!subregionSelect || !municipalitySelect) return;
+
+        fetch('/assets/js/municipios.json').then(function (r) { return r.json(); }).then(function (data) {
+            Object.keys(data).forEach(function (sub) {
+                var opt = document.createElement('option');
+                opt.value = sub;
+                opt.textContent = sub;
+                subregionSelect.appendChild(opt);
+            });
+            var currentSub = new URLSearchParams(window.location.search).get('subregion');
+            var currentMun = new URLSearchParams(window.location.search).get('municipality');
+            if (currentSub) {
+                subregionSelect.value = currentSub;
+                municipalitySelect.disabled = false;
+                (data[currentSub] || []).forEach(function (m) {
                     var o = document.createElement('option');
                     o.value = m;
                     o.textContent = m;
+                    if (m === currentMun) o.selected = true;
                     municipalitySelect.appendChild(o);
                 });
             }
+            subregionSelect.addEventListener('change', function () {
+                municipalitySelect.innerHTML = '<option value="">Todos</option>';
+                municipalitySelect.disabled = !subregionSelect.value;
+                if (subregionSelect.value && data[subregionSelect.value]) {
+                    data[subregionSelect.value].forEach(function (m) {
+                        var o = document.createElement('option');
+                        o.value = m;
+                        o.textContent = m;
+                        municipalitySelect.appendChild(o);
+                    });
+                }
+            });
         });
-    });
+    }, 0);
 });
 </script>

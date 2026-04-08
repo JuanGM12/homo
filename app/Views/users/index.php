@@ -75,7 +75,7 @@
                         <i class="bi bi-funnel me-1"></i>
                         Filtrar
                     </button>
-                    <a href="/admin/usuarios" class="btn btn-outline-secondary">
+                    <a href="/admin/usuarios" class="btn btn-outline-secondary" data-homo-filter-clear="/admin/usuarios">
                         Limpiar
                     </a>
                 </div>

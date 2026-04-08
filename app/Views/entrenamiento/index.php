@@ -98,7 +98,7 @@ if ($exportQuery !== []) {
         </div>
 
         <div class="col-lg-1 d-grid">
-            <a href="/entrenamiento" class="btn btn-outline-secondary">Limpiar</a>
+            <a href="/entrenamiento" class="btn btn-outline-secondary" data-homo-filter-clear="/entrenamiento">Limpiar</a>
         </div>
     </form>
 

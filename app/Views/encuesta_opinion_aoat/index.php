@@ -82,7 +82,7 @@ $exportPdfQuery = '?' . http_build_query($exportPdfParams);
                         value="<?= htmlspecialchars((string) ($filters['to_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                 </div>
                 <div class="col-12">
-                    <a href="/encuesta-opinion-aoat/listar" class="asi-filter-clear-link">Limpiar filtros</a>
+                    <a href="/encuesta-opinion-aoat/listar" class="asi-filter-clear-link" data-homo-filter-clear="/encuesta-opinion-aoat/listar">Limpiar filtros</a>
                 </div>
             </form>
         </div>

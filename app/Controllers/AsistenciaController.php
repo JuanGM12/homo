@@ -11,6 +11,7 @@ use App\Repositories\UserRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
+use App\Services\PdfService;
 
 final class AsistenciaController
 {
@@ -51,6 +52,7 @@ final class AsistenciaController
                 'Paciente agitado',
                 'Pre Test',
                 'Post Test',
+                'Resolución 347 de 2026',
                 'Trastorno Afectivo Bipolar',
                 'Trastorno de Déficit de Atención e Hiperactividad',
                 'Trastorno Depresivo',
@@ -369,28 +371,53 @@ final class AsistenciaController
 
         $asistentes = $this->repo->findAsistentesByActividad($id);
         $lines = [];
+
+        $tiposRaw = $actividad['actividad_tipos'] ?? [];
+        $tiposStr = is_array($tiposRaw) ? implode('; ', $tiposRaw) : (string) $tiposRaw;
+        $tipoNorm = $this->normalizeActividadTipo((string) ($actividad['tipo'] ?? 'aoat'));
+        $listadoTemasLabel = $tipoNorm === 'actividad' ? 'Actividad' : 'Listado AoAT';
+
+        $metaRows = [
+            ['Información de la actividad', ''],
+            ['Código QR', (string) ($actividad['code'] ?? '')],
+            ['Fecha', (string) ($actividad['activity_date'] ?? '')],
+            ['Subregión', (string) ($actividad['subregion'] ?? '')],
+            ['Municipio', (string) ($actividad['municipality'] ?? '')],
+            ['Lugar', (string) ($actividad['lugar'] ?? '')],
+            ['Tipo', $this->actividadTipoLabel((string) ($actividad['tipo'] ?? 'aoat'))],
+            ['Asesor', (string) ($actividad['advisor_name'] ?? '')],
+            [$listadoTemasLabel, $tiposStr],
+            ['Estado', (string) ($actividad['status'] ?? '')],
+            ['Enlace de registro', $this->registrationUrl((string) ($actividad['code'] ?? ''))],
+        ];
+        foreach ($metaRows as $pair) {
+            $lines[] = $this->asistenciaCsvEscape((string) $pair[0]) . ';' . $this->asistenciaCsvEscape((string) $pair[1]);
+        }
+        $lines[] = '';
+
         $lines[] = implode(';', ['#', 'Documento', 'Nombres y Apellidos', 'Entidad', 'Cargo', 'Teléfono', 'Correo', 'Zona', 'Sexo', 'Edad', 'Etnia', 'Etnia (otro)', 'Grupo poblacional', 'Registro']);
         foreach ($asistentes as $i => $a) {
             $grupo = $a['grupo_poblacional'] ?? [];
             $grupoStr = is_array($grupo) ? implode(', ', $grupo) : (string) $grupo;
-            $lines[] = implode(';', array_map(static function ($v): string {
-                return '"' . str_replace('"', '""', (string) $v) . '"';
-            }, [
-                $i + 1,
-                $a['document_number'] ?? '',
-                $a['full_name'] ?? '',
-                $a['entity'] ?? '',
-                $a['cargo'] ?? '',
-                $a['phone'] ?? '',
-                $a['email'] ?? '',
-                $a['zone'] ?? '',
-                $a['sex'] ?? '',
-                $a['age'] !== null ? $a['age'] : '',
-                $a['etnia'] ?? '',
-                $a['etnia_otro'] ?? '',
-                $grupoStr,
-                $a['registered_at'] ?? '',
-            ]));
+            $lines[] = implode(';', array_map(
+                fn ($v): string => $this->asistenciaCsvEscape((string) $v),
+                [
+                    $i + 1,
+                    $a['document_number'] ?? '',
+                    $a['full_name'] ?? '',
+                    $a['entity'] ?? '',
+                    $a['cargo'] ?? '',
+                    $a['phone'] ?? '',
+                    $a['email'] ?? '',
+                    $a['zone'] ?? '',
+                    $a['sex'] ?? '',
+                    $a['age'] !== null ? $a['age'] : '',
+                    $a['etnia'] ?? '',
+                    $a['etnia_otro'] ?? '',
+                    $grupoStr,
+                    $a['registered_at'] ?? '',
+                ]
+            ));
         }
 
         $csv = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
@@ -422,10 +449,14 @@ final class AsistenciaController
 
         $asistentes = $this->repo->findAsistentesByActividad($id);
         $html = $this->buildPdfHtml($actividad, $asistentes);
+        $pdfBinary = PdfService::renderHtml($html, 'L', 'Listado de Asistencia ' . (string) ($actividad['code'] ?? ''), true);
 
-        return new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-            'Content-Disposition' => 'inline; filename="asistencia_' . $actividad['code'] . '.html"',
+        $safeCode = preg_replace('/[^a-zA-Z0-9_-]+/', '_', (string) ($actividad['code'] ?? 'export')) ?? 'export';
+        $filename = 'asistencia_' . $safeCode . '_' . date('Ymd') . '.pdf';
+
+        return new Response($pdfBinary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
     }
 
@@ -938,6 +969,11 @@ final class AsistenciaController
         $base = ($_SERVER['REQUEST_SCHEME'] ?? 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
         $path = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/');
         return $base . $path . '/asistencia/registrar?code=' . rawurlencode($code);
+    }
+
+    private function asistenciaCsvEscape(string $value): string
+    {
+        return '"' . str_replace('"', '""', $value) . '"';
     }
 
     private function buildPdfHtml(array $actividad, array $asistentes): string

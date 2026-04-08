@@ -113,7 +113,7 @@ $exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
             </div>
         </div>
         <div class="col-md-1 d-flex gap-2">
-            <a href="/aoat" class="btn btn-sm btn-outline-secondary w-100">Limpiar</a>
+            <a href="/aoat" class="btn btn-sm btn-outline-secondary w-100" data-homo-filter-clear="/aoat">Limpiar</a>
         </div>
     </form>
 

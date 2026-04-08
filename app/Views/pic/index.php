@@ -113,7 +113,7 @@ $exportExcelHref = '/pic/exportar' . ($exportExcelQuery !== [] ? '?' . http_buil
         </div>
 
         <div class="col-lg-1 d-grid">
-            <a href="/pic" class="btn btn-outline-secondary">Limpiar</a>
+            <a href="/pic" class="btn btn-outline-secondary" data-homo-filter-clear="/pic">Limpiar</a>
         </div>
     </form>
 

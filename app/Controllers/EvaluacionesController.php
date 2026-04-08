@@ -182,7 +182,7 @@ final class EvaluacionesController
     /**
      * Temáticas visibles según rol (visitantes no autenticados: todas).
      * Admin y coordinación: todas las temáticas.
-     * Psicólogo: violencias, suicidios, adicciones.
+     * Psicólogo y Profesional social: violencias, suicidios, adicciones.
      * Médico: hospitales.
      * Abogado: ninguna (no aplica PRE/POST).
      */
@@ -207,9 +207,13 @@ final class EvaluacionesController
 
         $keys = [];
         $isPsychProfile = in_array('psicologo', $roles, true) || $primaryRole === 'psicologo';
+        $isSocialProfile = in_array('profesional social', $roles, true)
+            || in_array('profesional_social', $roles, true)
+            || $primaryRole === 'profesional social'
+            || $primaryRole === 'profesional_social';
         $isMedicalProfile = in_array('medico', $roles, true) || $primaryRole === 'medico';
 
-        if ($isPsychProfile) {
+        if ($isPsychProfile || $isSocialProfile) {
             array_push($keys, 'violencias', 'suicidios', 'adicciones');
         }
         if ($isMedicalProfile) {
@@ -279,6 +283,15 @@ final class EvaluacionesController
     }
 
     /**
+     * Profesionales con temáticas PRE/POST deben ver registros por participante en territorio
+     * (filtro por test_key), no por el documento del usuario en sesión: los tests guardan el documento quien responde.
+     */
+    private static function userSeesEvaluacionesByThematicScope(?array $user): bool
+    {
+        return $user !== null && self::getTestsListForUser($user) !== [];
+    }
+
+    /**
      * Letra de la opción correcta según temática y fase (misma clave que al guardar el test).
      */
     public static function correctLetterForQuestion(string $testKey, string $phase, int $questionNumber): ?string
@@ -328,8 +341,10 @@ final class EvaluacionesController
         $canSeeAll = Auth::canViewAllModuleRecords($user);
         $responseDoc = trim((string) ($response['document_number'] ?? ''));
         $userDoc = trim((string) ($user['document_number'] ?? ''));
-        if (!$canSeeAll && ($responseDoc === '' || $responseDoc !== $userDoc)) {
-            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        if (!$canSeeAll && !self::userSeesEvaluacionesByThematicScope($user)) {
+            if ($responseDoc === '' || $responseDoc !== $userDoc) {
+                return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+            }
         }
 
         if (self::userIsBlockedFromEvaluaciones($user)) {
@@ -411,7 +426,8 @@ final class EvaluacionesController
         $exportQuery = '';
 
         if ($user) {
-            if (!$canSeeAll && empty($user['document_number'])) {
+            $byThematicScope = self::userSeesEvaluacionesByThematicScope($user);
+            if (!$canSeeAll && empty($user['document_number']) && !$byThematicScope) {
                 $records = [];
             } else {
                 $repo = new TestResponseRepository();
@@ -424,10 +440,8 @@ final class EvaluacionesController
                 $impactSummary  = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
             }
 
-            $exportFilters = $filters;
-            unset($exportFilters['phase']);
             $exportQuery = http_build_query(array_filter(
-                $exportFilters,
+                $filters,
                 static fn (mixed $v): bool => $v !== null && $v !== ''
             ));
         }
@@ -441,6 +455,11 @@ final class EvaluacionesController
             return Response::json(['html' => $html]);
         }
 
+        $lockEvalSearchToDocument = $user !== null
+            && !$canSeeAll
+            && !empty($user['document_number'])
+            && !self::userSeesEvaluacionesByThematicScope($user);
+
         return Response::view('evaluaciones/index', [
             'pageTitle'      => 'Evaluaciones - Test',
             'tests'          => $testsForUi,
@@ -452,6 +471,7 @@ final class EvaluacionesController
             'exportQuery'    => $exportQuery,
             'currentUser'    => $user,
             'canSeeAll'      => (bool) $canSeeAll,
+            'lockEvalSearchToDocument' => $lockEvalSearchToDocument,
         ]);
     }
 
@@ -505,7 +525,7 @@ final class EvaluacionesController
         $searchFilters['limit'] = 8000;
 
         $repo = new TestResponseRepository();
-        $records = (!$canSeeAll && empty($user['document_number']))
+        $records = (!$canSeeAll && empty($user['document_number']) && !self::userSeesEvaluacionesByThematicScope($user))
             ? []
             : $repo->search($searchFilters);
         $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
@@ -572,7 +592,7 @@ final class EvaluacionesController
         $searchFilters['limit'] = self::PDF_EVAL_DB_FETCH_LIMIT;
 
         $repo = new TestResponseRepository();
-        $records = (!$canSeeAll && empty($user['document_number']))
+        $records = (!$canSeeAll && empty($user['document_number']) && !self::userSeesEvaluacionesByThematicScope($user))
             ? []
             : $repo->search($searchFilters);
         $dbFetchLimited = count($records) >= self::PDF_EVAL_DB_FETCH_LIMIT;
@@ -682,9 +702,12 @@ final class EvaluacionesController
 
     private function collectEvaluacionFiltersFromRequest(Request $request, ?array $user, bool $canSeeAll): array
     {
+        $phaseRaw = trim((string) $request->input('phase', ''));
+        $phase = in_array($phaseRaw, ['pre', 'post'], true) ? $phaseRaw : '';
+
         $filters = [
             'test_key' => (string) $request->input('test_key', ''),
-            'phase' => (string) $request->input('phase', ''),
+            'phase' => $phase,
             'search' => trim((string) $request->input('search', '')),
             'document_number' => trim((string) $request->input('document_number', '')),
             'impact' => trim((string) $request->input('impact', '')),
@@ -694,12 +717,27 @@ final class EvaluacionesController
             'date_to' => (string) $request->input('date_to', ''),
         ];
 
-        if (!$canSeeAll && $user && !empty($user['document_number'])) {
+        if (
+            !$canSeeAll
+            && $user
+            && !empty($user['document_number'])
+            && !self::userSeesEvaluacionesByThematicScope($user)
+        ) {
             $filters['document_number'] = (string) $user['document_number'];
             $filters['search'] = '';
         }
 
         return $filters;
+    }
+
+    /** Etiqueta para filtros/exportaciones (Tipo de test). */
+    private static function evalPhaseFilterLabel(string $phase): string
+    {
+        return match ($phase) {
+            'pre' => 'PRE-TEST',
+            'post' => 'POST-TEST',
+            default => '',
+        };
     }
 
     /**
@@ -740,13 +778,24 @@ final class EvaluacionesController
     {
         $search = strtolower(trim((string) ($filters['search'] ?? '')));
         $impact = trim((string) ($filters['impact'] ?? ''));
+        $phaseFilter = trim((string) ($filters['phase'] ?? ''));
+        if (!in_array($phaseFilter, ['pre', 'post'], true)) {
+            $phaseFilter = '';
+        }
 
-        if ($search === '' && $impact === '') {
+        if ($search === '' && $impact === '' && $phaseFilter === '') {
             return $rows;
         }
 
-        return array_values(array_filter($rows, static function (array $row) use ($search, $impact): bool {
+        return array_values(array_filter($rows, static function (array $row) use ($search, $impact, $phaseFilter): bool {
             if ($impact !== '' && (string) ($row['impact'] ?? '') !== $impact) {
+                return false;
+            }
+
+            if ($phaseFilter === 'pre' && ($row['pre'] ?? null) === null) {
+                return false;
+            }
+            if ($phaseFilter === 'post' && ($row['post'] ?? null) === null) {
                 return false;
             }
 
@@ -787,6 +836,9 @@ final class EvaluacionesController
         if (!empty($filters['municipality']))    $metaParts[] = 'Municipio: ' . $filters['municipality'];
         if (!empty($filters['date_from']))       $metaParts[] = 'Desde: ' . $filters['date_from'];
         if (!empty($filters['date_to']))         $metaParts[] = 'Hasta: ' . $filters['date_to'];
+        if (!empty($filters['phase'])) {
+            $metaParts[] = 'Tipo de test: ' . self::evalPhaseFilterLabel((string) $filters['phase']);
+        }
         $lines[] = $metaParts !== [] ? 'Filtros: ' . implode(' | ', $metaParts) : 'Sin filtros aplicados';
         $lines[] = '';
 
@@ -886,6 +938,9 @@ final class EvaluacionesController
         if (!empty($filters['date_to'])) {
             $filterParts[] = 'Hasta: ' . (string) $filters['date_to'];
         }
+        if (!empty($filters['phase'])) {
+            $filterParts[] = 'Tipo de test: ' . self::evalPhaseFilterLabel((string) $filters['phase']);
+        }
 
         $summaryRows = '';
         $global = $impactSummary['global'] ?? null;
@@ -966,7 +1021,11 @@ final class EvaluacionesController
             return null;
         }
 
-        if (!Auth::canViewAllModuleRecords($user) && trim((string) ($user['document_number'] ?? '')) !== $documentNumber) {
+        if (
+            !Auth::canViewAllModuleRecords($user)
+            && !self::userSeesEvaluacionesByThematicScope($user)
+            && trim((string) ($user['document_number'] ?? '')) !== $documentNumber
+        ) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'Exportación no permitida',
@@ -1222,6 +1281,9 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
         }
         if (!empty($filters['date_to'])) {
             $meta[] = 'Hasta: ' . $esc((string) $filters['date_to']);
+        }
+        if (!empty($filters['phase'])) {
+            $meta[] = 'Tipo de test: ' . $esc(self::evalPhaseFilterLabel((string) $filters['phase']));
         }
 
         $summaryBuf = [];
