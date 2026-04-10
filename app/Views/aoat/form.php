@@ -174,9 +174,26 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                             </div>
                         </div>
 
-                        <?php if ($isEdit && ($record['state'] ?? '') === 'Devuelta'): ?>
+                        <?php if ($isEdit && ($record['state'] ?? '') === 'Devuelta' && !$numberOnlyEdit): ?>
                             <div class="alert alert-warning border-0 shadow-sm mb-4">
                                 <strong>AoAT devuelta.</strong> Ajusta la información necesaria y al final del formulario guarda los cambios para enviarla nuevamente a revisión.
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label" for="professional_compliance_note">
+                                    ¿Qué hiciste para atender la devolución? <span class="text-danger">*</span>
+                                </label>
+                                <textarea
+                                    name="professional_compliance_note"
+                                    id="professional_compliance_note"
+                                    class="form-control"
+                                    rows="4"
+                                    minlength="15"
+                                    required
+                                    placeholder="Describe de forma breve los ajustes o acciones realizadas (mínimo 15 caracteres). El especialista leerá esto al revisar tu registro."
+                                ><?= htmlspecialchars((string) ($oldPayload[\App\Controllers\AoatController::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                                <div class="form-text">
+                                    Este texto se guarda en el registro y lo verá el especialista junto con los demás datos de la AoAT.
+                                </div>
                             </div>
                         <?php endif; ?>
 

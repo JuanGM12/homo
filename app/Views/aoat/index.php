@@ -111,13 +111,33 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small text-muted">Actividad que realizó</label>
-            <?php $currentActivityType = (string) ($_GET['activity_type'] ?? ''); ?>
-            <select name="activity_type" class="form-select form-select-sm">
-                <option value="">Todas</option>
-                <option value="Asistencia técnica" <?= $currentActivityType === 'Asistencia técnica' ? 'selected' : '' ?>>Asistencia técnica</option>
-                <option value="Asesoría" <?= $currentActivityType === 'Asesoría' ? 'selected' : '' ?>>Asesoría</option>
-                <option value="Actividad" <?= $currentActivityType === 'Actividad' ? 'selected' : '' ?>>Actividad</option>
+            <label class="form-label small text-muted mb-1">Actividad que realizó</label>
+            <?php
+            $activityTypeChoices = ['Asistencia técnica', 'Asesoría', 'Actividad'];
+            $currentActivityTypes = $_GET['activity_type'] ?? [];
+            if (!is_array($currentActivityTypes)) {
+                $currentActivityTypes = $currentActivityTypes !== '' ? [(string) $currentActivityTypes] : [];
+            }
+            $currentActivityTypes = array_values(array_unique(array_filter(
+                array_map('strval', $currentActivityTypes),
+                static fn (string $v): bool => in_array($v, $activityTypeChoices, true)
+            )));
+            ?>
+            <select
+                name="activity_type[]"
+                multiple
+                class="form-select form-select-sm"
+                data-homo-static-multiselect="1"
+                data-homo-multi-empty-label="Todas las actividades"
+                data-homo-multi-word="actividades"
+                data-homo-multi-title="Elija uno o varios tipos de actividad"
+            >
+                <?php foreach ($activityTypeChoices as $actLabel): ?>
+                    <option
+                        value="<?= htmlspecialchars($actLabel, ENT_QUOTES, 'UTF-8') ?>"
+                        <?= in_array($actLabel, $currentActivityTypes, true) ? 'selected' : '' ?>
+                    ><?= htmlspecialchars($actLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                <?php endforeach; ?>
             </select>
         </div>
         <div class="col-md-3">
@@ -168,4 +188,9 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
 
 <form id="aoat-delete-form" method="post" action="/aoat/eliminar" class="d-none">
     <input type="hidden" name="id" id="aoat-delete-id" value="">
+</form>
+
+<form id="aoat-marcar-realizado-form" method="post" action="/aoat/marcar-realizado" class="d-none">
+    <input type="hidden" name="id" id="aoat-marcar-realizado-id" value="">
+    <input type="hidden" name="professional_compliance_note" id="aoat-marcar-realizado-note" value="">
 </form>

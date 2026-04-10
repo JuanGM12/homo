@@ -99,7 +99,7 @@ if ($totalPages <= 7) {
                 </div>
                 <p class="px-3 pb-3 mb-0 small text-muted">
                     Solo se incluyen filas en estado <strong>Asignada</strong> o <strong>Realizado</strong> que puedas auditar.
-                    La devolución aplica únicamente a las que estén en <strong>Asignada</strong>.
+                    La devolución masiva aplica a las seleccionadas en esos estados (incluye volver a devolver una que ya estaba en Realizado).
                 </p>
             </div>
         <?php endif; ?>

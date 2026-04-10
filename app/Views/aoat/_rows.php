@@ -40,6 +40,7 @@ $formatActivityDate = static function (?string $value): array {
     $canEditForm = !$isAudit && $isOwner && !in_array($state, ['Aprobada', 'Realizado'], true);
     $canAuditState = $isAudit && !$isOwner && $state === 'Asignada' && $canAuditRole;
     $canApproveFromRealizado = $isAudit && !$isOwner && $state === 'Realizado' && $canAuditRole;
+    $canReturnAgainFromRealizado = $isAudit && !$isOwner && $state === 'Realizado' && $canAuditRole;
     $canBulkSelect = $canAuditState || $canApproveFromRealizado;
     $canMarkRealizado = !$isAudit && $isOwner && $state === 'Devuelta';
     $canExportSingle = ($isAdmin || $isCoordinator || $isSpecialist) || ($isOwner && $state === 'Aprobada');
@@ -190,6 +191,31 @@ $formatActivityDate = static function (?string $value): array {
                         Aprobar revisión
                     </button>
                 <?php endif; ?>
+                <?php if ($canReturnAgainFromRealizado): ?>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-warning"
+                        data-aoat-return-realizado
+                        data-aoat="<?= $detailsJson ?>"
+                    >
+                        <i class="bi bi-arrow-return-left me-1"></i>
+                        Devolver de nuevo
+                    </button>
+                <?php endif; ?>
+                <?php if ($canMarkRealizado): ?>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-success"
+                        data-aoat-mark-realizado
+                        data-aoat="<?= htmlspecialchars(json_encode([
+                            'id' => (int) $record['id'],
+                            'professional' => trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? ''))),
+                        ], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>"
+                    >
+                        <i class="bi bi-check2-circle me-1"></i>
+                        Marcar como Realizado
+                    </button>
+                <?php endif; ?>
                 <?php if ($canDeleteThisRow): ?>
                     <button
                         type="button"
@@ -202,7 +228,7 @@ $formatActivityDate = static function (?string $value): array {
                         Eliminar
                     </button>
                 <?php endif; ?>
-                <?php if (!$canExportSingle && !$canEditForm && !$canAuditState && !$canApproveFromRealizado && !$canDeleteThisRow): ?>
+                <?php if (!$canExportSingle && !$canEditForm && !$canAuditState && !$canApproveFromRealizado && !$canReturnAgainFromRealizado && !$canMarkRealizado && !$canDeleteThisRow): ?>
                     <span class="aoat-no-actions">Sin acciones adicionales</span>
                 <?php endif; ?>
             </div>

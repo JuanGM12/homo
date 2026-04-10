@@ -7,7 +7,9 @@ $dashboard = $dashboard ?? [];
 $kpis = $dashboard['kpis'] ?? [];
 $moduleMix = $dashboard['module_mix'] ?? [];
 $recentActivities = $dashboard['recent_activities'] ?? [];
-$scopeGlobal = (bool) ($dashboard['scope_is_global'] ?? false);
+$scopeFullPlatform = (bool) ($dashboard['scope_is_full_platform'] ?? false);
+$scopeTeamConsolidated = (bool) ($dashboard['scope_team_consolidated'] ?? false);
+$consolidatedFilterLabel = (string) ($dashboard['consolidated_filter_label'] ?? 'Todos (consolidado)');
 $canFilterProfessional = (bool) ($dashboard['can_filter_professional'] ?? false);
 $filterProfessionalId = $dashboard['filter_professional_id'] ?? null;
 $filterProfessionalName = (string) ($dashboard['filter_professional_name'] ?? '');
@@ -26,8 +28,10 @@ $isAuthenticated = Auth::check();
                 <span class="badge rounded-pill bg-light text-secondary border border-secondary border-opacity-25 text-uppercase small fw-semibold mb-3">
                     <?php if ($canFilterProfessional && $filterProfessionalId !== null): ?>
                         Vista por profesional · <?= htmlspecialchars($filterProfessionalName, ENT_QUOTES, 'UTF-8') ?>
-                    <?php elseif ($scopeGlobal): ?>
+                    <?php elseif ($scopeFullPlatform): ?>
                         Panel Global · Gestión Territorial
+                    <?php elseif ($scopeTeamConsolidated): ?>
+                        Equipo a cargo · Consolidado
                     <?php else: ?>
                         Panel Personal · Gestión Territorial
                     <?php endif; ?>
@@ -39,8 +43,10 @@ $isAuthenticated = Auth::check();
                     Indicadores operativos y de seguimiento para la toma de decisiones.
                     <?php if ($canFilterProfessional && $filterProfessionalId !== null): ?>
                         Métricas del usuario seleccionado (misma lógica que el panel personal).
-                    <?php elseif ($scopeGlobal): ?>
+                    <?php elseif ($scopeFullPlatform): ?>
                         Vista consolidada de todo el programa.
+                    <?php elseif ($scopeTeamConsolidated): ?>
+                        Indicadores consolidados de los profesionales bajo tu alcance de auditoría.
                     <?php else: ?>
                         Vista de tu actividad y resultados.
                     <?php endif; ?>
@@ -65,7 +71,7 @@ $isAuthenticated = Auth::check();
                                     class="form-select form-select-sm"
                                     onchange="this.form.submit()"
                             >
-                                <option value="">Todos (consolidado)</option>
+                                <option value=""><?= htmlspecialchars($consolidatedFilterLabel, ENT_QUOTES, 'UTF-8') ?></option>
                                 <?php foreach ($professionalOptions as $opt): ?>
                                     <?php
                                     $oid = (int) ($opt['id'] ?? 0);
@@ -107,6 +113,14 @@ $isAuthenticated = Auth::check();
                                 / <?= (int) ($kpis['aoat_aprobadas'] ?? 0) ?>
                             </strong>
                             <span class="text-muted" style="font-size: 0.7rem;">Asignadas · Devueltas · Revisadas · Aprobadas</span>
+                        </li>
+                        <li>
+                            <span title="Registros AoAT con tipo «Asistencia técnica» o «Asesoría» (aportan a la meta).">Meta (asist. técn. + asesorías)</span>
+                            <strong><?= (int) ($kpis['aoat_meta_suma'] ?? 0) ?></strong>
+                        </li>
+                        <li>
+                            <span title="Registros AoAT con tipo «Actividad».">AoAT tipo Actividad</span>
+                            <strong><?= (int) ($kpis['aoat_tipo_actividad'] ?? 0) ?></strong>
                         </li>
                         <li><span>Planes anuales</span><strong><?= (int) ($kpis['planes_total'] ?? 0) ?></strong></li>
                         <li><span>Entrenamientos</span><strong><?= (int) ($kpis['entrenamientos_total'] ?? 0) ?></strong></li>

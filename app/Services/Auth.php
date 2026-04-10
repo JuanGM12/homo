@@ -47,6 +47,44 @@ final class Auth
     }
 
     /**
+     * Roles profesionales cuyos usuarios puede considerar un especialista en paneles consolidados
+     * (misma regla que auditoría AoAT / PIC). null = sin restricción (admin o coordinación).
+     *
+     * @return list<string>|null null = toda la plataforma; [] = especialista sin perfil reconocido
+     */
+    public static function dashboardProfessionalRoleScope(?array $user = null): ?array
+    {
+        $user = $user ?? self::user();
+        if ($user === null) {
+            return null;
+        }
+
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+        if (in_array('admin', $roles, true)
+            || in_array('coordinadora', $roles, true)
+            || in_array('coordinador', $roles, true)) {
+            return null;
+        }
+
+        if (!in_array('especialista', $roles, true)) {
+            return null;
+        }
+
+        $primaryRole = strtolower(trim((string) ($user['role'] ?? (($roles[0] ?? '') ?: ''))));
+        if ($primaryRole === 'psicologo' || in_array('psicologo', $roles, true)) {
+            return ['psicologo', 'profesional social', 'profesional_social'];
+        }
+        if ($primaryRole === 'medico' || in_array('medico', $roles, true)) {
+            return ['medico'];
+        }
+        if ($primaryRole === 'abogado' || in_array('abogado', $roles, true)) {
+            return ['abogado'];
+        }
+
+        return [];
+    }
+
+    /**
      * Filtra filas al propio usuario (defensa en profundidad si una consulta devolvió de más).
      *
      * @param array<int, array<string, mixed>> $rows

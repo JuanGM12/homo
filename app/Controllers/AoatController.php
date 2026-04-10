@@ -19,6 +19,9 @@ final class AoatController
     private const INDEX_PAGE_SIZE = 20;
     private const FORM_OLD_INPUT_KEY = 'aoat_old_input';
 
+    /** Texto libre del profesional al pasar de Devuelta → Realizado (visible para el especialista). */
+    public const PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE = 'professional_compliance_note';
+
     public function index(Request $request): Response
     {
         $user = Auth::user();
@@ -41,7 +44,7 @@ final class AoatController
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
-        $activityTypeFilter = trim((string) $request->input('activity_type', ''));
+        $activityTypeFilters = $this->parseAoatListActivityTypeFilter($request);
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
@@ -84,13 +87,13 @@ final class AoatController
         $records = $this->attachActivityTypeToRecords($records);
 
         // Filtros en memoria (suficiente para el volumen esperado)
-        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilters !== [] || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilters, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
 
-                if ($activityTypeFilter !== '' && (string) ($row['activity_type'] ?? '') !== $activityTypeFilter) {
+                if ($activityTypeFilters !== [] && !in_array((string) ($row['activity_type'] ?? ''), $activityTypeFilters, true)) {
                     return false;
                 }
 
@@ -456,7 +459,7 @@ final class AoatController
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
-        $activityTypeFilter = trim((string) $request->input('activity_type', ''));
+        $activityTypeFilters = $this->parseAoatListActivityTypeFilter($request);
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
@@ -490,13 +493,13 @@ final class AoatController
         $records = $this->attachActivityDateToRecords($records);
         $records = $this->attachActivityTypeToRecords($records);
 
-        if ($search !== '' || $stateFilter !== '' || $activityTypeFilter !== '' || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilters !== [] || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilters, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
 
-                if ($activityTypeFilter !== '' && (string) ($row['activity_type'] ?? '') !== $activityTypeFilter) {
+                if ($activityTypeFilters !== [] && !in_array((string) ($row['activity_type'] ?? ''), $activityTypeFilters, true)) {
                     return false;
                 }
 
@@ -795,6 +798,21 @@ final class AoatController
             return Response::redirect('/aoat/editar?id=' . $id);
         }
 
+        $wasReturned = (string) ($record['state'] ?? '') === 'Devuelta';
+        if ($wasReturned && !$canEditApprovedNumberOnly) {
+            $complianceNote = trim((string) $request->input(self::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE, ''));
+            if (mb_strlen($complianceNote) < 15) {
+                $this->flashOldInput('edit', $id, $request);
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'Información requerida',
+                    'message' => 'Describe qué ajustes o acciones realizaste para atender la devolución (mínimo 15 caracteres). Así el especialista puede revisar con contexto.',
+                ]);
+
+                return Response::redirect('/aoat/editar?id=' . $id);
+            }
+        }
+
         $payload = $this->buildPayload($request);
 
         try {
@@ -803,7 +821,6 @@ final class AoatController
                 'municipality' => $municipality,
                 'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
             ];
-            $wasReturned = (string) ($record['state'] ?? '') === 'Devuelta';
             if ($wasReturned) {
                 $updateData['state'] = 'Realizado';
             }
@@ -821,7 +838,6 @@ final class AoatController
             return Response::redirect('/aoat/editar?id=' . $id);
         }
 
-        $wasReturned = (string) ($record['state'] ?? '') === 'Devuelta';
         Flash::set([
             'type' => 'success',
             'title' => $wasReturned ? 'Cambios guardados y AoAT marcada como realizada' : 'AoAT actualizada',
@@ -837,7 +853,7 @@ final class AoatController
      * Cambio de estado por parte de especialistas / coordinación.
      * Transiciones:
      *  - Asignada → Aprobada | Devuelta (Devuelta envía correo al profesional, fuera de la petición HTTP).
-     *  - Realizado → Aprobada (tras ajustes del profesional).
+     *  - Realizado → Aprobada | Devuelta (nueva devolución si el ajuste no fue suficiente; se notifica de nuevo).
      */
     public function updateState(Request $request): Response
     {
@@ -896,11 +912,11 @@ final class AoatController
         $current = (string) ($record['state'] ?? '');
 
         if ($newState === 'Devuelta') {
-            if ($current !== 'Asignada') {
+            if ($current !== 'Asignada' && $current !== 'Realizado') {
                 Flash::set([
                     'type' => 'error',
                     'title' => 'Estado no válido',
-                    'message' => 'Solo se puede devolver una AoAT que esté en estado "Asignada".',
+                    'message' => 'Solo se puede devolver una AoAT en estado "Asignada" o "Realizado" (revisión tras ajustes del profesional).',
                 ]);
 
                 return Response::redirect('/aoat');
@@ -944,10 +960,15 @@ final class AoatController
                 (string) ($payload['activity_date'] ?? '')
             );
 
+            $title = $current === 'Realizado' ? 'AoAT devuelta nuevamente' : 'AoAT devuelta';
+            $msg = $current === 'Realizado'
+                ? 'El registro volvió a "Devuelta". El profesional recibirá un correo para realizar los ajustes solicitados.'
+                : 'El estado se actualizó a "Devuelta". El profesional recibirá un correo con la notificación en breve.';
+
             Flash::set([
                 'type' => 'success',
-                'title' => 'AoAT devuelta',
-                'message' => 'El estado se actualizó a "Devuelta". El profesional recibirá un correo con la notificación en breve.',
+                'title' => $title,
+                'message' => $msg,
             ]);
 
             return Response::redirect('/aoat');
@@ -1084,7 +1105,7 @@ final class AoatController
             $current = (string) ($record['state'] ?? '');
 
             if ($newState === 'Devuelta') {
-                if ($current !== 'Asignada') {
+                if ($current !== 'Asignada' && $current !== 'Realizado') {
                     $skipped++;
 
                     continue;
@@ -1199,12 +1220,29 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
-        $repo->update($id, ['state' => 'Realizado']);
+        $complianceNote = trim((string) $request->input(self::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE, ''));
+        if (mb_strlen($complianceNote) < 15) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Información requerida',
+                'message' => 'Indica qué hiciste para atender la devolución (mínimo 15 caracteres). Puedes usar también "Editar" en el formulario completo.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
+        $payload = $this->decodePayload($record);
+        $payload[self::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE] = $complianceNote;
+
+        $repo->update($id, [
+            'state' => 'Realizado',
+            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        ]);
 
         Flash::set([
             'type' => 'success',
             'title' => 'Estado actualizado',
-            'message' => 'Marcaste la AoAT como "Realizado". El especialista podrá revisarla y aprobarla.',
+            'message' => 'Marcaste la AoAT como "Realizado". El especialista verá tu comentario al revisar.',
         ]);
 
         return Response::redirect('/aoat');
@@ -1624,7 +1662,8 @@ final class AoatController
             $payload['professional_last_name'],
             $payload['profession'],
             $payload['subregion'],
-            $payload['municipality']
+            $payload['municipality'],
+            $payload['id']
         );
 
         return $payload;
@@ -2092,6 +2131,7 @@ final class AoatController
             'aoat_number' => 'Número de la AoAT o actividad',
             'activity_date' => 'Fecha de la actividad',
             'activity_type' => 'Actividad que realizó',
+            self::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE => 'Acciones realizadas ante la devolución (profesional)',
             'activity_with' => 'Con quién realizó la actividad',
             'subregion' => 'Subregión que visitó',
             'municipality' => 'Municipio visitado',
@@ -2146,6 +2186,35 @@ final class AoatController
         }
 
         return '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '" style="height:54px;width:auto;">';
+    }
+
+    /**
+     * Tipos de actividad permitidos en filtro de listado/exportación. Vacío = todas.
+     * Acepta activity_type[]= (varias) o activity_type= (una, compatibilidad con URLs antiguas).
+     *
+     * @return list<string>
+     */
+    private function parseAoatListActivityTypeFilter(Request $request): array
+    {
+        $allowed = ['Asistencia técnica', 'Asesoría', 'Actividad'];
+        $raw = $request->input('activity_type');
+        $candidates = [];
+        if (is_array($raw)) {
+            foreach ($raw as $v) {
+                $candidates[] = trim((string) $v);
+            }
+        } elseif ($raw !== null && $raw !== '') {
+            $candidates[] = trim((string) $raw);
+        }
+
+        $out = [];
+        foreach ($candidates as $c) {
+            if ($c !== '' && in_array($c, $allowed, true)) {
+                $out[] = $c;
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 }
 

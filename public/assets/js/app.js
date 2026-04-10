@@ -330,8 +330,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /**
      * Sustituye el &lt;select multiple&gt; por un botón + panel con casillas (clic sin Ctrl).
+     *
+     * @param {HTMLSelectElement} sel
+     * @param {string} emptyLabel Texto cuando no hay selección (ej. «Todos los municipios»).
+     * @param {{ multiCountWord?: string, toggleTitle?: string }} [opts] multiCountWord: palabra tras el número (ej. «municipios», «actividades»).
      */
-    function homoMountMunicipalityMultiWidget(sel, emptyLabel) {
+    function homoMountMunicipalityMultiWidget(sel, emptyLabel, opts = {}) {
         if (!(sel instanceof HTMLSelectElement)) {
             return;
         }
@@ -339,6 +343,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isMulti) {
             return;
         }
+
+        const multiCountWord = opts.multiCountWord || 'municipios';
+        const toggleTitle = opts.toggleTitle || 'Elija uno o varios municipios';
 
         homoUnmountMunicipalityMultiWidget(sel);
 
@@ -353,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.className = 'homo-muni-multiselect__toggle';
         btn.setAttribute('aria-expanded', 'false');
         btn.setAttribute('aria-haspopup', 'listbox');
-        btn.setAttribute('title', 'Elija uno o varios municipios');
+        btn.setAttribute('title', toggleTitle);
 
         const panel = document.createElement('div');
         panel.className = 'homo-muni-multiselect__panel';
@@ -389,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (values.length === 1) {
                 labelEl.textContent = values[0];
             } else {
-                labelEl.textContent = `${values.length} municipios`;
+                labelEl.textContent = `${values.length} ${multiCountWord}`;
             }
             btn.replaceChildren(labelEl, chevronIcon());
             btn.disabled = sel.disabled;
@@ -466,6 +473,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateButton();
     }
+
+    /** Multiselect con opciones fijas en HTML (mismo UI que municipios). */
+    function homoMountStaticMultiSelectWidgets() {
+        document.querySelectorAll('select[data-homo-static-multiselect="1"]').forEach((node) => {
+            if (!(node instanceof HTMLSelectElement)) {
+                return;
+            }
+            const emptyLabel = node.dataset.homoMultiEmptyLabel || 'Seleccione';
+            const multiCountWord = node.dataset.homoMultiWord || 'opciones';
+            const toggleTitle = node.dataset.homoMultiTitle || emptyLabel;
+            homoMountMunicipalityMultiWidget(node, emptyLabel, {
+                multiCountWord,
+                toggleTitle,
+            });
+        });
+    }
+
+    homoMountStaticMultiSelectWidgets();
 
     // Subregión / Municipio dinámicos (Evaluaciones, AoAT, Asistencia, etc.)
     const subregionSelects = document.querySelectorAll('[data-subregion-select]');
@@ -1216,6 +1241,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     actividad_social: 'Actividades realizadas (Profesional social)',
                     'Motivo de devolución': 'Motivo de devolución',
                     'Comentarios de devolución': 'Comentarios de devolución',
+                    professional_compliance_note: 'Acciones realizadas ante la devolución (profesional)',
                 };
 
                 const entries = Object.entries(payload);
@@ -1327,6 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     actividad_social: 'Actividades realizadas (Profesional social)',
                     'Motivo de devolución': 'Motivo de devolución',
                     'Comentarios de devolución': 'Comentarios de devolución',
+                    professional_compliance_note: 'Acciones realizadas ante la devolución (profesional)',
                 };
 
                 const entries = Object.entries(payload);
@@ -1368,8 +1395,66 @@ document.addEventListener('DOMContentLoaded', () => {
     // Auditoría AoAT + aprobación desde Realizado (delegación: sigue funcionando tras filtros AJAX)
     document.body.addEventListener('click', async (e) => {
         const approveBtn = e.target.closest('[data-aoat-approve-realizado]');
+        const returnRealizadoBtn = e.target.closest('[data-aoat-return-realizado]');
+        const markRealizadoBtn = e.target.closest('[data-aoat-mark-realizado]');
         const auditBtn = e.target.closest('[data-aoat-audit]');
-        if (!approveBtn && !auditBtn) {
+        if (!approveBtn && !returnRealizadoBtn && !markRealizadoBtn && !auditBtn) {
+            return;
+        }
+
+        e.preventDefault();
+
+        if (markRealizadoBtn) {
+            const marcarForm = document.getElementById('aoat-marcar-realizado-form');
+            const marcarId = document.getElementById('aoat-marcar-realizado-id');
+            const marcarNote = document.getElementById('aoat-marcar-realizado-note');
+            if (!marcarForm || !marcarId || !marcarNote) {
+                return;
+            }
+
+            const rawMark = markRealizadoBtn.getAttribute('data-aoat');
+            if (!rawMark) {
+                return;
+            }
+
+            let markData;
+            try {
+                markData = JSON.parse(rawMark);
+            } catch (err) {
+                console.error('No se pudo parsear el detalle de la AoAT para marcar Realizado.', err);
+                return;
+            }
+
+            const markId = markData.id || '';
+
+            const markResult = await Swal.fire({
+                title: 'Marcar como Realizado',
+                html: '<p class="small mb-2 text-start">Describe qué hiciste para atender la devolución (mínimo 15 caracteres). El especialista leerá este texto al revisar.</p>',
+                input: 'textarea',
+                inputPlaceholder: 'Ej.: Actualicé datos en AoAT, subí soportes y corregí lo indicado...',
+                inputAttributes: { rows: 4 },
+                showCancelButton: true,
+                cancelButtonText: 'Cancelar',
+                confirmButtonText: 'Enviar a revisión del especialista',
+                width: '42rem',
+                preConfirm: () => {
+                    const el = Swal.getInput();
+                    const v = el && el.value ? String(el.value).trim() : '';
+                    if (v.length < 15) {
+                        Swal.showValidationMessage('La explicación debe tener al menos 15 caracteres.');
+                        return false;
+                    }
+                    return v;
+                },
+            });
+
+            if (!markResult.isConfirmed || !markResult.value) {
+                return;
+            }
+
+            marcarId.value = String(markId);
+            marcarNote.value = String(markResult.value);
+            marcarForm.submit();
             return;
         }
 
@@ -1382,7 +1467,64 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        e.preventDefault();
+        if (returnRealizadoBtn) {
+            const rawRet = returnRealizadoBtn.getAttribute('data-aoat');
+            if (!rawRet) {
+                return;
+            }
+
+            let retData;
+            try {
+                retData = JSON.parse(rawRet);
+            } catch (err) {
+                console.error('No se pudo parsear el detalle de la AoAT para devolver desde Realizado.', err);
+                return;
+            }
+
+            const retId = retData.id || '';
+            const retProfesional = retData.professional || '';
+
+            const { value: retFormValues } = await Swal.fire({
+                title: 'Devolver AoAT nuevamente',
+                html:
+                    `<p class="small text-start mb-2">Profesional: <strong>${escapeHtml(retProfesional)}</strong></p>` +
+                    '<div class="mb-2 text-start small">El registro está en <strong>Realizado</strong>. Indica motivo y observación para devolverlo de nuevo al profesional.</div>' +
+                    '<select id="swal-aoat-ret-motive" class="form-select mb-2">' +
+                    '<option value="">Selecciona un motivo</option>' +
+                    '<option value="Sin Cargar en AoAT">Sin Cargar en AoAT</option>' +
+                    '<option value="Sin cargar en Drive">Sin cargar en Drive</option>' +
+                    '<option value="Errores calidad del dato">Errores calidad del dato</option>' +
+                    '</select>' +
+                    '<textarea id="swal-aoat-ret-observation" class="form-control" rows="3" placeholder="Describe el motivo de la devolución"></textarea>',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const motiveEl = document.getElementById('swal-aoat-ret-motive');
+                    const obsEl = document.getElementById('swal-aoat-ret-observation');
+                    const m = motiveEl ? motiveEl.value : '';
+                    const o = obsEl ? obsEl.value.trim() : '';
+                    if (!m || !o) {
+                        Swal.showValidationMessage('Debes seleccionar un motivo y escribir una observación.');
+                        return null;
+                    }
+                    return { motive: m, observation: o };
+                },
+                showCancelButton: true,
+                cancelButtonText: 'Cancelar',
+                confirmButtonText: 'Enviar devolución',
+                width: '40rem',
+            });
+
+            if (!retFormValues) {
+                return;
+            }
+
+            inputId.value = String(retId);
+            inputState.value = 'Devuelta';
+            inputObs.value = retFormValues.observation;
+            inputMotive.value = retFormValues.motive;
+            stateForm.submit();
+            return;
+        }
 
         if (approveBtn) {
             const raw = approveBtn.getAttribute('data-aoat');
@@ -1398,11 +1540,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const id = data.id || '';
             const profesional = data.professional || '';
+            const payloadApprove = data.payload && typeof data.payload === 'object' ? data.payload : {};
+            const noteRaw = (payloadApprove.professional_compliance_note && String(payloadApprove.professional_compliance_note).trim()) || '';
+
+            let approveHtml = `<p class="small mb-0">Profesional: <strong>${escapeHtml(profesional)}</strong></p>
+<p class="small mt-2 mb-0">El profesional marcó el registro como <strong>Realizado</strong> tras los ajustes. ¿Confirmas la <strong>aprobación final</strong>?</p>`;
+            if (noteRaw) {
+                approveHtml += `<div class="alert alert-light border small text-start mt-2 mb-0"><strong>Lo que indicó el profesional al marcar Realizado:</strong><br>${formatTextBlock(noteRaw)}</div>`;
+            }
 
             const result = await Swal.fire({
                 title: 'Aprobar revisión de AoAT',
-                html: `<p class="small mb-0">Profesional: <strong>${profesional}</strong></p>
-<p class="small mt-2 mb-0">El profesional marcó el registro como <strong>Realizado</strong> tras los ajustes. ¿Confirmas la <strong>aprobación final</strong>?</p>`,
+                html: approveHtml,
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, aprobar',
@@ -1558,13 +1707,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const hasSelection = checks.length > 0;
-        const hasAsignada = checks.some((cb) => (cb.getAttribute('data-aoat-bulk-row-state') || '') === 'Asignada');
+        const hasDevolutable = checks.some((cb) => {
+            const st = (cb.getAttribute('data-aoat-bulk-row-state') || '');
+            return st === 'Asignada' || st === 'Realizado';
+        });
 
         if (btnAprobar) {
             btnAprobar.disabled = !hasSelection;
         }
         if (btnDevolver) {
-            btnDevolver.disabled = !hasAsignada;
+            btnDevolver.disabled = !hasDevolutable;
         }
 
         if (selectAll) {
@@ -1665,12 +1817,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const asignadaChecks = checked.filter((cb) => (cb.getAttribute('data-aoat-bulk-row-state') || '') === 'Asignada');
-        if (asignadaChecks.length === 0) {
+        const devolutableChecks = checked.filter((cb) => {
+            const st = (cb.getAttribute('data-aoat-bulk-row-state') || '');
+            return st === 'Asignada' || st === 'Realizado';
+        });
+        if (devolutableChecks.length === 0) {
             await Swal.fire({
                 icon: 'info',
-                title: 'Sin registros en Asignada',
-                text: 'La devolución masiva solo aplica a AoAT en estado Asignada.',
+                title: 'Sin registros devolvibles',
+                text: 'La devolución masiva aplica solo a AoAT en estado Asignada o Realizado (las demás se omiten en el servidor).',
             });
             return;
         }
@@ -1678,8 +1833,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const { value: formValues } = await Swal.fire({
             title: 'Devolver AoAT en bloque',
             html:
-                `<p class="small text-start mb-2">Se devolverán <strong>${asignadaChecks.length}</strong> registro(s) en estado <strong>Asignada</strong>. Las filas en Realizado no se incluyen.</p>` +
-                '<div class="mb-2 text-start small">Motivo y observación (mismos para todos los seleccionados en Asignada):</div>' +
+                `<p class="small text-start mb-2">Se devolverán <strong>${devolutableChecks.length}</strong> registro(s) en estado <strong>Asignada</strong> o <strong>Realizado</strong>. El servidor omitirá los que no correspondan.</p>` +
+                '<div class="mb-2 text-start small">Motivo y observación (mismos para todos los seleccionados):</div>' +
                 '<select id="swal-aoat-bulk-motive" class="form-select mb-2">' +
                 '<option value="">Selecciona un motivo</option>' +
                 '<option value="Sin Cargar en AoAT">Sin Cargar en AoAT</option>' +
@@ -1710,7 +1865,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         bulkIdsWrap.innerHTML = '';
-        asignadaChecks.forEach((cb) => {
+        devolutableChecks.forEach((cb) => {
             const inp = document.createElement('input');
             inp.type = 'hidden';
             inp.name = 'ids[]';
@@ -2473,7 +2628,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stateSelect.addEventListener('change', () => applyAoatFilters(1));
         }
 
-        aoatFilterForm.querySelector('select[name="activity_type"]')?.addEventListener('change', () => applyAoatFilters(1));
+        aoatFilterForm.querySelector('select[name="activity_type[]"]')?.addEventListener('change', () => applyAoatFilters(1));
 
         aoatFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () => applyAoatFilters(1));
         aoatFilterForm.querySelector('[data-municipality-select]')?.addEventListener('change', () => applyAoatFilters(1));
