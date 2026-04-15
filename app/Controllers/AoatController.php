@@ -1249,7 +1249,7 @@ final class AoatController
     }
 
     /**
-     * Elimina un registro de AoAT (solo admin, coordinación o especialista con alcance acorde).
+     * Elimina un registro de AoAT (solo administradores).
      */
     public function destroy(Request $request): Response
     {
@@ -1306,44 +1306,13 @@ final class AoatController
     }
 
     /**
-     * Admin y coordinación pueden eliminar cualquier registro en vista de auditoría.
-     * Especialista: mismo alcance que la auditoría y no sobre sus propios registros.
+     * Solo administradores pueden eliminar registros de AoAT desde la plataforma.
      */
     public static function canUserDeleteAoatRecord(array $user, array $record): bool
     {
-        $roles = $user['roles'] ?? [];
-        $hasElevatedRole = in_array('admin', $roles, true)
-            || in_array('coordinadora', $roles, true)
-            || in_array('coordinador', $roles, true)
-            || in_array('especialista', $roles, true);
-        if (!$hasElevatedRole) {
-            return false;
-        }
+        unset($record);
 
-        if (in_array('admin', $roles, true)
-            || in_array('coordinadora', $roles, true)
-            || in_array('coordinador', $roles, true)) {
-            return true;
-        }
-
-        if ((int) ($record['user_id'] ?? 0) === (int) ($user['id'] ?? 0)) {
-            return false;
-        }
-
-        $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
-        $profRole = strtolower(trim((string) ($record['professional_role'] ?? '')));
-
-        if ($primaryRole === 'medico') {
-            return $profRole === 'medico';
-        }
-        if ($primaryRole === 'abogado') {
-            return $profRole === 'abogado';
-        }
-        if ($primaryRole === 'psicologo') {
-            return in_array($profRole, ['psicologo', 'profesional social', 'profesional_social'], true);
-        }
-
-        return false;
+        return Auth::isAdmin($user);
     }
 
     private function userCanAccessAoat(array $user): bool

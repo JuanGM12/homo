@@ -12,6 +12,7 @@ $to = (int) ($pagination['to'] ?? 0);
 $currentSort = (string) ($_GET['sort'] ?? 'created_at');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 $userId = (int) ($currentUser['id'] ?? 0);
+$isAdmin = in_array('admin', $currentUser['roles'] ?? [], true);
 
 $query = $_GET;
 unset($query['partial']);
@@ -189,12 +190,32 @@ if ($totalPages <= 7) {
                                     <i class="bi bi-eye me-1"></i>
                                     Ver detalles
                                 </button>
-                                <?php if (!empty($plan['editable']) && $isOwner): ?>
+                                <?php
+                                $canEditPlan = !empty($plan['editable']) && $isOwner;
+                                ?>
+                                <?php if ($canEditPlan): ?>
                                     <a href="/entrenamiento/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil me-1"></i>
                                         Editar
                                     </a>
-                                <?php else: ?>
+                                <?php endif; ?>
+                                <?php if ($isAdmin): ?>
+                                    <form
+                                        method="post"
+                                        action="/entrenamiento/eliminar"
+                                        class="d-inline"
+                                        data-sw-confirm="1"
+                                        data-sw-title="Eliminar plan de entrenamiento"
+                                        data-sw-text="¿Eliminar este plan de entrenamiento de forma permanente? Esta acción no se puede deshacer."
+                                    >
+                                        <input type="hidden" name="id" value="<?= (int) $plan['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash me-1"></i>
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                                <?php if (!$canEditPlan && !$isAdmin): ?>
                                     <span class="entrenamiento-no-actions">Sin acciones</span>
                                 <?php endif; ?>
                             </div>

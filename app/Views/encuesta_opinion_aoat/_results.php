@@ -1,6 +1,9 @@
 <?php
 /** @var array<int, array<string, mixed>> $records */
 /** @var array<string, mixed> $pagination */
+/** @var bool $isAdmin */
+
+$isAdmin = (bool) ($isAdmin ?? false);
 
 $totalItems  = (int) ($pagination['total_items'] ?? 0);
 $currentPage = (int) ($pagination['current_page'] ?? 1);
@@ -59,28 +62,32 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
             <thead>
                 <tr>
                     <?php
-                    $cols = [
-                        'created_at'   => 'Fecha registro',
-                        'advisor_name' => 'Asesor',
-                        ''             => 'Actividad',
-                        ''             => 'Lugar',
-                        'activity_date'=> 'Fecha actividad',
-                        'subregion'    => 'Subregión',
-                        'municipality' => 'Municipio',
-                        'promedio'     => 'Promedio (1–5)',
+                    /** Columnas del encabezado (una entrada por columna; antes se usaba '' repetido y PHP dejaba solo la ultima clave). */
+                    $encColDefs = [
+                        ['sort' => 'created_at', 'label' => 'Fecha registro'],
+                        ['sort' => 'advisor_name', 'label' => 'Asesor'],
+                        ['sort' => null, 'label' => 'Actividad'],
+                        ['sort' => null, 'label' => 'Lugar'],
+                        ['sort' => 'activity_date', 'label' => 'Fecha actividad'],
+                        ['sort' => 'subregion', 'label' => 'Subregión'],
+                        ['sort' => 'municipality', 'label' => 'Municipio'],
+                        ['sort' => 'promedio', 'label' => 'Promedio (1–5)'],
+                        ['sort' => null, 'label' => 'Acciones'],
                     ];
-                    foreach ($cols as $colKey => $colLabel):
-                        $isActive = $colKey !== '' && $currentSort === $colKey;
+                    foreach ($encColDefs as $encCol):
+                        $sortKey = $encCol['sort'];
+                        $colLabel = $encCol['label'];
+                        $isActive = $sortKey !== null && $currentSort === $sortKey;
                         $nextDir  = ($isActive && $currentDir === 'asc') ? 'desc' : 'asc';
                     ?>
                         <th>
-                            <?php if ($colKey !== ''): ?>
+                            <?php if ($sortKey !== null): ?>
                                 <a class="asi-sort-link <?= $isActive ? 'is-active' : '' ?>"
                                     href="#"
-                                    data-encuesta-sort="<?= htmlspecialchars($colKey, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-encuesta-sort="<?= htmlspecialchars($sortKey, ENT_QUOTES, 'UTF-8') ?>"
                                     data-encuesta-dir="<?= htmlspecialchars($nextDir, ENT_QUOTES, 'UTF-8') ?>">
                                     <span><?= htmlspecialchars($colLabel, ENT_QUOTES, 'UTF-8') ?></span>
-                                    <i class="bi <?= $sortIcon($colKey) ?>"></i>
+                                    <i class="bi <?= $sortIcon($sortKey) ?>"></i>
                                 </a>
                             <?php else: ?>
                                 <span class="enc-col-static"><?= htmlspecialchars($colLabel, ENT_QUOTES, 'UTF-8') ?></span>
@@ -122,6 +129,25 @@ $getSubStyle = static function (string $sub) use ($subColors): string {
                         <td class="small"><?= htmlspecialchars((string) ($row['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="text-center">
                             <span class="enc-score-badge <?= $scoreClass($prom) ?>"><?= number_format($prom, 1) ?></span>
+                        </td>
+                        <td class="text-end">
+                            <?php if ($isAdmin): ?>
+                                <form
+                                    method="post"
+                                    action="/encuesta-opinion-aoat/eliminar"
+                                    class="d-inline"
+                                    data-sw-confirm="1"
+                                    data-sw-title="Eliminar encuesta"
+                                    data-sw-text="¿Eliminar esta encuesta de opinión AoAT de forma permanente? Esta acción no se puede deshacer."
+                                >
+                                    <input type="hidden" name="id" value="<?= (int) ($row['id'] ?? 0) ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            <?php else: ?>
+                                <span class="text-muted">—</span>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>

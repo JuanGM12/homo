@@ -59,4 +59,21 @@ final class EncuestaOpinionAoatRepository
         );
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public function findById(int $id): ?array
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare('SELECT * FROM encuesta_opinion_aoat WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
+    }
+
+    public function deleteById(int $id): void
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare('DELETE FROM encuesta_opinion_aoat WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+    }
 }

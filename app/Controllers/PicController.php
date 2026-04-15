@@ -377,6 +377,52 @@ final class PicController
         ]);
     }
 
+    public function destroy(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+        if (!Auth::isAdmin($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+        if (!$this->userCanAccessModule($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'No se indicó un registro PIC válido.',
+            ]);
+
+            return Response::redirect('/pic');
+        }
+
+        $record = $this->repository->findById($id);
+        if ($record === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'El registro PIC indicado no existe.',
+            ]);
+
+            return Response::redirect('/pic');
+        }
+
+        $this->repository->deleteById($id);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Registro eliminado',
+            'message' => 'El registro de seguimiento PIC se eliminó del sistema.',
+        ]);
+
+        return Response::redirect('/pic');
+    }
+
     private function userCanAccessModule(array $user): bool
     {
         $roles = $user['roles'] ?? [];

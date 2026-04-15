@@ -176,7 +176,7 @@ final class EncuestaOpinionAoatController
         $pagination = $this->paginateEncuestaRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
 
         if ((string) $request->input('partial', '') === 'results') {
-            $html = $this->renderEncuestaResultsPartial($pagination['items'], $pagination);
+            $html = $this->renderEncuestaResultsPartial($pagination['items'], $pagination, Auth::isAdmin($user));
 
             return Response::json(['html' => $html]);
         }
@@ -187,6 +187,7 @@ final class EncuestaOpinionAoatController
             'pagination' => $pagination,
             'filters' => $filters,
             'advisors' => $advisors,
+            'isAdmin' => Auth::isAdmin($user),
         ]);
     }
 
@@ -232,6 +233,64 @@ final class EncuestaOpinionAoatController
             'Content-Type' => 'application/vnd.ms-excel; charset=utf-8',
             'Content-Disposition' => 'attachment; filename="encuesta_opinion_aoat_' . date('Ymd_His') . '.xls"',
         ]);
+    }
+
+    public function destroy(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+        if (!Auth::isAdmin($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+        if (!$this->userCanConsultExport($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'No se indicó una encuesta válida.',
+            ]);
+
+            return Response::redirect('/encuesta-opinion-aoat/listar');
+        }
+
+        $repo = new EncuestaOpinionAoatRepository();
+        $record = $repo->findById($id);
+        if ($record === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'La encuesta indicada no existe.',
+            ]);
+
+            return Response::redirect('/encuesta-opinion-aoat/listar');
+        }
+
+        $scoped = $this->scopeRecordsForUser([$record], $user);
+        if ($scoped === []) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Acción no permitida',
+                'message' => 'No puedes eliminar esta encuesta.',
+            ]);
+
+            return Response::redirect('/encuesta-opinion-aoat/listar');
+        }
+
+        $repo->deleteById($id);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Registro eliminado',
+            'message' => 'La encuesta de opinión AoAT se eliminó del sistema.',
+        ]);
+
+        return Response::redirect('/encuesta-opinion-aoat/listar');
     }
 
     private function applyEncuestaFilters(array $records, array $filters): array
@@ -323,7 +382,7 @@ final class EncuestaOpinionAoatController
         ];
     }
 
-    private function renderEncuestaResultsPartial(array $records, array $pagination): string
+    private function renderEncuestaResultsPartial(array $records, array $pagination, bool $isAdmin): string
     {
         ob_start();
         require dirname(__DIR__) . '/Views/encuesta_opinion_aoat/_results.php';

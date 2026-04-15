@@ -12,6 +12,7 @@ $to = (int) ($pagination['to'] ?? 0);
 $currentSort = (string) ($_GET['sort'] ?? 'created_at');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 $userId = (int) ($currentUser['id'] ?? 0);
+$isAdmin = in_array('admin', $currentUser['roles'] ?? [], true);
 
 $query = $_GET;
 unset($query['partial']);
@@ -192,12 +193,32 @@ if ($totalPages <= 7) {
                                     <i class="bi bi-eye me-1"></i>
                                     Ver detalles
                                 </button>
-                                <?php if (!empty($row['editable']) && $isOwner): ?>
+                                <?php
+                                $canEditPic = !empty($row['editable']) && $isOwner;
+                                ?>
+                                <?php if ($canEditPic): ?>
                                     <a href="/pic/editar?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil me-1"></i>
                                         Editar
                                     </a>
-                                <?php else: ?>
+                                <?php endif; ?>
+                                <?php if ($isAdmin): ?>
+                                    <form
+                                        method="post"
+                                        action="/pic/eliminar"
+                                        class="d-inline"
+                                        data-sw-confirm="1"
+                                        data-sw-title="Eliminar registro PIC"
+                                        data-sw-text="¿Eliminar este registro PIC de forma permanente? Esta acción no se puede deshacer."
+                                    >
+                                        <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash me-1"></i>
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                                <?php if (!$canEditPic && !$isAdmin): ?>
                                     <span class="pic-no-actions">No editable</span>
                                 <?php endif; ?>
                             </div>

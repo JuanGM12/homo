@@ -2,6 +2,9 @@
 /** @var array $actividad */
 /** @var array $asistentes */
 /** @var string $registrationUrl */
+/** @var bool $canDeleteActividad */
+
+$canDeleteActividad = (bool) ($canDeleteActividad ?? false);
 $tipos = $actividad['actividad_tipos'] ?? [];
 $tiposList = is_array($tipos) ? $tipos : [];
 $tipoActividad = (string) ($actividad['tipo'] ?? 'aoat');
@@ -137,12 +140,20 @@ if ($subregion !== '') {
                     <a href="/asistencia/exportar-pdf?id=<?= (int) ($actividad['id'] ?? 0) ?>" target="_blank" class="asi-show-action-link text-primary">
                         <i class="bi bi-file-pdf me-2"></i>Exportar PDF
                     </a>
-                    <form method="post" action="/asistencia/eliminar" onsubmit="return confirm('¿Está seguro de eliminar esta actividad y todos sus asistentes?');">
-                        <input type="hidden" name="id" value="<?= (int) ($actividad['id'] ?? 0) ?>">
-                        <button type="submit" class="asi-show-action-link text-danger border-0 bg-transparent p-0 w-100 text-start">
-                            <i class="bi bi-trash me-2"></i>Eliminar Actividad
-                        </button>
-                    </form>
+                    <?php if ($canDeleteActividad): ?>
+                        <form
+                            method="post"
+                            action="/asistencia/eliminar"
+                            data-sw-confirm="1"
+                            data-sw-title="Eliminar actividad"
+                            data-sw-text="¿Eliminar esta actividad y todos los asistentes registrados? Esta acción no se puede deshacer."
+                        >
+                            <input type="hidden" name="id" value="<?= (int) ($actividad['id'] ?? 0) ?>">
+                            <button type="submit" class="asi-show-action-link text-danger border-0 bg-transparent p-0 w-100 text-start">
+                                <i class="bi bi-trash me-2"></i>Eliminar Actividad
+                            </button>
+                        </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

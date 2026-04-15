@@ -356,6 +356,7 @@ final class AsistenciaController
             'actividad' => $actividad,
             'asistentes' => $asistentes,
             'registrationUrl' => $registrationUrl,
+            'canDeleteActividad' => Auth::isAdmin($user),
         ]);
     }
 
@@ -486,8 +487,8 @@ final class AsistenciaController
             Flash::set(['type' => 'error', 'title' => 'No encontrado', 'message' => 'La actividad no existe.']);
             return Response::redirect('/asistencia');
         }
-        if (!$this->userCanAccessActividad($user, $actividad)) {
-            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'No puedes eliminar esta actividad de asistencia.']);
+        if (!Auth::isAdmin($user)) {
+            Flash::set(['type' => 'error', 'title' => 'Acceso denegado', 'message' => 'Solo un administrador puede eliminar actividades de asistencia.']);
             return Response::redirect('/asistencia');
         }
 

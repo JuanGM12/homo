@@ -31,6 +31,7 @@ final class App
         // Módulo 1: Evaluaciones - Test (acceso libre)
         $this->router->get('/evaluaciones', [\App\Controllers\EvaluacionesController::class, 'index']);
         $this->router->get('/evaluaciones/detalle', [\App\Controllers\EvaluacionesController::class, 'showDetail'])->middleware('auth');
+        $this->router->post('/evaluaciones/eliminar', [\App\Controllers\EvaluacionesController::class, 'destroyResponse'])->middleware('auth', 'role:admin');
         $this->router->get('/evaluaciones/exportar-csv', [\App\Controllers\EvaluacionesController::class, 'exportCsv'])->middleware('auth');
         $this->router->get('/evaluaciones/exportar-pdf', [\App\Controllers\EvaluacionesController::class, 'exportPdf'])->middleware('auth');
 
@@ -66,6 +67,7 @@ final class App
         $this->router->post('/encuesta-opinion-aoat', [\App\Controllers\EncuestaOpinionAoatController::class, 'store']);
         $this->router->get('/encuesta-opinion-aoat/listar', [\App\Controllers\EncuestaOpinionAoatController::class, 'index'])->middleware('auth');
         $this->router->get('/encuesta-opinion-aoat/exportar', [\App\Controllers\EncuestaOpinionAoatController::class, 'export'])->middleware('auth');
+        $this->router->post('/encuesta-opinion-aoat/eliminar', [\App\Controllers\EncuestaOpinionAoatController::class, 'destroy'])->middleware('auth', 'role:admin');
 
         // Módulo 2: Registro de AoAT (requiere autenticación)
         $this->router->get('/aoat', [\App\Controllers\AoatController::class, 'index'])->middleware('auth');
@@ -75,7 +77,7 @@ final class App
         $this->router->post('/aoat/editar', [\App\Controllers\AoatController::class, 'update'])->middleware('auth');
         $this->router->post('/aoat/cambiar-estado', [\App\Controllers\AoatController::class, 'updateState'])->middleware('auth');
         $this->router->post('/aoat/cambiar-estado-masivo', [\App\Controllers\AoatController::class, 'updateStateBulk'])->middleware('auth');
-        $this->router->post('/aoat/eliminar', [\App\Controllers\AoatController::class, 'destroy'])->middleware('auth');
+        $this->router->post('/aoat/eliminar', [\App\Controllers\AoatController::class, 'destroy'])->middleware('auth', 'role:admin');
         $this->router->post('/aoat/marcar-realizado', [\App\Controllers\AoatController::class, 'markAsRealizado'])->middleware('auth');
         $this->router->get('/aoat/reportes', [\App\Controllers\AoatController::class, 'reportForm'])->middleware('auth');
         $this->router->post('/aoat/reportes/enviar', [\App\Controllers\AoatController::class, 'sendWeeklyReport'])->middleware('auth');
@@ -88,6 +90,7 @@ final class App
         $this->router->get('/planeacion/editar', [\App\Controllers\PlaneacionController::class, 'edit'])->middleware('auth');
         $this->router->post('/planeacion/editar', [\App\Controllers\PlaneacionController::class, 'update'])->middleware('auth');
         $this->router->get('/planeacion/exportar', [\App\Controllers\PlaneacionController::class, 'export'])->middleware('auth');
+        $this->router->post('/planeacion/eliminar', [\App\Controllers\PlaneacionController::class, 'destroy'])->middleware('auth', 'role:admin');
 
         // Módulo 4: Plan de Entrenamiento (solo Psicólogos)
         $this->router->get('/entrenamiento', [\App\Controllers\EntrenamientoController::class, 'index'])->middleware('auth');
@@ -97,6 +100,7 @@ final class App
         $this->router->post('/entrenamiento/editar', [\App\Controllers\EntrenamientoController::class, 'update'])->middleware('auth');
         $this->router->get('/entrenamiento/exportar', [\App\Controllers\EntrenamientoController::class, 'export'])->middleware('auth');
         $this->router->get('/entrenamiento/exportar-pdf', [\App\Controllers\EntrenamientoController::class, 'exportPdf'])->middleware('auth');
+        $this->router->post('/entrenamiento/eliminar', [\App\Controllers\EntrenamientoController::class, 'destroy'])->middleware('auth', 'role:admin');
 
         // Módulo 7: Listado de Asistencia (solo usuarios con rol)
         $this->router->get('/asistencia', [\App\Controllers\AsistenciaController::class, 'index'])->middleware('auth');
@@ -105,7 +109,7 @@ final class App
         $this->router->get('/asistencia/ver', [\App\Controllers\AsistenciaController::class, 'show'])->middleware('auth');
         $this->router->get('/asistencia/exportar-csv', [\App\Controllers\AsistenciaController::class, 'exportCsv'])->middleware('auth');
         $this->router->get('/asistencia/exportar-pdf', [\App\Controllers\AsistenciaController::class, 'exportPdf'])->middleware('auth');
-        $this->router->post('/asistencia/eliminar', [\App\Controllers\AsistenciaController::class, 'delete'])->middleware('auth');
+        $this->router->post('/asistencia/eliminar', [\App\Controllers\AsistenciaController::class, 'delete'])->middleware('auth', 'role:admin');
         $this->router->post('/asistencia/cambiar-estado', [\App\Controllers\AsistenciaController::class, 'updateStatus'])->middleware('auth');
         // Registro público de asistencia (enlace automático por código)
         $this->router->get('/asistencia/registrar', [\App\Controllers\AsistenciaController::class, 'registrarForm']);
@@ -119,6 +123,7 @@ final class App
         $this->router->get('/pic/editar', [\App\Controllers\PicController::class, 'edit'])->middleware('auth');
         $this->router->post('/pic/editar', [\App\Controllers\PicController::class, 'update'])->middleware('auth');
         $this->router->get('/pic/exportar', [\App\Controllers\PicController::class, 'export'])->middleware('auth');
+        $this->router->post('/pic/eliminar', [\App\Controllers\PicController::class, 'destroy'])->middleware('auth', 'role:admin');
 
         // Perfil de usuario autenticado
         $this->router->get('/perfil', [\App\Controllers\ProfileController::class, 'edit'])->middleware('auth');

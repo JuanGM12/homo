@@ -2,8 +2,11 @@
 /** @var array $response */
 /** @var array<int, array<string, mixed>> $answerRows */
 /** @var array $tests */
+/** @var bool $canDeleteResponse */
 
 use App\Services\EvaluacionesQuestionCatalog;
+
+$canDeleteResponse = (bool) ($canDeleteResponse ?? false);
 
 $testKey    = (string) ($response['test_key'] ?? '');
 $phase      = (string) ($response['phase'] ?? '');
@@ -31,9 +34,26 @@ $scoreColor = $scorePct >= 70 ? 'var(--app-primary-deep)' : ($scorePct >= 50 ? '
             <h1 class="section-title mb-1">Detalle del <?= htmlspecialchars($phaseLabel, ENT_QUOTES, 'UTF-8') ?></h1>
             <p class="section-subtitle mb-0"><?= htmlspecialchars((string) ($testInfo['name'] ?? $testKey), ENT_QUOTES, 'UTF-8') ?></p>
         </div>
-        <a href="/evaluaciones" class="asi-show-back-link">
-            <i class="bi bi-arrow-left me-1"></i> Volver al listado
-        </a>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <a href="/evaluaciones" class="asi-show-back-link">
+                <i class="bi bi-arrow-left me-1"></i> Volver al listado
+            </a>
+            <?php if ($canDeleteResponse): ?>
+                <form
+                    method="post"
+                    action="/evaluaciones/eliminar"
+                    class="d-inline"
+                    data-sw-confirm="1"
+                    data-sw-title="Eliminar respuesta del test"
+                    data-sw-text="¿Eliminar de forma permanente esta respuesta y todas las respuestas por pregunta asociadas? Esta acción no se puede deshacer."
+                >
+                    <input type="hidden" name="id" value="<?= (int) ($response['id'] ?? 0) ?>">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash me-1"></i>Eliminar registro
+                    </button>
+                </form>
+            <?php endif; ?>
+        </div>
     </div>
 
     <!-- Tarjetas de resumen -->

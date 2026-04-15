@@ -148,4 +148,11 @@ final class PicRepository
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
+
+    public function deleteById(int $id): void
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare('DELETE FROM pic_records WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+    }
 }

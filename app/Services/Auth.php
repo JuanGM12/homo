@@ -27,6 +27,16 @@ final class Auth
         return in_array($role, $roles, true);
     }
 
+    public static function isAdmin(?array $user = null): bool
+    {
+        $user = $user ?? self::user();
+        if ($user === null) {
+            return false;
+        }
+
+        return in_array('admin', $user['roles'] ?? [], true);
+    }
+
     /**
      * Puede ver registros de todos los usuarios en módulos operativos (auditoría / listados globales).
      * El resto de perfiles solo ve sus propios registros (por user_id o documento).

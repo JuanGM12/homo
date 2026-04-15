@@ -244,5 +244,24 @@ final class TestResponseRepository
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public function deleteById(int $id): void
+    {
+        $pdo = Connection::getPdo();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare('DELETE FROM test_response_answers WHERE response_id = :id');
+            $stmt->execute([':id' => $id]);
+
+            $stmt = $pdo->prepare('DELETE FROM test_responses WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+
+            $pdo->commit();
+        } catch (PDOException $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
 }
 

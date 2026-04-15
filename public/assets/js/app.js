@@ -2804,3 +2804,40 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 });
 
+/**
+ * Confirmación de envío con SweetAlert2 (formularios con data-sw-confirm).
+ * Usa HTMLFormElement.prototype.submit para no re-disparar este listener.
+ */
+document.addEventListener(
+    'submit',
+    (ev) => {
+        const form = ev.target;
+        if (!(form instanceof HTMLFormElement) || form.getAttribute('data-sw-confirm') === null) {
+            return;
+        }
+        ev.preventDefault();
+        if (typeof Swal === 'undefined') {
+            return;
+        }
+        const title = form.getAttribute('data-sw-title') || 'Confirmar acción';
+        const text = form.getAttribute('data-sw-text') || '';
+        Swal.fire({
+            icon: 'warning',
+            title,
+            text,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            focusCancel: true,
+            reverseButtons: true,
+            confirmButtonColor: '#b02a37',
+            cancelButtonColor: '#6c757d',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                HTMLFormElement.prototype.submit.call(form);
+            }
+        });
+    },
+    true
+);
+

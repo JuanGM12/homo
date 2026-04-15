@@ -123,4 +123,11 @@ final class EntrenamientoPlanRepository
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
+
+    public function deleteById(int $id): void
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare('DELETE FROM entrenamiento_plans WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+    }
 }

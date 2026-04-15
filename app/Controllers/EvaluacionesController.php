@@ -380,7 +380,57 @@ final class EvaluacionesController
             'response' => $response,
             'answerRows' => $answerRows,
             'tests' => $tests,
+            'canDeleteResponse' => Auth::isAdmin($user),
         ]);
+    }
+
+    public function destroyResponse(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (!Auth::isAdmin($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'Indica un registro de evaluación válido.',
+            ]);
+
+            return Response::redirect('/evaluaciones');
+        }
+
+        $repo = new TestResponseRepository();
+        $response = $repo->findById($id);
+        if ($response === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'El registro de evaluación no existe.',
+            ]);
+
+            return Response::redirect('/evaluaciones');
+        }
+
+        $testKey = (string) ($response['test_key'] ?? '');
+        if (!self::userMayAccessTestKey($user, $testKey)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $repo->deleteById($id);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Registro eliminado',
+            'message' => 'La respuesta del test se eliminó del sistema.',
+        ]);
+
+        return Response::redirect('/evaluaciones');
     }
 
     public function index(Request $request): Response

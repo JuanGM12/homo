@@ -358,6 +358,52 @@ final class PlaneacionController
         );
     }
 
+    public function destroy(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+        if (!Auth::isAdmin($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+        if (!$this->userCanAccessModule($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'No se indicó una planeación válida.',
+            ]);
+
+            return Response::redirect('/planeacion');
+        }
+
+        $record = $this->repository->findById($id);
+        if ($record === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'La planeación indicada no existe.',
+            ]);
+
+            return Response::redirect('/planeacion');
+        }
+
+        $this->repository->deleteById($id);
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Registro eliminado',
+            'message' => 'La planeación anual se eliminó del sistema.',
+        ]);
+
+        return Response::redirect('/planeacion');
+    }
+
     /**
      * @param array<int, array<string, mixed>> $records
      * @param array<string, string> $months
