@@ -75,7 +75,7 @@ final class EvaluacionesController
         17 => 'A',
         18 => 'B',
         19 => 'C',
-        20 => 'D',
+        20 => 'C',
     ];
 
     /** Clave de respuestas correctas: POST - TEST Prevención de Adicciones (preguntas 1 a 9) */
@@ -1189,7 +1189,7 @@ final class EvaluacionesController
             $questionNumber = (int) ($answer['question_number'] ?? 0);
             $selectedLetter = strtoupper((string) ($answer['selected_option'] ?? ''));
             $correctLetter = self::correctLetterForQuestion($testKey, $phase, $questionNumber);
-            $question = EvaluacionesQuestionCatalog::getQuestion($testKey, $questionNumber);
+            $question = EvaluacionesQuestionCatalog::getQuestion($testKey, $questionNumber, $phase);
             $options = is_array($question['options'] ?? null) ? $question['options'] : [];
 
             $rows[] = [

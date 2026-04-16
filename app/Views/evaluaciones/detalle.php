@@ -127,7 +127,7 @@ $scoreColor = $scorePct >= 70 ? 'var(--app-primary-deep)' : ($scorePct >= 50 ? '
                 <?php foreach ($answerRows as $r):
                     $ok         = !empty($r['is_correct']);
                     $qNum       = (int) ($r['question_number'] ?? 0);
-                    $meta       = EvaluacionesQuestionCatalog::getQuestion($testKey, $qNum);
+                    $meta       = EvaluacionesQuestionCatalog::getQuestion($testKey, $qNum, $phase);
                     $collapseId = 'eval-q-' . $qNum;
                     $selLetter  = strtoupper((string)($r['selected']??''));
                     $corrLetter = $r['correct'] !== null ? strtoupper((string)$r['correct']) : '';

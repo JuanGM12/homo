@@ -27,7 +27,7 @@ final class EvaluacionesQuestionCatalog
     /**
      * @return array{text: string, options: array<string, string>}|null
      */
-    public static function getQuestion(string $testKey, int $questionNumber): ?array
+    public static function getQuestion(string $testKey, int $questionNumber, ?string $phase = null): ?array
     {
         $all = self::all();
         $bank = $all[$testKey] ?? null;
@@ -35,7 +35,19 @@ final class EvaluacionesQuestionCatalog
             return null;
         }
 
-        $row = $bank[$questionNumber] ?? null;
+        if (
+            $testKey === 'hospitales'
+            && isset($bank['pre'], $bank['post'])
+            && is_array($bank['pre'])
+            && is_array($bank['post'])
+        ) {
+            $p = strtolower((string) ($phase ?? 'pre'));
+            $subBank = $p === 'post' ? $bank['post'] : $bank['pre'];
+            $row = $subBank[$questionNumber] ?? null;
+        } else {
+            $row = $bank[$questionNumber] ?? null;
+        }
+
         if (!is_array($row) || !isset($row['text'], $row['options']) || !is_array($row['options'])) {
             return null;
         }
