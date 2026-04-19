@@ -47,6 +47,10 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
                     Exportar CSV
                 </a>
             <?php endif; ?>
+            <a href="/aoat/seguimiento" class="btn btn-outline-primary">
+                <i class="bi bi-grid-1x2 me-1"></i>
+                Cuadro metas · territorio
+            </a>
             <?php if ($canUseWeeklyReport): ?>
                 <a href="/aoat/reportes" class="btn btn-outline-secondary">
                     <i class="bi bi-file-earmark-spreadsheet me-1"></i>

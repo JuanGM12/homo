@@ -147,9 +147,13 @@ if ($currentUser) {
                                     $aoatRoles = ['abogado', 'medico', 'psicologo', 'profesional social', 'profesional_social', 'especialista', 'coordinadora', 'coordinador'];
                                     $canAccessAoat = !empty(array_intersect($aoatRoles, $currentUserRoles)) || in_array('admin', $currentUserRoles, true);
                                     if ($canAccessAoat): ?>
-                                        <a href="/aoat" class="app-sidebar-link <?= str_starts_with($currentPath, '/aoat') ? 'active' : '' ?>">
+                                        <a href="/aoat" class="app-sidebar-link <?= ($currentPath === '/aoat' || (str_starts_with($currentPath, '/aoat/') && !str_starts_with($currentPath, '/aoat/seguimiento'))) ? 'active' : '' ?>">
                                             <i class="bi bi-clipboard-data" aria-hidden="true"></i>
-                                            <span>Seguimiento AoAT</span>
+                                            <span>Registro AoAT</span>
+                                        </a>
+                                        <a href="/aoat/seguimiento" class="app-sidebar-link <?= str_starts_with($currentPath, '/aoat/seguimiento') ? 'active' : '' ?>">
+                                            <i class="bi bi-grid-1x2" aria-hidden="true"></i>
+                                            <span>Cuadro metas · territorio</span>
                                         </a>
                                     <?php endif;
                                     $plannerRoles = ['abogado', 'medico', 'psicologo'];

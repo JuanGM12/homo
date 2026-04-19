@@ -70,6 +70,10 @@ final class App
         $this->router->post('/encuesta-opinion-aoat/eliminar', [\App\Controllers\EncuestaOpinionAoatController::class, 'destroy'])->middleware('auth', 'role:admin');
 
         // Módulo 2: Registro de AoAT (requiere autenticación)
+        $this->router->get('/aoat/seguimiento', [\App\Controllers\AoatSeguimientoController::class, 'index'])->middleware('auth');
+        $this->router->get('/aoat/seguimiento/datos', [\App\Controllers\AoatSeguimientoController::class, 'data'])->middleware('auth');
+        $this->router->get('/aoat/seguimiento/exportar-csv', [\App\Controllers\AoatSeguimientoController::class, 'exportCsv'])->middleware('auth');
+        $this->router->get('/aoat/seguimiento/exportar-pdf', [\App\Controllers\AoatSeguimientoController::class, 'exportPdf'])->middleware('auth');
         $this->router->get('/aoat', [\App\Controllers\AoatController::class, 'index'])->middleware('auth');
         $this->router->get('/aoat/nueva', [\App\Controllers\AoatController::class, 'create'])->middleware('auth');
         $this->router->post('/aoat/nueva', [\App\Controllers\AoatController::class, 'store'])->middleware('auth');
@@ -109,7 +113,7 @@ final class App
         $this->router->get('/asistencia/ver', [\App\Controllers\AsistenciaController::class, 'show'])->middleware('auth');
         $this->router->get('/asistencia/exportar-csv', [\App\Controllers\AsistenciaController::class, 'exportCsv'])->middleware('auth');
         $this->router->get('/asistencia/exportar-pdf', [\App\Controllers\AsistenciaController::class, 'exportPdf'])->middleware('auth');
-        $this->router->post('/asistencia/eliminar', [\App\Controllers\AsistenciaController::class, 'delete'])->middleware('auth', 'role:admin');
+        $this->router->post('/asistencia/eliminar', [\App\Controllers\AsistenciaController::class, 'delete'])->middleware('auth');
         $this->router->post('/asistencia/cambiar-estado', [\App\Controllers\AsistenciaController::class, 'updateStatus'])->middleware('auth');
         // Registro público de asistencia (enlace automático por código)
         $this->router->get('/asistencia/registrar', [\App\Controllers\AsistenciaController::class, 'registrarForm']);

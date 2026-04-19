@@ -15,6 +15,9 @@ $filterProfessionalId = $dashboard['filter_professional_id'] ?? null;
 $filterProfessionalName = (string) ($dashboard['filter_professional_name'] ?? '');
 $professionalOptions = $dashboard['professional_options'] ?? [];
 $isAuthenticated = Auth::check();
+$user = Auth::user();
+/** Perfiles de campo (no admin/coordinación/especialista): el panel es personal y estos desgloses suelen confundir en cero. */
+$suppressOperationalScopeMetrics = $isAuthenticated && $user !== null && !Auth::canViewAllModuleRecords($user);
 ?>
 
 <?php if ($isAuthenticated): ?>
@@ -104,15 +107,40 @@ $isAuthenticated = Auth::check();
                     </div>
 
                     <ul class="list-unstyled dashboard-mini-list mb-0">
-                        <li>
-                            <span title="Estados según el flujo AoAT: Asignada, Devuelta, Realizado (pendiente de aprobación del especialista) y Aprobada.">AoAT por estado</span>
-                            <strong class="d-block small lh-sm mt-1">
-                                <?= (int) ($kpis['aoat_asignadas'] ?? 0) ?>
-                                / <?= (int) ($kpis['aoat_devueltas'] ?? 0) ?>
-                                / <?= (int) ($kpis['aoat_revisadas'] ?? 0) ?>
-                                / <?= (int) ($kpis['aoat_aprobadas'] ?? 0) ?>
-                            </strong>
-                            <span class="text-muted" style="font-size: 0.7rem;">Asignadas · Devueltas · Revisadas · Aprobadas</span>
+                        <li class="dashboard-li--stacked">
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                <span title="Estados según el flujo AoAT: Asignada, Devuelta, Realizado (pendiente de aprobación del especialista) y Aprobada.">AoAT por estado</span>
+                            </div>
+                            <?php if ($suppressOperationalScopeMetrics): ?>
+                                <p class="small text-muted mb-0">
+                                    Este desglose en el panel personal suele mostrarse en cero si aún no aplican registros en estos estados.
+                                    Revisa el listado y filtros en
+                                    <a href="/aoat" class="link-offset-1">AoAT registradas</a>.
+                                </p>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-borderless mb-0 table-aoat-estado-mini">
+                                        <tbody>
+                                            <tr>
+                                                <td>Asignadas</td>
+                                                <td><?= (int) ($kpis['aoat_asignadas'] ?? 0) ?></td>
+                                            </tr>
+                                            <tr>
+                                                <td>Devueltas</td>
+                                                <td><?= (int) ($kpis['aoat_devueltas'] ?? 0) ?></td>
+                                            </tr>
+                                            <tr>
+                                                <td>Revisadas</td>
+                                                <td><?= (int) ($kpis['aoat_revisadas'] ?? 0) ?></td>
+                                            </tr>
+                                            <tr>
+                                                <td>Aprobadas</td>
+                                                <td><?= (int) ($kpis['aoat_aprobadas'] ?? 0) ?></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
                         </li>
                         <li>
                             <span title="Registros AoAT con tipo «Asistencia técnica» o «Asesoría» (aportan a la meta).">Meta (asist. técn. + asesorías)</span>
@@ -125,14 +153,26 @@ $isAuthenticated = Auth::check();
                         <li><span>Planes anuales</span><strong><?= (int) ($kpis['planes_total'] ?? 0) ?></strong></li>
                         <li><span>Entrenamientos</span><strong><?= (int) ($kpis['entrenamientos_total'] ?? 0) ?></strong></li>
                         <li><span>Registros PIC</span><strong><?= (int) ($kpis['pic_total'] ?? 0) ?></strong></li>
-                        <li>
-                            <span title="Total de respuestas guardadas en evaluaciones: fase PRE (antes de la intervención) y fase POST (después). En panel personal o con filtro por profesional, solo cuenta el documento vinculado a ese usuario de la plataforma.">PRE / POST</span>
-                            <strong><?= (int) ($dashboard['evaluaciones_pre'] ?? 0) ?> / <?= (int) ($dashboard['evaluaciones_post'] ?? 0) ?></strong>
+                        <li class="dashboard-li--stacked">
+                            <div class="d-flex justify-content-between align-items-center gap-2 w-100">
+                                <span title="Total de respuestas guardadas en evaluaciones: fase PRE (antes de la intervención) y fase POST (después). En panel personal o con filtro por profesional, solo cuenta el documento vinculado a ese usuario de la plataforma.">PRE / POST</span>
+                                <?php if (!$suppressOperationalScopeMetrics): ?>
+                                    <strong><?= (int) ($dashboard['evaluaciones_pre'] ?? 0) ?> / <?= (int) ($dashboard['evaluaciones_post'] ?? 0) ?></strong>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ($suppressOperationalScopeMetrics): ?>
+                                <p class="small text-muted mb-0">
+                                    Para consultar PRE y POST con filtros por temática y fase, usa
+                                    <a href="/evaluaciones" class="link-offset-1">Evaluaciones registradas</a>.
+                                </p>
+                            <?php endif; ?>
                         </li>
                     </ul>
+                    <?php if (!$suppressOperationalScopeMetrics): ?>
                     <p class="small text-muted mb-0 mt-2" style="font-size: 0.7rem;">
                         PRE y POST: número de tests de evaluación en cada fase (todas las temáticas) según el alcance del panel.
                     </p>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

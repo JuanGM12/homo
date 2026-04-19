@@ -345,6 +345,33 @@ body {
     font-weight: 700;
 }
 
+.dashboard-mini-list li.dashboard-li--stacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+}
+
+.table-aoat-estado-mini {
+    font-size: 0.8125rem;
+    --bs-table-bg: transparent;
+}
+
+.table-aoat-estado-mini td {
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+    vertical-align: middle;
+}
+
+.table-aoat-estado-mini td:first-child {
+    color: var(--app-text-muted);
+}
+
+.table-aoat-estado-mini td:last-child {
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+}
+
 .dashboard-activity-item {
     display: flex;
     align-items: flex-start;
@@ -3645,4 +3672,454 @@ select.homo-muni-native.visually-hidden {
     clip: rect(0, 0, 0, 0) !important;
     white-space: nowrap !important;
     border: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Cuadro metas · territorio (Seguimiento AoAT)
+   -------------------------------------------------------------------------- */
+.aoat-seg-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--app-radius, 0.75rem);
+    border: 1px solid var(--app-border-subtle, #d8e8f5);
+    background: var(--app-surface, #fff);
+    box-shadow: var(--app-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+.aoat-seg-compact .aoat-seg-page-title {
+    font-size: 1.2rem;
+}
+.aoat-seg-compact .aoat-seg-page-lead {
+    font-size: 0.82rem;
+}
+.aoat-seg-compact .aoat-seg-toolbar {
+    padding: 0.65rem 0.85rem !important;
+    font-size: 0.78rem;
+}
+.aoat-seg-filters-form .form-label {
+    min-height: 1.25rem;
+    line-height: 1.2;
+}
+.aoat-seg-filters-hint {
+    max-width: 42rem;
+    padding-left: 0.1rem;
+    margin-top: 0.35rem !important;
+    margin-bottom: 0.25rem !important;
+}
+.aoat-seg-muni-wrap {
+    max-width: 100%;
+}
+@media (min-width: 992px) {
+    .aoat-seg-muni-wrap select.form-select[multiple] {
+        max-height: 7.5rem;
+    }
+}
+.aoat-seg-filters-card .form-label {
+    font-size: 0.72rem;
+    margin-bottom: 0.2rem;
+}
+
+.aoat-seg-table {
+    margin-bottom: 0;
+    font-size: 0.78rem;
+    min-width: 980px;
+}
+.aoat-seg-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--app-bg-subtle, #f4eee7);
+    color: var(--app-text, #2a5543);
+    border-bottom: 2px solid var(--app-border, #9ac6eb);
+    white-space: nowrap;
+    font-weight: 600;
+}
+.aoat-seg-table tbody td {
+    vertical-align: middle;
+    border-color: var(--app-border-subtle, #d8e8f5);
+}
+.aoat-seg-table .aoat-seg-sticky {
+    position: sticky;
+    background: var(--app-surface, #fff);
+    box-shadow: 4px 0 10px -6px rgba(15, 23, 42, 0.15);
+}
+.aoat-seg-table thead .aoat-seg-sticky {
+    background: var(--app-bg-subtle, #f4eee7);
+}
+.aoat-seg-table thead .aoat-seg-sticky:nth-child(1) {
+    left: 0;
+    z-index: 5;
+    min-width: 3.1rem;
+}
+.aoat-seg-table thead .aoat-seg-sticky:nth-child(2) {
+    left: 3.1rem;
+    z-index: 4;
+    min-width: 9.5rem;
+}
+.aoat-seg-table thead .aoat-seg-sticky:nth-child(3) {
+    left: 12.6rem;
+    z-index: 3;
+    min-width: 7.5rem;
+}
+.aoat-seg-table tbody .aoat-seg-sticky:nth-child(1) {
+    left: 0;
+    z-index: 3;
+    min-width: 3.1rem;
+}
+.aoat-seg-table tbody .aoat-seg-sticky:nth-child(2) {
+    left: 3.1rem;
+    z-index: 2;
+    min-width: 9.5rem;
+}
+.aoat-seg-table tbody .aoat-seg-sticky:nth-child(3) {
+    left: 12.6rem;
+    z-index: 1;
+    min-width: 7.5rem;
+}
+.aoat-seg-row--band0 .aoat-seg-sticky {
+    background: #faf8f5 !important;
+}
+.aoat-seg-row--band1 .aoat-seg-sticky {
+    background: #eef5fb !important;
+}
+.aoat-seg-row--band0 td:not(.aoat-seg-sticky) {
+    background: #faf8f5;
+}
+.aoat-seg-row--band1 td:not(.aoat-seg-sticky) {
+    background: #eef5fb;
+}
+.aoat-seg-cell {
+    display: inline-block;
+    min-width: 2rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.35rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 1.2;
+}
+.aoat-seg-cell--ok {
+    background: rgba(34, 139, 34, 0.18);
+    color: #1b5e20;
+}
+.aoat-seg-cell--warn {
+    background: rgba(255, 193, 7, 0.22);
+    color: #856404;
+}
+.aoat-seg-cell--bad {
+    background: rgba(220, 53, 69, 0.2);
+    color: #842029;
+}
+.aoat-seg-cell--na {
+    background: rgba(108, 117, 125, 0.12);
+    color: var(--app-text-muted, #5b6d8f);
+}
+.aoat-seg-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--app-text-muted, #5b6d8f);
+}
+.aoat-seg-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.aoat-seg-legend .aoat-seg-cell {
+    min-width: 1.25rem;
+    padding: 0.1rem 0.35rem;
+}
+
+.aoat-seg-readme {
+    background: var(--app-surface, #fff);
+    border: 1px solid var(--app-border-subtle, #d8e8f5) !important;
+}
+.aoat-seg-readme code {
+    font-size: 0.85em;
+    color: var(--app-primary-deep, #2a5543);
+    background: var(--app-bg-subtle, #f4eee7);
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.25rem;
+}
+.aoat-seg-role-badge {
+    background: rgba(65, 96, 164, 0.12);
+    color: var(--app-primary-deep, #2a5543);
+    border: 1px solid var(--app-border, #9ac6eb) !important;
+    font-weight: 600;
+    font-size: 0.78rem;
+}
+.aoat-seg-meta-hint {
+    font-size: 0.72rem;
+    margin-top: 0.25rem;
+    line-height: 1.2;
+}
+.aoat-seg-th-sub {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    margin-top: 0.2rem;
+    color: var(--app-text-muted, #5b6d8f);
+}
+.aoat-seg-th-hint {
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 500;
+    color: var(--app-text-muted, #5b6d8f);
+    margin-top: 0.15rem;
+    line-height: 1.2;
+}
+.aoat-seg-th-kpi {
+    white-space: nowrap;
+    font-size: 0.72rem;
+    vertical-align: bottom;
+}
+.aoat-seg-td-item {
+    text-align: center;
+    vertical-align: middle !important;
+    line-height: 1.1;
+}
+.aoat-seg-item-big {
+    font-size: 1.05rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-primary-deep, #2a5543);
+}
+.aoat-seg-item-of {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--app-text-muted, #5b6d8f);
+}
+.aoat-seg-item-hint {
+    display: block;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--app-text-muted, #5b6d8f);
+    margin-top: 0.2rem;
+}
+.aoat-seg-td-place .aoat-seg-muni {
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+}
+.aoat-seg-td-place .aoat-seg-sub {
+    margin-top: 0.15rem;
+    line-height: 1.2;
+}
+.aoat-seg-td-prof {
+    max-width: 10rem;
+    line-height: 1.3;
+    font-size: 0.76rem;
+}
+.aoat-seg-td-prof .aoat-seg-prof-name {
+    white-space: normal;
+    word-break: break-word;
+}
+.aoat-seg-td-role {
+    max-width: 15rem;
+    line-height: 1.35;
+}
+.aoat-seg-role-chip {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(65, 96, 164, 0.14);
+    color: var(--app-primary-deep, #2a5543);
+    border: 1px solid rgba(65, 96, 164, 0.25);
+}
+.aoat-seg-meta-pill {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--app-text-muted, #5b6d8f);
+    margin-left: 0.25rem;
+    vertical-align: middle;
+}
+.aoat-seg-month-td {
+    padding: 0.35rem 0.3rem !important;
+    vertical-align: middle !important;
+    min-width: 4.25rem;
+    background: transparent !important;
+}
+.aoat-seg-month-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+}
+.aoat-seg-month-bubble {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+}
+.aoat-seg-month-bubble--ok {
+    background: linear-gradient(145deg, #2e7d32, #43a047);
+    color: #fff;
+}
+.aoat-seg-month-bubble--warn {
+    background: linear-gradient(145deg, #f9a825, #ffca28);
+    color: #4a3c00;
+}
+.aoat-seg-month-bubble--bad {
+    background: linear-gradient(145deg, #c62828, #e53935);
+    color: #fff;
+}
+.aoat-seg-month-bubble--upcoming {
+    background: linear-gradient(145deg, #546e7a, #90a4ae);
+    color: #fff;
+}
+.aoat-seg-month-bubble--na {
+    background: linear-gradient(145deg, #78909c, #b0bec5);
+    color: #fff;
+}
+.aoat-seg-month-bubble--plain {
+    background: linear-gradient(145deg, #607d8b, #90a4ae);
+    color: #fff;
+}
+.aoat-seg-month-mini {
+    font-size: 0.62rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-text-muted, #5b6d8f);
+    letter-spacing: 0.02em;
+}
+.aoat-seg-month-mini--act {
+    color: #455a64;
+}
+.aoat-seg-toolbar {
+    background: linear-gradient(120deg, rgba(65, 96, 164, 0.07), rgba(42, 85, 67, 0.06));
+    border: 1px solid var(--app-border-subtle, #d8e8f5);
+}
+.aoat-seg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--app-text, #2a5543);
+}
+.aoat-seg-swatch {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.aoat-seg-swatch--ok {
+    background: linear-gradient(145deg, #2e7d32, #66bb6a);
+}
+.aoat-seg-swatch--warn {
+    background: linear-gradient(145deg, #f9a825, #ffca28);
+}
+.aoat-seg-swatch--bad {
+    background: linear-gradient(145deg, #c62828, #ef5350);
+}
+.aoat-seg-swatch--upcoming {
+    background: linear-gradient(145deg, #546e7a, #b0bec5);
+}
+.aoat-seg-swatch--na {
+    background: linear-gradient(145deg, #78909c, #cfd8dc);
+}
+.aoat-seg-swatch--plain {
+    background: linear-gradient(145deg, #607d8b, #b0bec5);
+}
+.aoat-seg-kpi {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
+}
+.aoat-seg-debe-td {
+    min-width: 4rem;
+}
+.aoat-seg-debe--ok {
+    background: rgba(34, 139, 34, 0.12);
+    color: #1b5e20;
+}
+.aoat-seg-debe--bad {
+    background: rgba(220, 53, 69, 0.12);
+    color: #842029;
+}
+.aoat-seg-debe--na {
+    background: rgba(108, 117, 125, 0.08);
+    color: var(--app-text-muted, #5b6d8f);
+}
+.aoat-seg-debe-note {
+    font-size: 0.68rem;
+    font-weight: 600;
+    margin-top: 0.15rem;
+    color: inherit;
+    opacity: 0.95;
+}
+
+/* Móvil / tablet estrecha: sin columnas fijas (sticky) para que el scroll horizontal muestre toda la tabla */
+@media (max-width: 991.98px) {
+    .aoat-seg-card {
+        overflow: visible;
+    }
+    .aoat-seg-table-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+    }
+    .aoat-seg-table thead th {
+        position: static;
+        white-space: normal;
+    }
+    .aoat-seg-table .aoat-seg-sticky,
+    .aoat-seg-table thead .aoat-seg-sticky:nth-child(n),
+    .aoat-seg-table tbody .aoat-seg-sticky:nth-child(n) {
+        position: static !important;
+        left: auto !important;
+        right: auto !important;
+        box-shadow: none !important;
+        z-index: auto !important;
+        min-width: 0 !important;
+    }
+    .aoat-seg-td-item {
+        width: 3.25rem;
+        max-width: 4rem;
+    }
+    .aoat-seg-td-place {
+        min-width: 5.5rem;
+        max-width: 8.5rem;
+    }
+    .aoat-seg-td-prof {
+        min-width: 5rem;
+        max-width: 9rem;
+    }
+    .aoat-seg-muni {
+        font-size: 0.72rem !important;
+        line-height: 1.2;
+    }
+    .aoat-seg-sub {
+        font-size: 0.65rem !important;
+    }
+    .aoat-seg-month-td {
+        min-width: 3.5rem !important;
+    }
+    .aoat-seg-month-bubble {
+        width: 2rem;
+        height: 2rem;
+        font-size: 0.85rem;
+    }
+    .aoat-seg-month-mini {
+        font-size: 0.58rem;
+    }
+    .aoat-seg-scroll-hint {
+        background: linear-gradient(180deg, rgba(244, 238, 231, 0.6), rgba(255, 255, 255, 0.95));
+    }
+}
+
+@media (min-width: 992px) {
+    .aoat-seg-card {
+        overflow: hidden;
+    }
 }
