@@ -57,6 +57,36 @@ final class Auth
     }
 
     /**
+     * Resumen de metas globales mensuales (p. ej. medicina) en seguimiento AoAT.
+     * Solo médicos, especialistas con ámbito médico, administración y coordinación.
+     */
+    public static function canViewAoatGlobalMonthlySummaries(?array $user = null): bool
+    {
+        $user = $user ?? self::user();
+        if ($user === null) {
+            return false;
+        }
+
+        $roles = $user['roles'] ?? [];
+        if (in_array('admin', $roles, true)) {
+            return true;
+        }
+        if (in_array('coordinador', $roles, true) || in_array('coordinadora', $roles, true)) {
+            return true;
+        }
+        if (in_array('medico', $roles, true)) {
+            return true;
+        }
+        if (in_array('especialista', $roles, true)) {
+            $primary = strtolower(trim((string) ($user['role'] ?? '')));
+
+            return $primary === 'medico' || in_array('medico', $roles, true);
+        }
+
+        return false;
+    }
+
+    /**
      * Roles profesionales cuyos usuarios puede considerar un especialista en paneles consolidados
      * (misma regla que auditoría AoAT / PIC). null = sin restricción (admin o coordinación).
      *

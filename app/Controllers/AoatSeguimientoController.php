@@ -46,6 +46,7 @@ final class AoatSeguimientoController
             'vista' => 'meta',
             'total_periodo' => '',
         ];
+        $defaultFilters = $this->withSeguimientoViewerFlags($user, $defaultFilters);
         $initialMeta = $this->service->buildMatrix($records, $defaultFilters);
         $filterOptions = $this->buildFilterOptions($records);
 
@@ -81,6 +82,7 @@ final class AoatSeguimientoController
             'vista' => trim((string) $request->input('vista', 'meta')) === 'actividad' ? 'actividad' : 'meta',
             'total_periodo' => $this->normalizeTotalPeriodoFilter((string) $request->input('total_periodo', '')),
         ];
+        $filters = $this->withSeguimientoViewerFlags($user, $filters);
 
         $matrix = $this->service->buildMatrix($records, $filters);
         $filterOptions = $this->buildFilterOptions($records);
@@ -105,7 +107,7 @@ final class AoatSeguimientoController
 
         $repo = new AoatRepository();
         $records = $this->fetchScopedRecords($user, $repo);
-        $filters = $this->parseFiltersFromRequest($request);
+        $filters = $this->withSeguimientoViewerFlags($user, $this->parseFiltersFromRequest($request));
         $matrix = $this->service->buildMatrix($records, $filters);
         $vista = ($filters['vista'] ?? 'meta') === 'actividad' ? 'actividad' : 'meta';
 
@@ -232,7 +234,7 @@ final class AoatSeguimientoController
 
         $repo = new AoatRepository();
         $records = $this->fetchScopedRecords($user, $repo);
-        $filters = $this->parseFiltersFromRequest($request);
+        $filters = $this->withSeguimientoViewerFlags($user, $this->parseFiltersFromRequest($request));
         $matrix = $this->service->buildMatrix($records, $filters);
 
         $html = $this->buildSeguimientoPdfHtml($matrix, $filters, $records);
@@ -247,6 +249,17 @@ final class AoatSeguimientoController
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="' . $fn . '"',
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    private function withSeguimientoViewerFlags(array $user, array $filters): array
+    {
+        $filters['include_global_monthly_targets'] = Auth::canViewAoatGlobalMonthlySummaries($user);
+
+        return $filters;
     }
 
     /**
@@ -530,6 +543,7 @@ final class AoatSeguimientoController
             . '<div class="docsub">' . $esc($docSub) . '</div></td>'
             . '<td style="width:22%;text-align:right;">' . ($logoHomo !== '' ? '<img src="' . $esc($logoHomo) . '" alt="HOMO" style="height:34px;width:auto;">' : '') . '</td>';
 
+        $showGlobalMedLegend = $vista !== 'actividad' && !empty($filters['include_global_monthly_targets']);
         $legend = $vista === 'actividad'
             ? '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
             . 'Solo se cuentan registros AoAT con tipo <em>Actividad</em>. '
@@ -537,7 +551,9 @@ final class AoatSeguimientoController
             : '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
             . 'Solo cuentan actividades registradas como <em>Asesoría</em> o <em>Asistencia técnica</em>. '
             . 'En cada mes verás tres líneas: asesorías realizadas, asistencias técnicas realizadas y el <strong>total</strong> frente a la meta. '
-            . 'Psicología y Derecho pueden cambiar por tramo del año; Medicina usa una meta global mensual entre todos. '
+            . ($showGlobalMedLegend
+                ? 'Psicología y Derecho pueden cambiar por tramo del año; Medicina usa una meta global mensual entre todos. '
+                : 'Psicología y Derecho pueden cambiar por tramo del año. ')
             . '<strong>Saldo al final:</strong> negativo = faltan actividades; cero = cumple la meta; positivo = va a favor, por encima de la meta del periodo mostrado.</div>';
 
         $filterBlock = '<div class="meta"><p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p>'

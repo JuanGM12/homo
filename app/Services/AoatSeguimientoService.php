@@ -29,7 +29,7 @@ final class AoatSeguimientoService
 
     /**
      * @param array<int, array<string, mixed>> $records
-     * @param array<string, mixed> $filters
+     * @param array<string, mixed> $filters include_global_monthly_targets: bool (solo servidor; define bloque de metas globales mensuales)
      * @return array{
      *   vista: 'meta'|'actividad',
      *   months: list<array{num:int,label:string,key:string}>,
@@ -79,7 +79,8 @@ final class AoatSeguimientoService
             ];
         }
 
-        $globalTargets = $vista === 'meta' ? $this->buildGlobalTargets($prepared, $year, $monthRange) : [];
+        $includeGlobalMonthly = $vista === 'meta' && !empty($filters['include_global_monthly_targets']);
+        $globalTargets = $includeGlobalMonthly ? $this->buildGlobalTargets($prepared, $year, $monthRange) : [];
         $rows = [];
 
         foreach ($territory as $t) {
@@ -229,7 +230,9 @@ final class AoatSeguimientoService
                 'territory' => 'Cada fila sigue basada en territorios donde el profesional tiene historial AoAT (misma grilla que la vista de metas).',
             ]
             : [
-                'meta' => 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo. Profesional social no se lista aqui. Psicologia y Derecho cambian meta por tramo del ano; Medicina usa meta global mensual entre todos.',
+                'meta' => $includeGlobalMonthly
+                    ? 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo. Profesional social no se lista aqui. Psicologia y Derecho cambian meta por tramo del ano; Medicina usa meta global mensual entre todos.'
+                    : 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo. Profesional social no se lista aqui. Psicologia y Derecho cambian meta por tramo del ano.',
                 'territory' => 'Cada fila (subregion + municipio + profesional) surge de registros AoAT existentes. Un cero en rojo es deficit en un mes ya iniciado; un mes futuro en calendario se muestra distinto aunque el total sea 0.',
             ];
 
