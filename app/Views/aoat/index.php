@@ -37,16 +37,24 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <?php if ($isAudit): ?>
-                <a
-                    href="/aoat/exportar<?= htmlspecialchars($exportQuery, ENT_QUOTES, 'UTF-8') ?>"
-                    class="btn btn-outline-success"
-                    data-aoat-export-link
-                >
-                    <i class="bi bi-download me-1"></i>
-                    Exportar CSV
-                </a>
-            <?php endif; ?>
+            <a
+                href="/aoat/exportar<?= htmlspecialchars($exportQuery . ($exportQuery === '' ? '?' : '&') . 'format=xls', ENT_QUOTES, 'UTF-8') ?>"
+                class="btn btn-outline-success"
+                data-aoat-export-link
+            >
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i>
+                Excel
+            </a>
+            <a
+                href="/aoat/exportar<?= htmlspecialchars($exportQuery . ($exportQuery === '' ? '?' : '&') . 'format=pdf', ENT_QUOTES, 'UTF-8') ?>"
+                class="btn btn-outline-danger"
+                data-aoat-export-pdf-link
+                target="_blank"
+                rel="noopener"
+            >
+                <i class="bi bi-file-earmark-pdf me-1"></i>
+                PDF
+            </a>
             <a href="/aoat/seguimiento" class="btn btn-outline-primary">
                 <i class="bi bi-grid-1x2 me-1"></i>
                 Cuadro metas · territorio

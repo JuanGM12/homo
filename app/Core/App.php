@@ -140,6 +140,8 @@ final class App
         $this->router->get('/admin/usuarios/editar', [\App\Controllers\UsersController::class, 'edit'])->middleware('auth', 'role:admin');
         $this->router->post('/admin/usuarios/editar', [\App\Controllers\UsersController::class, 'update'])->middleware('auth', 'role:admin');
         $this->router->post('/admin/usuarios/desactivar', [\App\Controllers\UsersController::class, 'deactivate'])->middleware('auth', 'role:admin');
+        $this->router->get('/admin/aoat-metas', [\App\Controllers\AoatMetaRulesController::class, 'index'])->middleware('auth', 'role:admin');
+        $this->router->post('/admin/aoat-metas', [\App\Controllers\AoatMetaRulesController::class, 'update'])->middleware('auth', 'role:admin');
     }
 
     public function run(): void

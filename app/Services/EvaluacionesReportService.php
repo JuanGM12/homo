@@ -164,15 +164,23 @@ final class EvaluacionesReportService
     }
 
     /**
-     * Resumen por municipio: solo filas con PRE y POST (para porcentajes de impacto).
+     * Resumen por municipio: solo filas con PRE y POST (para porcentajes de impacto
+     * y promedio de puntajes PRE/POST).
      *
      * @param array<int, array<string, mixed>> $comparisonRows
-     * @return array<string, array{municipality: string, con_ambos: int, mejoria: int, sin_cambios: int, sin_mejoria: int, pct_mejoria: float, pct_sin_cambios: float, pct_sin_mejoria: float}>
+     * @return array<string, mixed>
      */
     public static function summarizeByMunicipality(array $comparisonRows): array
     {
         // Totales globales
-        $totals = ['con_ambos' => 0, 'mejoria' => 0, 'sin_cambios' => 0, 'sin_mejoria' => 0];
+        $totals = [
+            'con_ambos' => 0,
+            'mejoria' => 0,
+            'sin_cambios' => 0,
+            'sin_mejoria' => 0,
+            'sum_pre_score' => 0.0,
+            'sum_post_score' => 0.0,
+        ];
         $byMun = [];
 
         foreach ($comparisonRows as $row) {
@@ -187,6 +195,10 @@ final class EvaluacionesReportService
                     'mejoria' => 0,
                     'sin_cambios' => 0,
                     'sin_mejoria' => 0,
+                    'sum_pre_score' => 0.0,
+                    'sum_post_score' => 0.0,
+                    'avg_pre_score' => 0.0,
+                    'avg_post_score' => 0.0,
                     'pct_mejoria' => 0.0,
                     'pct_sin_cambios' => 0.0,
                     'pct_sin_mejoria' => 0.0,
@@ -199,6 +211,12 @@ final class EvaluacionesReportService
             }
 
             $byMun[$mun]['con_ambos']++;
+            $preScore = (float) ($row['pre_score'] ?? 0);
+            $postScore = (float) ($row['post_score'] ?? 0);
+            $byMun[$mun]['sum_pre_score'] += $preScore;
+            $byMun[$mun]['sum_post_score'] += $postScore;
+            $totals['sum_pre_score'] += $preScore;
+            $totals['sum_post_score'] += $postScore;
             if ($impact === self::IMPACT_MEJORIA) {
                 $byMun[$mun]['mejoria']++;
                 $totals['mejoria']++;
@@ -215,6 +233,8 @@ final class EvaluacionesReportService
         foreach ($byMun as $k => $block) {
             $n = (int) $block['con_ambos'];
             if ($n > 0) {
+                $byMun[$k]['avg_pre_score'] = round($block['sum_pre_score'] / $n, 1);
+                $byMun[$k]['avg_post_score'] = round($block['sum_post_score'] / $n, 1);
                 $byMun[$k]['pct_mejoria'] = round($block['mejoria'] / $n * 100, 1);
                 $byMun[$k]['pct_sin_cambios'] = round($block['sin_cambios'] / $n * 100, 1);
                 $byMun[$k]['pct_sin_mejoria'] = round($block['sin_mejoria'] / $n * 100, 1);
@@ -227,6 +247,10 @@ final class EvaluacionesReportService
             'mejoria' => $totals['mejoria'],
             'sin_cambios' => $totals['sin_cambios'],
             'sin_mejoria' => $totals['sin_mejoria'],
+            'sum_pre_score' => $totals['sum_pre_score'],
+            'sum_post_score' => $totals['sum_post_score'],
+            'avg_pre_score' => $totals['con_ambos'] > 0 ? round($totals['sum_pre_score'] / $totals['con_ambos'], 1) : 0.0,
+            'avg_post_score' => $totals['con_ambos'] > 0 ? round($totals['sum_post_score'] / $totals['con_ambos'], 1) : 0.0,
             'pct_mejoria' => $totals['con_ambos'] > 0 ? round($totals['mejoria'] / $totals['con_ambos'] * 100, 1) : 0.0,
             'pct_sin_cambios' => $totals['con_ambos'] > 0 ? round($totals['sin_cambios'] / $totals['con_ambos'] * 100, 1) : 0.0,
             'pct_sin_mejoria' => $totals['con_ambos'] > 0 ? round($totals['sin_mejoria'] / $totals['con_ambos'] * 100, 1) : 0.0,

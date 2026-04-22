@@ -39,6 +39,7 @@ final class AoatSeguimientoController
             'period' => (int) date('n') <= 6 ? 'ene_jun' : 'jul_dic',
             'professional_user_id' => 0,
             'filter_month' => 0,
+            'state' => '',
             'role' => '',
             'subregion' => '',
             'municipalities' => [],
@@ -73,6 +74,7 @@ final class AoatSeguimientoController
             'period' => trim((string) $request->input('period', 'ene_jun')) === 'jul_dic' ? 'jul_dic' : 'ene_jun',
             'professional_user_id' => max(0, (int) $request->input('professional_user_id', 0)),
             'filter_month' => (int) $request->input('filter_month', 0),
+            'state' => $this->normalizeAoatStateFilter((string) $request->input('state', '')),
             'role' => trim((string) $request->input('role', '')),
             'subregion' => trim((string) $request->input('subregion', '')),
             'municipalities' => MunicipalityListRequest::parse($request, 'municipality'),
@@ -143,7 +145,7 @@ final class AoatSeguimientoController
                 'Municipio',
                 'Profesional',
                 'Rol',
-                'Meta mínima mensual (actividades)',
+                'Regla de meta mensual',
             ];
             foreach ($matrix['months'] as $mh) {
                 $mn = $this->monthNameEs((int) $mh['num']);
@@ -153,13 +155,13 @@ final class AoatSeguimientoController
             }
             $header[] = 'Total en el periodo';
             $header[] = 'Meta del periodo';
-            $header[] = 'Saldo (DEBE)';
+            $header[] = 'Saldo';
             $header[] = 'Interpretación del saldo';
         }
         $lines[] = implode(';', array_map($esc, $header));
 
         foreach ($matrix['rows'] as $row) {
-            $metaM = $row['meta_mensual'] ?? null;
+            $metaLabel = trim((string) ($row['meta_label'] ?? ''));
             $pl = (int) ($row['prof_line'] ?? 0);
             $pt = (int) ($row['prof_total_lines'] ?? 0);
             $debe = $row['debe'] ?? null;
@@ -189,7 +191,7 @@ final class AoatSeguimientoController
                     (string) ($row['municipality'] ?? ''),
                     (string) ($row['advisor_name'] ?? ''),
                     (string) ($row['professional_role_label'] ?? ''),
-                    $metaM === null ? '' : (string) $metaM,
+                    $metaLabel,
                 ];
                 foreach ($matrix['months'] as $mh) {
                     $k = $mh['key'];
@@ -257,12 +259,20 @@ final class AoatSeguimientoController
             'period' => trim((string) $request->input('period', 'ene_jun')) === 'jul_dic' ? 'jul_dic' : 'ene_jun',
             'professional_user_id' => max(0, (int) $request->input('professional_user_id', 0)),
             'filter_month' => (int) $request->input('filter_month', 0),
+            'state' => $this->normalizeAoatStateFilter((string) $request->input('state', '')),
             'role' => trim((string) $request->input('role', '')),
             'subregion' => trim((string) $request->input('subregion', '')),
             'municipalities' => MunicipalityListRequest::parse($request, 'municipality'),
             'vista' => trim((string) $request->input('vista', 'meta')) === 'actividad' ? 'actividad' : 'meta',
             'total_periodo' => $this->normalizeTotalPeriodoFilter((string) $request->input('total_periodo', '')),
         ];
+    }
+
+    private function normalizeAoatStateFilter(string $raw): string
+    {
+        $state = trim($raw);
+
+        return in_array($state, ['Asignada', 'Devuelta', 'Realizado', 'Aprobada'], true) ? $state : '';
     }
 
     private function normalizeTotalPeriodoFilter(string $raw): string
@@ -417,6 +427,11 @@ final class AoatSeguimientoController
             $parts[] = 'Solo mes calendario: ' . $this->monthNameEs($fm);
         }
 
+        $state = $this->normalizeAoatStateFilter((string) ($filters['state'] ?? ''));
+        if ($state !== '') {
+            $parts[] = 'Estado AoAT: ' . $state;
+        }
+
         $role = trim((string) ($filters['role'] ?? ''));
         if ($role !== '') {
             $parts[] = 'Rol: ' . $this->roleFilterLabel($role);
@@ -487,7 +502,7 @@ final class AoatSeguimientoController
             return 'Faltan ' . (string) abs($d) . ' actividades para la meta del periodo';
         }
         if ($d > 0) {
-            return 'Por encima de la meta del periodo';
+            return 'Va a favor con ' . (string) $d . ' actividades por encima de la meta del periodo';
         }
 
         return 'Cumple la meta del periodo';
@@ -522,7 +537,8 @@ final class AoatSeguimientoController
             : '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
             . 'Solo cuentan actividades registradas como <em>Asesoría</em> o <em>Asistencia técnica</em>. '
             . 'En cada mes verás tres líneas: asesorías realizadas, asistencias técnicas realizadas y el <strong>total</strong> frente a la meta. '
-            . '<strong>Saldo al final:</strong> un valor negativo significa que aún faltan actividades para cumplir la meta del periodo mostrado.</div>';
+            . 'Psicología y Derecho pueden cambiar por tramo del año; Medicina usa una meta global mensual entre todos. '
+            . '<strong>Saldo al final:</strong> negativo = faltan actividades; cero = cumple la meta; positivo = va a favor, por encima de la meta del periodo mostrado.</div>';
 
         $filterBlock = '<div class="meta"><p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p>'
             . '<p><strong>Filtros aplicados:</strong> ' . $esc($this->resolveSeguimientoFilterDescription($filters, $records)) . '</p>'
@@ -539,7 +555,7 @@ final class AoatSeguimientoController
         }
         $thead .= '<th>Total periodo</th>';
         if ($vista !== 'actividad') {
-            $thead .= '<th>Meta periodo</th><th>Saldo (DEBE)</th>';
+            $thead .= '<th>Meta periodo</th><th>Saldo</th>';
         }
         $thead .= '</tr>';
 
@@ -548,8 +564,10 @@ final class AoatSeguimientoController
             $pl = (int) ($row['prof_line'] ?? 0);
             $pt = (int) ($row['prof_total_lines'] ?? 0);
             $numLabel = $pl > 0 && $pt > 0 ? ($pl . ' de ' . $pt) : '—';
-            $mm = $row['meta_mensual'] ?? null;
-            $mmStr = $mm === null ? '—' : (string) (int) $mm;
+            $mmStr = trim((string) ($row['meta_label'] ?? ''));
+            if ($mmStr === '') {
+                $mmStr = '—';
+            }
 
             $rowsHtml .= '<tr>'
                 . '<td style="text-align:center;">' . $esc($numLabel) . '</td>'

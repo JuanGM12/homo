@@ -13,6 +13,7 @@ $filterDefaultsJs = [
     'period' => $period0,
     'professional_user_id' => '0',
     'filter_month' => '0',
+    'state' => '',
     'role' => '',
     'subregion' => '',
     'municipalities' => [],
@@ -90,6 +91,16 @@ $filterDefaultsJs = [
                             <?php for ($m = 1; $m <= 12; $m++): ?>
                                 <option value="<?= $m ?>"><?= ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][$m] ?></option>
                             <?php endfor; ?>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label small text-muted mb-1">Estado AoAT</label>
+                        <select name="state" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="Asignada">Asignada</option>
+                            <option value="Devuelta">Devuelta</option>
+                            <option value="Realizado">Realizado</option>
+                            <option value="Aprobada">Aprobada</option>
                         </select>
                     </div>
                     <div class="col-6 col-lg-2">
@@ -173,19 +184,21 @@ $filterDefaultsJs = [
             <div class="card-body p-3 small text-body-secondary">
                 <div id="aoat-seg-readme-meta">
                     <p class="mb-2"><strong>Profesional social:</strong> no tiene meta A+AT en este seguimiento; en la vista «Asistencias técnicas y asesorías» no se muestran esas filas (sí en «Actividades» si aplica).</p>
-                    <p class="mb-2"><strong>Meta:</strong> solo <strong>Asesoría</strong> y <strong>Asistencia técnica</strong>. Psicólogo/Abogado ≥ 2 por mes y municipio; Médico ≥ 1.</p>
-                    <p class="mb-2"><strong>Total / Meta / DEBE:</strong> suma del periodo vs meta (meses × meta mensual). <strong>DEBE negativo</strong> = faltan esas actividades.</p>
+                    <p class="mb-2"><strong>Meta:</strong> solo <strong>Asesoría</strong> y <strong>Asistencia técnica</strong>. Psicólogo/Abogado: <strong>2/mes</strong> de enero a marzo y <strong>3/mes</strong> desde abril. <strong>Médico:</strong> meta global mensual de <strong>8</strong> entre todos.</p>
+                    <p class="mb-2"><strong>Total / Meta / Saldo:</strong> suma del periodo vs meta (meses × meta mensual). <strong>Saldo negativo</strong> = faltan actividades; <strong>saldo positivo</strong> = va a favor, por encima de la meta.</p>
                     <p class="mb-2"><strong>Colores:</strong> un mes <strong>posterior al mes calendario actual</strong> con total 0 se muestra en gris azulado (no es un incumplimiento: ese mes aún no «cuenta» en la práctica).</p>
                     <p class="mb-0"><strong>Municipios:</strong> aparecen si ya hay al menos un registro AoAT en esa subregión y municipio (según rol y filtros).</p>
                 </div>
                 <div id="aoat-seg-readme-actividad" class="d-none">
                     <p class="mb-2"><strong>Actividades:</strong> aquí solo se cuentan los registros AoAT cuyo campo «Actividad que realizó» es <strong>Actividad</strong> (no se mezclan con asesorías ni asistencias técnicas).</p>
-                    <p class="mb-2"><strong>Sin metas:</strong> no hay columnas Meta ni DEBE; el total del periodo es la suma de esos registros por municipio y mes.</p>
+                    <p class="mb-2"><strong>Sin metas:</strong> no hay columnas Meta ni Saldo; el total del periodo es la suma de esos registros por municipio y mes.</p>
                     <p class="mb-0"><strong>Misma grilla territorial:</strong> las filas siguen saliendo del historial AoAT del profesional en cada municipio (igual que en la vista de metas).</p>
                 </div>
             </div>
         </div>
     </div>
+
+    <div id="aoat-seg-global-targets" class="mb-3"></div>
 
     <div class="card border-0 shadow-sm rounded-4 aoat-seg-card">
         <div class="table-responsive aoat-seg-table-wrap">
@@ -206,7 +219,7 @@ $filterDefaultsJs = [
 
 <script>
 (function () {
-    var STORAGE_KEY = 'homo_aoat_seguimiento_filters_v5';
+    var STORAGE_KEY = 'homo_aoat_seguimiento_filters_v6';
     var FILTER_DEFAULTS = <?= json_encode($filterDefaultsJs, JSON_UNESCAPED_UNICODE) ?>;
     var initial = <?= json_encode($initialMeta ?? ['months' => [], 'rows' => [], 'vista' => 'meta'], JSON_UNESCAPED_UNICODE) ?>;
 
@@ -243,6 +256,140 @@ $filterDefaultsJs = [
         );
     }
 
+    function aggregateRows(rows, months, vista) {
+        var summary = {
+            territories: rows.length,
+            consolidado_meta: 0,
+            expected: vista === 'meta' ? 0 : null,
+            debe: vista === 'meta' ? 0 : null,
+            hasExpected: false,
+            month_cells: {}
+        };
+
+        months.forEach(function (m) {
+            summary.month_cells[m.key] = {
+                count: 0,
+                asesoria: 0,
+                asistencia_tecnica: 0,
+                tier: vista === 'actividad' ? 'plain' : 'na'
+            };
+        });
+
+        rows.forEach(function (row) {
+            summary.consolidado_meta += Number(row.consolidado_meta || 0);
+            if (vista === 'meta') {
+                if (row.expected !== null && row.expected !== undefined) {
+                    summary.expected += Number(row.expected || 0);
+                    summary.hasExpected = true;
+                }
+                if (row.debe !== null && row.debe !== undefined) {
+                    summary.debe += Number(row.debe || 0);
+                }
+            }
+
+            months.forEach(function (m) {
+                var source = row.month_cells && row.month_cells[m.key] ? row.month_cells[m.key] : null;
+                var target = summary.month_cells[m.key];
+                target.count += Number(source && source.count != null ? source.count : 0);
+                target.asesoria += Number(source && source.asesoria != null ? source.asesoria : 0);
+                target.asistencia_tecnica += Number(source && source.asistencia_tecnica != null ? source.asistencia_tecnica : 0);
+            });
+        });
+
+        if (vista === 'meta' && !summary.hasExpected) {
+            summary.expected = null;
+            summary.debe = null;
+        }
+
+        return summary;
+    }
+
+    function buildSummaryRow(summary, months, vista, type, label, detail) {
+        var tr = document.createElement('tr');
+        tr.className = 'aoat-seg-summary-row aoat-seg-summary-row--' + type;
+
+        tr.innerHTML =
+            '<td class="aoat-seg-sticky aoat-seg-td-item aoat-seg-summary-sticky">' +
+                '<span class="aoat-seg-item-big">Σ</span>' +
+                '<span class="aoat-seg-item-hint">' + escapeHtml(type === 'group' ? 'subtotal' : 'total') + '</span>' +
+            '</td>' +
+            '<td class="aoat-seg-sticky aoat-seg-td-place aoat-seg-summary-sticky">' +
+                '<div class="aoat-seg-muni fw-semibold">' + escapeHtml(label) + '</div>' +
+                '<div class="aoat-seg-sub small">' + escapeHtml(detail) + '</div>' +
+            '</td>' +
+            '<td class="aoat-seg-sticky aoat-seg-td-prof aoat-seg-summary-sticky">' +
+                '<div class="aoat-seg-prof-name fw-semibold">' + escapeHtml(type === 'group' ? 'Subtotal por profesional' : 'Total general') + '</div>' +
+            '</td>' +
+            '<td class="aoat-seg-td-role aoat-seg-summary-label">' +
+                '<span class="aoat-seg-summary-pill">' + escapeHtml(vista === 'actividad' ? 'Totales de actividades' : 'Totales A+AT') + '</span>' +
+            '</td>';
+
+        months.forEach(function (m) {
+            var td = document.createElement('td');
+            td.className = 'text-center aoat-seg-month-td aoat-seg-summary-month';
+            td.innerHTML = monthCellHtml(summary.month_cells[m.key], vista);
+            tr.appendChild(td);
+        });
+
+        var tdCons = document.createElement('td');
+        tdCons.className = 'text-center fw-semibold align-middle aoat-seg-summary-kpi';
+        tdCons.innerHTML = '<span class="aoat-seg-kpi">' + String(summary.consolidado_meta) + '</span>';
+        tr.appendChild(tdCons);
+
+        if (vista === 'meta') {
+            var tdMeta = document.createElement('td');
+            tdMeta.className = 'text-center align-middle aoat-seg-summary-kpi';
+            tdMeta.innerHTML = summary.expected === null ? '<span class="text-muted">—</span>' : '<span class="aoat-seg-kpi">' + String(summary.expected) + '</span>';
+            tr.appendChild(tdMeta);
+
+            var tdDebe = document.createElement('td');
+            var debeTier = summary.debe === null ? 'na' : (summary.debe >= 0 ? 'ok' : 'bad');
+            var debeNote = saldoNoteHtml(summary.debe);
+            tdDebe.className = 'text-center fw-semibold aoat-seg-debe-td aoat-seg-debe--' + debeTier + ' aoat-seg-summary-kpi';
+            tdDebe.innerHTML = '<span class="aoat-seg-kpi">' + (summary.debe === null ? '—' : String(summary.debe)) + '</span>' + debeNote;
+            tr.appendChild(tdDebe);
+        }
+
+        return tr;
+    }
+
+    function renderGlobalTargets(matrix) {
+        var wrap = document.getElementById('aoat-seg-global-targets');
+        if (!wrap) return;
+        var vista = matrix && matrix.vista === 'actividad' ? 'actividad' : 'meta';
+        var items = matrix && Array.isArray(matrix.global_targets) ? matrix.global_targets : [];
+        if (vista !== 'meta' || items.length === 0) {
+            wrap.innerHTML = '';
+            return;
+        }
+
+        wrap.innerHTML = items.map(function (item) {
+            var months = Array.isArray(item.months) ? item.months : [];
+            var chips = months.map(function (month) {
+                var tier = month && month.tier ? String(month.tier) : 'na';
+                var saldo = Number(month && month.saldo != null ? month.saldo : 0);
+                var saldoText = saldo > 0 ? 'A favor ' + saldo : (saldo < 0 ? 'Falta ' + Math.abs(saldo) : 'Al dia');
+                return '<div class="aoat-seg-global-chip aoat-seg-global-chip--' + escapeHtml(tier) + '">' +
+                    '<div class="aoat-seg-global-chip-head">' + escapeHtml(String(month.label || '')) + '</div>' +
+                    '<div class="aoat-seg-global-chip-main">' + escapeHtml(String(month.count || 0)) + ' / ' + escapeHtml(String(month.target || 0)) + '</div>' +
+                    '<div class="aoat-seg-global-chip-sub">' + escapeHtml(saldoText) + '</div>' +
+                '</div>';
+            }).join('');
+
+            return '<div class="card border-0 shadow-sm rounded-4 aoat-seg-global-card">' +
+                '<div class="card-body p-3 p-lg-4">' +
+                    '<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">' +
+                        '<div>' +
+                            '<div class="aoat-seg-global-title">' + escapeHtml(String(item.title || 'Meta global mensual')) + '</div>' +
+                            '<div class="aoat-seg-global-copy">' + escapeHtml(String(item.description || '')) + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="aoat-seg-global-grid">' + chips + '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+
     function renderBody(matrix) {
         var vista = matrix.vista === 'actividad' ? 'actividad' : 'meta';
         var months = matrix.months || [];
@@ -250,6 +397,9 @@ $filterDefaultsJs = [
         var tbody = document.getElementById('aoat-seg-tbody');
         tbody.innerHTML = '';
         document.getElementById('aoat-seg-empty').classList.toggle('d-none', rows.length > 0);
+
+        var currentUserId = null;
+        var currentGroupRows = [];
 
         rows.forEach(function (row, idx) {
             var tr = document.createElement('tr');
@@ -260,9 +410,9 @@ $filterDefaultsJs = [
             var pt = row.prof_total_lines != null ? row.prof_total_lines : 1;
             var metaShort = '';
             if (vista === 'meta') {
-                metaShort = (row.meta_mensual === null || row.meta_mensual === undefined)
-                    ? '<span class="aoat-seg-meta-pill">Sin meta</span>'
-                    : '<span class="aoat-seg-meta-pill">Meta ' + row.meta_mensual + '/mes</span>';
+                metaShort = row.meta_label
+                    ? '<span class="aoat-seg-meta-pill">' + escapeHtml(String(row.meta_label)) + '</span>'
+                    : '<span class="aoat-seg-meta-pill">Sin meta</span>';
             }
 
             tr.innerHTML =
@@ -303,18 +453,52 @@ $filterDefaultsJs = [
                 var tdDebe = document.createElement('td');
                 tdDebe.className = 'text-center fw-semibold aoat-seg-debe-td aoat-seg-debe--' + (row.debe_tier || 'na');
                 var debeVal = row.debe === null ? '—' : String(row.debe);
-                var debeNote = row.debe !== null && row.debe < 0 ? '<div class="aoat-seg-debe-note">Falta ' + Math.abs(row.debe) + '</div>' : '';
+                var debeNote = saldoNoteHtml(row.debe);
                 tdDebe.innerHTML = '<span class="aoat-seg-kpi">' + debeVal + '</span>' + debeNote;
                 tr.appendChild(tdDebe);
             }
 
             tbody.appendChild(tr);
+
+            if (currentUserId === null) {
+                currentUserId = row.user_id;
+            }
+            currentGroupRows.push(row);
+
+            var nextRow = rows[idx + 1] || null;
+            var groupEnds = !nextRow || String(nextRow.user_id || '') !== String(row.user_id || '');
+            if (groupEnds) {
+                var detail = currentGroupRows.length === 1
+                    ? '1 territorio en el filtro actual'
+                    : String(currentGroupRows.length) + ' territorios en el filtro actual';
+                var subtotal = aggregateRows(currentGroupRows, months, vista);
+                tbody.appendChild(buildSummaryRow(subtotal, months, vista, 'group', row.advisor_name || 'Profesional', detail));
+                currentUserId = nextRow ? nextRow.user_id : null;
+                currentGroupRows = [];
+            }
         });
+
+        if (rows.length > 0) {
+            var grandTotal = aggregateRows(rows, months, vista);
+            var grandDetail = rows.length === 1
+                ? '1 fila visible en el cuadro'
+                : String(rows.length) + ' filas visibles en el cuadro';
+            tbody.appendChild(buildSummaryRow(grandTotal, months, vista, 'grand', 'Total general', grandDetail));
+        }
     }
 
     function escapeHtml(s) {
         if (s === null || s === undefined) return '';
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function saldoNoteHtml(value) {
+        if (value === null || value === undefined || value === '') return '';
+        var n = Number(value);
+        if (!Number.isFinite(n)) return '';
+        if (n < 0) return '<div class="aoat-seg-debe-note">Falta ' + Math.abs(n) + '</div>';
+        if (n > 0) return '<div class="aoat-seg-debe-note">A favor ' + n + '</div>';
+        return '<div class="aoat-seg-debe-note">Al día</div>';
     }
 
     function rebuildHead(months, vista) {
@@ -323,7 +507,7 @@ $filterDefaultsJs = [
         var thead = document.getElementById('aoat-seg-thead');
         var tail = '<th class="text-center aoat-seg-th-kpi">Total</th>';
         if (v === 'meta') {
-            tail += '<th class="text-center aoat-seg-th-kpi">Meta</th><th class="text-center aoat-seg-th-kpi">DEBE</th>';
+            tail += '<th class="text-center aoat-seg-th-kpi">Meta</th><th class="text-center aoat-seg-th-kpi">Saldo<div class="aoat-seg-th-hint">Falta / A favor</div></th>';
         }
         thead.innerHTML = '<tr>' +
             '<th class="aoat-seg-sticky"><span class="d-block">N.º</span><span class="aoat-seg-th-hint">en grupo</span></th>' +
@@ -353,7 +537,7 @@ $filterDefaultsJs = [
         }
         if (leadMain) {
             if (v === 'actividad') {
-                leadMain.innerHTML = 'Una fila por <strong>territorio y profesional</strong> según registros AoAT. Cada mes: cantidad de registros con tipo <strong>Actividad</strong> (sin meta ni DEBE).';
+                leadMain.innerHTML = 'Una fila por <strong>territorio y profesional</strong> según registros AoAT. Cada mes: cantidad de registros con tipo <strong>Actividad</strong> (sin meta ni saldo).';
             } else {
                 leadMain.innerHTML = 'Una fila por <strong>territorio y profesional</strong> (subregión + municipio + quien registra) según registros AoAT. Cada mes: total que cuenta para la meta (A+AT); abajo el detalle.';
             }
@@ -397,6 +581,7 @@ $filterDefaultsJs = [
                 period: form.querySelector('[name="period"]').value,
                 professional_user_id: profSel ? String(profSel.value || '0') : '0',
                 filter_month: String(form.querySelector('[name="filter_month"]').value || '0'),
+                state: String((form.querySelector('[name="state"]') || {}).value || ''),
                 role: form.querySelector('[name="role"]').value,
                 subregion: form.querySelector('[name="subregion"]').value,
                 municipalities: municipalities,
@@ -432,6 +617,7 @@ $filterDefaultsJs = [
                 }
             }
             if (data.filter_month != null) form.querySelector('[name="filter_month"]').value = String(data.filter_month);
+            if (data.state != null) form.querySelector('[name="state"]').value = String(data.state);
             if (data.role != null) form.querySelector('[name="role"]').value = data.role;
             if (data.subregion != null) form.querySelector('[name="subregion"]').value = data.subregion;
             var vistaSel = form.querySelector('[name="vista"]');
@@ -482,6 +668,7 @@ $filterDefaultsJs = [
                 var vista = m.vista === 'actividad' ? 'actividad' : 'meta';
                 applyVistaChrome(vista);
                 rebuildHead(m.months || [], vista);
+                renderGlobalTargets(m);
                 renderBody(m);
             })
             .catch(function () {
@@ -526,6 +713,7 @@ $filterDefaultsJs = [
         var iv = initial.vista === 'actividad' ? 'actividad' : 'meta';
         applyVistaChrome(iv);
         rebuildHead(initial.months || [], iv);
+        renderGlobalTargets(initial);
         renderBody(initial);
     }
 })();

@@ -4,17 +4,28 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\AoatMetaRuleRepository;
+
 /**
- * Seguimiento territorial de AoAT: metas (Asesoría + Asistencia técnica) por municipio y mes.
- * Los municipios "asignados" se infieren de los registros históricos del profesional (distinct subregión/municipio).
+ * Seguimiento territorial de AoAT: metas (Asesoria + Asistencia tecnica) por municipio y mes.
+ * Los municipios "asignados" se infieren de los registros historicos del profesional.
  */
 final class AoatSeguimientoService
 {
+    /** @var list<array<string, mixed>> */
+    private array $metaRules;
+
     /** Cuentan para la meta operativa */
     public const META_ACTIVITY_TYPES = ['Asesoría', 'Asistencia técnica'];
 
-    /** Registro «Actividad» (exclusivo frente a A+AT en seguimiento) */
+    /** Registro "Actividad" (exclusivo frente a A+AT en seguimiento) */
     public const STANDALONE_ACTIVITY_TYPE = 'Actividad';
+
+    public function __construct(?AoatMetaRuleRepository $metaRuleRepo = null)
+    {
+        $repo = $metaRuleRepo ?? new AoatMetaRuleRepository();
+        $this->metaRules = $repo->allActive();
+    }
 
     /**
      * @param array<int, array<string, mixed>> $records
@@ -23,7 +34,8 @@ final class AoatSeguimientoService
      *   vista: 'meta'|'actividad',
      *   months: list<array{num:int,label:string,key:string}>,
      *   rows: list<array<string, mixed>>,
-     *   legend: array<string, string>
+     *   legend: array<string, string>,
+     *   global_targets: list<array<string, mixed>>
      * }
      */
     public function buildMatrix(array $records, array $filters): array
@@ -33,6 +45,7 @@ final class AoatSeguimientoService
         $vista = trim((string) ($filters['vista'] ?? 'meta')) === 'actividad' ? 'actividad' : 'meta';
         $professionalUserId = max(0, (int) ($filters['professional_user_id'] ?? 0));
         $filterMonth = (int) ($filters['filter_month'] ?? 0);
+        $stateFilter = trim((string) ($filters['state'] ?? ''));
         $roleFilter = trim((string) ($filters['role'] ?? ''));
         $subregionFilter = trim((string) ($filters['subregion'] ?? ''));
         $municipalityFilters = $filters['municipalities'] ?? [];
@@ -49,6 +62,12 @@ final class AoatSeguimientoService
         }
 
         $prepared = $this->prepareRecords($records);
+        if ($stateFilter !== '') {
+            $prepared = array_values(array_filter($prepared, static function (array $row) use ($stateFilter): bool {
+                return (string) ($row['state'] ?? '') === $stateFilter;
+            }));
+        }
+
         $territory = $this->distinctTerritories($prepared, $roleFilter, $subregionFilter, $municipalityFilters, $professionalUserId);
 
         $monthsMeta = [];
@@ -60,7 +79,9 @@ final class AoatSeguimientoService
             ];
         }
 
+        $globalTargets = $vista === 'meta' ? $this->buildGlobalTargets($prepared, $year, $monthRange) : [];
         $rows = [];
+
         foreach ($territory as $t) {
             $uid = (int) $t['user_id'];
             $sub = (string) $t['subregion'];
@@ -74,6 +95,11 @@ final class AoatSeguimientoService
             $monthCounts = [];
             $monthCells = [];
             $consolidado = 0;
+            $expectedTotalAcc = 0;
+            $hasExpectedTotal = false;
+            $metaLabels = [];
+            $metaScope = null;
+            $displayMonthlyTarget = null;
 
             foreach ($monthRange as $m) {
                 if ($vista === 'actividad') {
@@ -87,38 +113,53 @@ final class AoatSeguimientoService
                         'tier' => 'plain',
                         'target' => null,
                     ];
-                } else {
-                    $brk = $this->metaBreakdownInMonth(
-                        $prepared,
-                        $uid,
-                        $sub,
-                        $mun,
-                        $year,
-                        $m
-                    );
-                    $c = $brk['total'];
-                    $monthCounts['m' . $m] = $c;
-                    $consolidado += $c;
-
-                    $target = $this->monthlyTargetForRole($prole);
-                    $monthCells['m' . $m] = [
-                        'count' => $c,
-                        'asesoria' => $brk['asesoria'],
-                        'asistencia_tecnica' => $brk['asistencia_tecnica'],
-                        'tier' => $this->monthCellTier($year, $m, $target, $c),
-                        'target' => $target,
-                    ];
+                    continue;
                 }
+
+                $rule = $this->resolveRuleForRoleMonth($prole, $year, $m);
+                $brk = $this->metaBreakdownInMonth($prepared, $uid, $sub, $mun, $year, $m);
+                $c = $brk['total'];
+                $monthCounts['m' . $m] = $c;
+                $consolidado += $c;
+
+                $target = $rule !== null && (string) ($rule['scope'] ?? '') === 'per_territory'
+                    ? (int) ($rule['target_value'] ?? 0)
+                    : null;
+
+                if ($target !== null) {
+                    $expectedTotalAcc += $target;
+                    $hasExpectedTotal = true;
+                    if ($displayMonthlyTarget === null) {
+                        $displayMonthlyTarget = $target;
+                    }
+                }
+
+                if ($rule !== null) {
+                    $metaLabels[] = $this->ruleShortLabel($rule);
+                    if ($metaScope === null) {
+                        $metaScope = (string) ($rule['scope'] ?? '');
+                    }
+                }
+
+                $monthCells['m' . $m] = [
+                    'count' => $c,
+                    'asesoria' => $brk['asesoria'],
+                    'asistencia_tecnica' => $brk['asistencia_tecnica'],
+                    'tier' => $this->monthCellTier($year, $m, $target, $c),
+                    'target' => $target,
+                ];
             }
 
-            $numMonths = count($monthRange);
             if ($vista === 'actividad') {
                 $monthlyTarget = null;
+                $metaLabel = null;
+                $metaScope = null;
                 $expectedTotal = null;
                 $debe = null;
             } else {
-                $monthlyTarget = $this->monthlyTargetForRole($prole);
-                $expectedTotal = $monthlyTarget !== null ? $monthlyTarget * $numMonths : null;
+                $monthlyTarget = $displayMonthlyTarget;
+                $metaLabel = $this->buildMetaLabel($metaLabels, $monthlyTarget, $metaScope);
+                $expectedTotal = $hasExpectedTotal ? $expectedTotalAcc : null;
                 $debe = $expectedTotal !== null ? $consolidado - $expectedTotal : null;
             }
 
@@ -132,6 +173,8 @@ final class AoatSeguimientoService
                 'months' => $monthCounts,
                 'month_cells' => $monthCells,
                 'meta_mensual' => $monthlyTarget,
+                'meta_label' => $metaLabel,
+                'meta_scope' => $metaScope,
                 'consolidado_meta' => $consolidado,
                 'expected' => $expectedTotal,
                 'debe' => $debe,
@@ -182,12 +225,12 @@ final class AoatSeguimientoService
 
         $legend = $vista === 'actividad'
             ? [
-                'meta' => 'Vista de actividades: solo se cuentan registros AoAT con tipo «Actividad». No aplica meta ni saldo DEBE.',
+                'meta' => 'Vista de actividades: solo se cuentan registros AoAT con tipo "Actividad". No aplica meta ni saldo.',
                 'territory' => 'Cada fila sigue basada en territorios donde el profesional tiene historial AoAT (misma grilla que la vista de metas).',
             ]
             : [
-                'meta' => 'Solo Asesoría y Asistencia técnica cuentan para la meta y el saldo «DEBE». Profesional social no se lista aquí (sin meta A+AT).',
-                'territory' => 'Cada fila (subregión + municipio + profesional) surge de registros AoAT existentes: si el profesional ha trabajado ese municipio, aparece aquí. Un cero en rojo es déficit en un mes ya iniciado; un mes futuro en calendario se muestra distinto aunque el total sea 0.',
+                'meta' => 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo. Profesional social no se lista aqui. Psicologia y Derecho cambian meta por tramo del ano; Medicina usa meta global mensual entre todos.',
+                'territory' => 'Cada fila (subregion + municipio + profesional) surge de registros AoAT existentes. Un cero en rojo es deficit en un mes ya iniciado; un mes futuro en calendario se muestra distinto aunque el total sea 0.',
             ];
 
         return [
@@ -195,6 +238,7 @@ final class AoatSeguimientoService
             'months' => $monthsMeta,
             'rows' => $rows,
             'legend' => $legend,
+            'global_targets' => $globalTargets,
         ];
     }
 
@@ -229,10 +273,8 @@ final class AoatSeguimientoService
 
     /**
      * @param list<array<string, mixed>> $prepared
+     * @param list<string> $municipalityFilters
      * @return list<array<string, mixed>>
-     */
-    /**
-     * @param list<string> $municipalityFilters vacío = todos los municipios
      */
     private function distinctTerritories(array $prepared, string $roleFilter, string $subregionFilter, array $municipalityFilters, int $professionalUserId = 0): array
     {
@@ -272,7 +314,7 @@ final class AoatSeguimientoService
     }
 
     /**
-     * Cuenta Asesoría y Asistencia técnica por separado (ambas cuentan para la meta).
+     * Cuenta Asesoria y Asistencia tecnica por separado.
      *
      * @param list<array<string, mixed>> $prepared
      * @return array{asesoria:int,asistencia_tecnica:int,total:int}
@@ -297,16 +339,11 @@ final class AoatSeguimientoService
             if ($r['subregion'] !== $subregion || $r['municipality'] !== $municipality) {
                 continue;
             }
-            $d = $r['activity_date'];
-            if ($d === '') {
+            $d = (string) ($r['activity_date'] ?? '');
+            if ($d === '' || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $mch)) {
                 continue;
             }
-            if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $mch)) {
-                continue;
-            }
-            $y = (int) $mch[1];
-            $mo = (int) $mch[2];
-            if ($y !== $year || $mo !== $month) {
+            if ((int) $mch[1] !== $year || (int) $mch[2] !== $month) {
                 continue;
             }
             $type = (string) ($r['activity_type'] ?? '');
@@ -325,7 +362,7 @@ final class AoatSeguimientoService
     }
 
     /**
-     * Cuenta registros con activity_type «Actividad» (no mezclar con A+AT).
+     * Cuenta registros con activity_type "Actividad".
      *
      * @param list<array<string, mixed>> $prepared
      */
@@ -348,16 +385,11 @@ final class AoatSeguimientoService
             if ($r['subregion'] !== $subregion || $r['municipality'] !== $municipality) {
                 continue;
             }
-            $d = $r['activity_date'];
-            if ($d === '') {
+            $d = (string) ($r['activity_date'] ?? '');
+            if ($d === '' || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $mch)) {
                 continue;
             }
-            if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $mch)) {
-                continue;
-            }
-            $y = (int) $mch[1];
-            $mo = (int) $mch[2];
-            if ($y !== $year || $mo !== $month) {
+            if ((int) $mch[1] !== $year || (int) $mch[2] !== $month) {
                 continue;
             }
             $n++;
@@ -367,8 +399,6 @@ final class AoatSeguimientoService
     }
 
     /**
-     * Filtra por total del periodo mostrado (columna «Total» / consolidado_meta).
-     *
      * @param list<array<string, mixed>> $rows
      * @return list<array<string, mixed>>
      */
@@ -413,9 +443,6 @@ final class AoatSeguimientoService
         return strtr($s, $map);
     }
 
-    /**
-     * Rol profesional social: sin meta operativa A+AT; no se lista en vista de metas.
-     */
     private function isProfesionalSocialRole(string $professionalRole): bool
     {
         $r = $this->stripSpanishAccents($this->normalizeRoleToken($professionalRole));
@@ -425,23 +452,23 @@ final class AoatSeguimientoService
 
     public function monthlyTargetForRole(string $professionalRole): ?int
     {
-        if ($this->isProfesionalSocialRole($professionalRole)) {
+        return $this->monthlyTargetForRoleMonth($professionalRole, (int) date('Y'), (int) date('n'));
+    }
+
+    public function monthlyTargetForRoleMonth(string $professionalRole, int $year, int $month): ?int
+    {
+        $rule = $this->resolveRuleForRoleMonth($professionalRole, $year, $month);
+        if ($rule === null || (string) ($rule['scope'] ?? '') !== 'per_territory') {
             return null;
         }
-        $r = $this->stripSpanishAccents($this->normalizeRoleToken($professionalRole));
-        if ($r === 'psicologo' || $r === 'abogado') {
-            return 2;
-        }
-        if ($r === 'medico') {
-            return 1;
-        }
 
-        return null;
+        return (int) ($rule['target_value'] ?? 0);
     }
 
     private function roleLabel(string $role): string
     {
         $r = $this->stripSpanishAccents($this->normalizeRoleToken($role));
+
         return match ($r) {
             'profesional social' => 'Profesional social',
             'psicologo' => 'Psicólogo',
@@ -458,9 +485,6 @@ final class AoatSeguimientoService
         return $labels[$m] ?? (string) $m;
     }
 
-    /**
-     * Color del mes: el rojo «cero» solo aplica a meses ya iniciados; meses futuros usan otro estado.
-     */
     private function monthCellTier(int $year, int $month, ?int $target, int $count): string
     {
         if ($target === null) {
@@ -489,6 +513,156 @@ final class AoatSeguimientoService
         $cell = $year * 12 + $month;
 
         return $cell > $cur;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function resolveRuleForRoleMonth(string $professionalRole, int $year, int $month): ?array
+    {
+        $roleKey = $this->stripSpanishAccents($this->normalizeRoleToken($professionalRole));
+        $fallback = null;
+
+        foreach ($this->metaRules as $rule) {
+            if ((string) ($rule['role_key'] ?? '') !== $roleKey) {
+                continue;
+            }
+            $from = (int) ($rule['month_from'] ?? 1);
+            $to = (int) ($rule['month_to'] ?? 12);
+            if ($month < $from || $month > $to) {
+                continue;
+            }
+            $ruleYear = $rule['rule_year'] ?? null;
+            if ($ruleYear === null || $ruleYear === '') {
+                $fallback = $rule;
+                continue;
+            }
+            if ((int) $ruleYear === $year) {
+                return $rule;
+            }
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * @param list<string> $labels
+     */
+    private function buildMetaLabel(array $labels, ?int $monthlyTarget, ?string $scope): ?string
+    {
+        $labels = array_values(array_unique(array_filter($labels, static fn ($v): bool => trim((string) $v) !== '')));
+
+        if ($scope === 'global_monthly' && $labels !== []) {
+            return $labels[0];
+        }
+        if ($monthlyTarget !== null && count($labels) <= 1) {
+            return 'Meta ' . $monthlyTarget . '/mes';
+        }
+        if ($labels !== []) {
+            return implode(' · ', $labels);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $rule
+     */
+    private function ruleShortLabel(array $rule): string
+    {
+        $target = (int) ($rule['target_value'] ?? 0);
+        $scope = (string) ($rule['scope'] ?? 'per_territory');
+        $from = (int) ($rule['month_from'] ?? 1);
+        $to = (int) ($rule['month_to'] ?? 12);
+        $range = $from === $to
+            ? $this->monthShortLabel($from)
+            : $this->monthShortLabel($from) . '-' . $this->monthShortLabel($to);
+
+        if ($scope === 'global_monthly') {
+            return 'Meta global ' . $target . '/mes (' . $range . ')';
+        }
+
+        return 'Meta ' . $target . '/mes (' . $range . ')';
+    }
+
+    /**
+     * @param list<array<string, mixed>> $prepared
+     * @param list<int> $monthRange
+     * @return list<array<string, mixed>>
+     */
+    private function buildGlobalTargets(array $prepared, int $year, array $monthRange): array
+    {
+        $summaries = [];
+        $roleKeys = [];
+
+        foreach ($this->metaRules as $rule) {
+            if ((string) ($rule['scope'] ?? '') === 'global_monthly') {
+                $roleKeys[(string) ($rule['role_key'] ?? '')] = true;
+            }
+        }
+
+        foreach (array_keys($roleKeys) as $roleKey) {
+            $months = [];
+            foreach ($monthRange as $month) {
+                $rule = $this->resolveRuleForRoleMonth($roleKey, $year, $month);
+                if ($rule === null || (string) ($rule['scope'] ?? '') !== 'global_monthly') {
+                    continue;
+                }
+
+                $count = $this->metaCountByRoleInMonth($prepared, $roleKey, $year, $month);
+                $target = (int) ($rule['target_value'] ?? 0);
+                $months[] = [
+                    'month' => $month,
+                    'label' => $this->monthShortLabel($month),
+                    'count' => $count,
+                    'target' => $target,
+                    'saldo' => $count - $target,
+                    'tier' => $count >= $target ? 'ok' : ($count > 0 ? 'warn' : 'bad'),
+                ];
+            }
+
+            if ($months === []) {
+                continue;
+            }
+
+            $summaries[] = [
+                'role_key' => $roleKey,
+                'role_label' => $this->roleLabel($roleKey),
+                'scope' => 'global_monthly',
+                'title' => 'Meta global mensual de ' . $this->roleLabel($roleKey),
+                'description' => 'Esta meta no se mide por municipio. Se calcula entre todos los registros del rol en el mes.',
+                'months' => $months,
+            ];
+        }
+
+        return $summaries;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $prepared
+     */
+    private function metaCountByRoleInMonth(array $prepared, string $roleKey, int $year, int $month): int
+    {
+        $count = 0;
+        foreach ($prepared as $r) {
+            if (!$r['is_meta']) {
+                continue;
+            }
+            $currentRole = $this->stripSpanishAccents($this->normalizeRoleToken((string) ($r['professional_role'] ?? '')));
+            if ($currentRole !== $roleKey) {
+                continue;
+            }
+            $d = (string) ($r['activity_date'] ?? '');
+            if ($d === '' || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $mch)) {
+                continue;
+            }
+            if ((int) $mch[1] !== $year || (int) $mch[2] !== $month) {
+                continue;
+            }
+            $count++;
+        }
+
+        return $count;
     }
 
     /**

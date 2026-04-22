@@ -547,6 +547,24 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
+        $exportFilters = [
+            'q' => $search,
+            'state' => $stateFilter,
+            'activity_type' => $activityTypeFilters,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'subregion' => $subregionFilter,
+            'municipality' => $municipalityFilters,
+        ];
+
+        if ($format === 'pdf') {
+            return $this->exportAoatListPdf($records, $exportFilters);
+        }
+
+        if (in_array($format, ['xls', 'excel'], true)) {
+            return $this->exportAoatListExcel($records, $exportFilters);
+        }
+
         $lines = [];
         $lines[] = implode(';', [
             'ID',
@@ -1306,13 +1324,16 @@ final class AoatController
     }
 
     /**
-     * Solo administradores pueden eliminar registros de AoAT desde la plataforma.
+     * Administradores y especialistas pueden eliminar registros de AoAT desde la plataforma.
      */
     public static function canUserDeleteAoatRecord(array $user, array $record): bool
     {
         unset($record);
 
-        return Auth::isAdmin($user);
+        $roles = $user['roles'] ?? [];
+
+        return Auth::isAdmin($user)
+            || in_array('especialista', $roles, true);
     }
 
     private function userCanAccessAoat(array $user): bool
@@ -1978,6 +1999,143 @@ final class AoatController
             'Content-Type' => 'application/vnd.ms-excel; charset=utf-8',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $records
+     * @param array<string,mixed> $filters
+     */
+    private function exportAoatListPdf(array $records, array $filters): Response
+    {
+        $html = $this->buildAoatListExportHtml($records, $filters, true);
+        $pdfBinary = PdfService::renderHtml($html, 'L', 'Registro AoAT', true);
+        $filename = 'aoat_registros_' . date('Ymd_His') . '.pdf';
+
+        return new Response($pdfBinary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $records
+     * @param array<string,mixed> $filters
+     */
+    private function exportAoatListExcel(array $records, array $filters): Response
+    {
+        $html = $this->buildAoatListExportHtml($records, $filters, false);
+        $filename = 'aoat_registros_' . date('Ymd_His') . '.xls';
+
+        return new Response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $records
+     * @param array<string,mixed> $filters
+     */
+    private function buildAoatListExportHtml(array $records, array $filters, bool $forPdf): string
+    {
+        $esc = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+
+        $logoHomo = dirname(__DIR__, 2) . '/public/assets/img/logoHomo.png';
+        $logoAntioquia = dirname(__DIR__, 2) . '/public/assets/img/logoAntioquia.png';
+        $logoHomoSrc = $forPdf ? PdfImageHelper::imageDataUri($logoHomo) : $this->buildExcelImageTag($logoHomo, 'HOMO');
+        $logoAntioquiaSrc = $forPdf ? PdfImageHelper::imageDataUri($logoAntioquia) : $this->buildExcelImageTag($logoAntioquia, 'Gobernación de Antioquia');
+
+        $renderLogo = static function (string $srcOrHtml, string $alt, bool $isPdf) use ($esc): string {
+            if ($srcOrHtml === '') {
+                return '';
+            }
+
+            if ($isPdf) {
+                return '<img src="' . $esc($srcOrHtml) . '" alt="' . $esc($alt) . '" style="height:46px;width:auto;">';
+            }
+
+            return $srcOrHtml;
+        };
+
+        $filterParts = [];
+        if (trim((string) ($filters['q'] ?? '')) !== '') {
+            $filterParts[] = 'Buscar: ' . trim((string) $filters['q']);
+        }
+        if (trim((string) ($filters['state'] ?? '')) !== '') {
+            $filterParts[] = 'Estado AoAT: ' . trim((string) $filters['state']);
+        }
+        $activityTypeFilters = $filters['activity_type'] ?? [];
+        if (is_array($activityTypeFilters) && $activityTypeFilters !== []) {
+            $filterParts[] = 'Actividad que realizó: ' . implode(', ', array_map('strval', $activityTypeFilters));
+        }
+        if (trim((string) ($filters['subregion'] ?? '')) !== '') {
+            $filterParts[] = 'Subregión: ' . trim((string) $filters['subregion']);
+        }
+        $municipalityFilters = $filters['municipality'] ?? [];
+        if (is_array($municipalityFilters) && $municipalityFilters !== []) {
+            $filterParts[] = 'Municipio(s): ' . implode(', ', array_map('strval', $municipalityFilters));
+        }
+        if (trim((string) ($filters['from_date'] ?? '')) !== '') {
+            $filterParts[] = 'Desde: ' . trim((string) $filters['from_date']);
+        }
+        if (trim((string) ($filters['to_date'] ?? '')) !== '') {
+            $filterParts[] = 'Hasta: ' . trim((string) $filters['to_date']);
+        }
+
+        $rowsHtml = '';
+        foreach ($records as $row) {
+            $professionalName = trim(((string) ($row['professional_name'] ?? '')) . ' ' . ((string) ($row['professional_last_name'] ?? '')));
+            $rowsHtml .= '<tr>'
+                . '<td>' . (int) ($row['id'] ?? 0) . '</td>'
+                . '<td>' . $esc((string) ($row['activity_date'] ?? '')) . '</td>'
+                . '<td>' . $esc($professionalName) . '</td>'
+                . '<td>' . $esc(ucwords(str_replace('_', ' ', (string) ($row['professional_role'] ?? '')))) . '</td>'
+                . '<td>' . $esc((string) ($row['subregion'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($row['municipality'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($row['activity_type'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($row['state'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($row['audit_motive'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($row['audit_observation'] ?? '')) . '</td>'
+                . '</tr>';
+        }
+
+        return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Registro AoAT</title>'
+            . '<style>'
+            . 'body{font-family:DejaVu Sans,Arial,sans-serif;color:#284d46;font-size:11px;margin:0;padding:0;background:#f7faf8;}'
+            . '.page{padding:20px;}'
+            . '.sheet{background:#ffffff;border:1px solid #d9e8e3;border-radius:16px;padding:18px;}'
+            . '.header{border:1px solid #c7ddd6;border-radius:14px;background:linear-gradient(135deg,#e4f0ec 0%,#f4efe5 100%);padding:14px 16px;}'
+            . '.header-table{width:100%;border-collapse:collapse;}'
+            . '.header-table td{vertical-align:middle;}'
+            . '.title{margin:0;font-size:20px;font-weight:700;color:#4160a4;text-align:center;}'
+            . '.subtitle{margin:4px 0 0;font-size:12px;color:#35645b;text-align:center;}'
+            . '.meta{margin-top:16px;background:#eef5f0;border:1px solid #c9ddd1;border-radius:12px;padding:12px 14px;}'
+            . '.meta p{margin:4px 0;}'
+            . '.section-title{margin:18px 0 8px;font-size:14px;font-weight:700;color:#4160a4;}'
+            . 'table{width:100%;border-collapse:collapse;}'
+            . 'th,td{border:1px solid #d8e8f5;padding:7px 8px;vertical-align:top;text-align:left;}'
+            . 'th{background:#dfece7;color:#24564e;font-weight:700;}'
+            . 'td{background:#ffffff;color:#2f4d48;}'
+            . '.footer{margin-top:16px;font-size:10px;color:#64748b;text-align:center;}'
+            . '</style></head><body><div class="page"><div class="sheet">'
+            . '<div class="header"><table class="header-table"><tr>'
+            . '<td style="width:28%;">' . $renderLogo($logoAntioquiaSrc, 'Gobernación de Antioquia', $forPdf) . '</td>'
+            . '<td style="width:44%;"><p class="title">Registro AoAT</p><p class="subtitle">Exportación general de registros</p></td>'
+            . '<td style="width:28%;text-align:right;">' . $renderLogo($logoHomoSrc, 'HOMO', $forPdf) . '</td>'
+            . '</tr></table></div>'
+            . '<div class="meta">'
+            . '<p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p>'
+            . '<p><strong>Filtros aplicados:</strong> ' . $esc($filterParts !== [] ? implode(' | ', $filterParts) : 'Sin filtros aplicados') . '</p>'
+            . '<p><strong>Total de registros:</strong> ' . count($records) . '</p>'
+            . '</div>'
+            . '<p class="section-title">Listado</p>'
+            . '<table><thead><tr>'
+            . '<th>ID</th><th>Fecha actividad</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Actividad</th><th>Estado AoAT</th><th>Motivo auditoría</th><th>Observación auditoría</th>'
+            . '</tr></thead><tbody>'
+            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="10">Sin registros.</td></tr>')
+            . '</tbody></table>'
+            . '<p class="footer">Documento generado automáticamente desde la plataforma Equipo de Promoción y Prevención.</p>'
+            . '</div></div></body></html>';
     }
 
     /**

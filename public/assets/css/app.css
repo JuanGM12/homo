@@ -3787,6 +3787,99 @@ select.homo-muni-native.visually-hidden {
 .aoat-seg-row--band1 td:not(.aoat-seg-sticky) {
     background: #eef5fb;
 }
+.aoat-seg-summary-row td {
+    border-top: 2px solid rgba(65, 96, 164, 0.16);
+    border-bottom: 2px solid rgba(65, 96, 164, 0.08);
+}
+.aoat-seg-summary-row--group td:not(.aoat-seg-summary-sticky) {
+    background: linear-gradient(180deg, rgba(65, 96, 164, 0.06), rgba(65, 96, 164, 0.03));
+}
+.aoat-seg-summary-row--grand td:not(.aoat-seg-summary-sticky) {
+    background: linear-gradient(180deg, rgba(42, 85, 67, 0.12), rgba(42, 85, 67, 0.06));
+}
+.aoat-seg-summary-sticky {
+    background: #edf3fb !important;
+}
+.aoat-seg-summary-row--grand .aoat-seg-summary-sticky {
+    background: #e6f1eb !important;
+}
+.aoat-seg-summary-label {
+    white-space: nowrap;
+}
+.aoat-seg-summary-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(65, 96, 164, 0.14);
+    color: var(--app-primary-deep, #2a5543);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+.aoat-seg-summary-row--grand .aoat-seg-summary-pill {
+    background: rgba(42, 85, 67, 0.16);
+}
+.aoat-seg-summary-kpi {
+    background-clip: padding-box;
+}
+.aoat-seg-summary-month .aoat-seg-month-bubble {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+}
+.aoat-seg-global-card {
+    background: linear-gradient(180deg, rgba(42, 85, 67, 0.08), rgba(42, 85, 67, 0.03));
+    border: 1px solid rgba(42, 85, 67, 0.12) !important;
+}
+.aoat-seg-global-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--app-primary-deep, #2a5543);
+}
+.aoat-seg-global-copy {
+    color: var(--app-text-muted, #5b6d8f);
+    font-size: 0.85rem;
+}
+.aoat-seg-global-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+}
+.aoat-seg-global-chip {
+    border-radius: 1rem;
+    padding: 0.85rem 0.9rem;
+    background: #fff;
+    border: 1px solid rgba(154, 198, 235, 0.45);
+    box-shadow: 0 8px 20px rgba(42, 85, 67, 0.06);
+}
+.aoat-seg-global-chip--ok {
+    border-color: rgba(76, 175, 80, 0.35);
+    background: linear-gradient(180deg, rgba(76, 175, 80, 0.12), rgba(255, 255, 255, 0.92));
+}
+.aoat-seg-global-chip--warn {
+    border-color: rgba(255, 179, 0, 0.35);
+    background: linear-gradient(180deg, rgba(255, 179, 0, 0.14), rgba(255, 255, 255, 0.92));
+}
+.aoat-seg-global-chip--bad {
+    border-color: rgba(220, 53, 69, 0.28);
+    background: linear-gradient(180deg, rgba(220, 53, 69, 0.12), rgba(255, 255, 255, 0.92));
+}
+.aoat-seg-global-chip-head {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--app-text-muted, #5b6d8f);
+    margin-bottom: 0.3rem;
+}
+.aoat-seg-global-chip-main {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--app-primary-deep, #2a5543);
+    line-height: 1.1;
+}
+.aoat-seg-global-chip-sub {
+    margin-top: 0.28rem;
+    font-size: 0.78rem;
+    color: var(--app-text-muted, #5b6d8f);
+}
 .aoat-seg-cell {
     display: inline-block;
     min-width: 2rem;

@@ -213,6 +213,10 @@ if ($currentUser) {
                                         <i class="bi bi-people-gear" aria-hidden="true"></i>
                                         <span>Usuarios</span>
                                     </a>
+                                    <a href="/admin/aoat-metas" class="app-sidebar-link <?= str_starts_with($currentPath, '/admin/aoat-metas') ? 'active' : '' ?>">
+                                        <i class="bi bi-sliders" aria-hidden="true"></i>
+                                        <span>Metas AoAT</span>
+                                    </a>
                                 <?php endif; ?>
                                 <div class="app-sidebar-divider mt-auto">
                                     <span class="app-sidebar-divider-label">Acciones</span>

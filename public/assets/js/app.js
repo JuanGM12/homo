@@ -2548,6 +2548,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const aoatFilterForm = document.querySelector('[data-aoat-filters]');
     const aoatResults = document.querySelector('[data-aoat-results]');
     const aoatExportLink = document.querySelector('[data-aoat-export-link]');
+    const aoatExportPdfLink = document.querySelector('[data-aoat-export-pdf-link]');
 
     if (aoatFilterForm && aoatResults) {
         let aoatFilterTimer = null;
@@ -2563,7 +2564,11 @@ document.addEventListener('DOMContentLoaded', () => {
             homoSaveFiltersForPath('/aoat', '?' + query);
 
             if (aoatExportLink) {
-                aoatExportLink.setAttribute('href', '/aoat/exportar' + (query ? `?${query}` : ''));
+                aoatExportLink.setAttribute('href', '/aoat/exportar' + (query ? `?${query}&format=xls` : '?format=xls'));
+            }
+
+            if (aoatExportPdfLink) {
+                aoatExportPdfLink.setAttribute('href', '/aoat/exportar' + (query ? `?${query}&format=pdf` : '?format=pdf'));
             }
         };
 
