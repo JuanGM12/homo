@@ -3,6 +3,10 @@
 /** @var array<string, mixed> $pagination */
 /** @var array<string, mixed> $impactSummary */
 /** @var array<string, mixed> $tests */
+/** @var string $exportQuery */
+
+$exportQuery = $exportQuery ?? '';
+$impactExportQuery = $exportQuery !== '' ? $exportQuery . '&solo_impacto_global=1' : 'solo_impacto_global=1';
 
 $impactGlobal = $impactSummary['global'] ?? null;
 $impactByMun  = $impactSummary['by_municipality'] ?? [];
@@ -52,6 +56,19 @@ $impactMeta = [
         <div id="evalImpactCollapse" class="accordion-collapse collapse"
             aria-labelledby="evalImpactHeading" data-bs-parent="#evalImpactAccordion">
             <div class="accordion-body p-0">
+                <div class="px-3 py-2 border-bottom d-flex flex-wrap justify-content-end gap-2 align-items-center eval-impact-export-bar">
+                    <span class="small text-muted me-auto">Mismos filtros que arriba.</span>
+                    <a href="/evaluaciones/exportar-csv?<?= htmlspecialchars($impactExportQuery, ENT_QUOTES, 'UTF-8') ?>"
+                        class="btn btn-outline-success btn-sm"
+                        data-eval-impact-csv>
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+                    </a>
+                    <a href="/evaluaciones/exportar-pdf?<?= htmlspecialchars($impactExportQuery, ENT_QUOTES, 'UTF-8') ?>"
+                        class="btn btn-outline-danger btn-sm"
+                        data-eval-impact-pdf>
+                        <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                    </a>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0 eval-impact-table">
                         <thead>

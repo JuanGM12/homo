@@ -498,7 +498,13 @@ final class EvaluacionesController
         $pagination     = $this->paginateEvalRows($comparisonRows, $currentPage, 25);
 
         if ((string) $request->input('partial', '') === 'results') {
-            $html = $this->renderResultsPartial($pagination['items'], $pagination, $impactSummary, $testsFull);
+            $html = $this->renderResultsPartial(
+                $pagination['items'],
+                $pagination,
+                $impactSummary,
+                $testsFull,
+                $exportQuery
+            );
 
             return Response::json(['html' => $html]);
         }
@@ -563,6 +569,31 @@ final class EvaluacionesController
                 $singleExport['pre'],
                 $singleExport['post']
             );
+        }
+
+        if ((string) $request->input('solo_impacto_global', '') === '1') {
+            $canSeeAll = Auth::canViewAllModuleRecords($user);
+            $filters = $this->collectEvaluacionFiltersFromRequest($request, $user, $canSeeAll);
+            $filters = $this->applyEvaluacionSearchScope($filters, $user);
+            $searchFilters = $filters;
+            unset($searchFilters['phase'], $searchFilters['impact'], $searchFilters['search']);
+            $searchFilters['limit'] = 8000;
+
+            $repo = new TestResponseRepository();
+            $records = (!$canSeeAll && empty($user['document_number']) && !self::userSeesEvaluacionesByThematicScope($user))
+                ? []
+                : $repo->search($searchFilters);
+            $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
+            $comparisonRows = $this->applyComparisonFilters($comparisonRows, $filters);
+            $impactSummary = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
+
+            $excel = $this->buildEvaluacionesImpactoGlobalExcelHtml($impactSummary, $filters, $testsFull);
+            $filename = 'evaluaciones_impacto_global_' . date('Y-m-d_His') . '.xls';
+
+            return new Response($excel, 200, [
+                'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
         }
 
         $canSeeAll = Auth::canViewAllModuleRecords($user);
@@ -630,6 +661,34 @@ final class EvaluacionesController
                 $singleExport['pre'],
                 $singleExport['post']
             );
+        }
+
+        if ((string) $request->input('solo_impacto_global', '') === '1') {
+            $canSeeAll = Auth::canViewAllModuleRecords($user);
+            $filters = $this->collectEvaluacionFiltersFromRequest($request, $user, $canSeeAll);
+            $filters = $this->applyEvaluacionSearchScope($filters, $user);
+            $searchFilters = $filters;
+            unset($searchFilters['phase'], $searchFilters['impact'], $searchFilters['search']);
+            $searchFilters['limit'] = 8000;
+
+            $repo = new TestResponseRepository();
+            $records = (!$canSeeAll && empty($user['document_number']) && !self::userSeesEvaluacionesByThematicScope($user))
+                ? []
+                : $repo->search($searchFilters);
+            $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
+            $comparisonRows = $this->applyComparisonFilters($comparisonRows, $filters);
+            $impactSummary = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
+
+            @ini_set('memory_limit', '256M');
+            @set_time_limit(120);
+
+            $html = $this->buildEvaluacionesImpactoGlobalPdfHtml($impactSummary, $filters, $testsFull);
+            $pdfBinary = PdfService::renderHtml($html, 'L', 'Impacto global evaluaciones', true);
+
+            return new Response($pdfBinary, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="evaluaciones_impacto_global_' . date('Y-m-d_His') . '.pdf"',
+            ]);
         }
 
         $canSeeAll = Auth::canViewAllModuleRecords($user);
@@ -739,7 +798,8 @@ final class EvaluacionesController
         array $comparisonRows,
         array $pagination,
         array $impactSummary,
-        array $tests
+        array $tests,
+        string $exportQuery = ''
     ): string {
         ob_start();
         require dirname(__DIR__) . '/Views/evaluaciones/_results.php';
@@ -823,6 +883,18 @@ final class EvaluacionesController
             'pre' => 'PRE-TEST',
             'post' => 'POST-TEST',
             default => '',
+        };
+    }
+
+    private static function evalImpactFilterLabel(string $code): string
+    {
+        return match ($code) {
+            'mejoria' => 'Con mejoría',
+            'sin_cambios' => 'Sin cambios',
+            'sin_mejoria' => 'Sin mejoría',
+            'pendiente_post' => 'Pendiente POST',
+            'pendiente_pre' => 'Sin PRE',
+            default => $code,
         };
     }
 
@@ -943,6 +1015,8 @@ final class EvaluacionesController
                 'Ámbito',
                 'Temática',
                 'N con PRE+POST',
+                'PRE prom. %',
+                'POST prom. %',
                 'Con mejoría %',
                 'Sin cambios %',
                 'Sin mejoría %',
@@ -951,6 +1025,8 @@ final class EvaluacionesController
                 (string) ($g['municipality'] ?? ''),
                 'Todas',
                 (string) ($g['con_ambos'] ?? '0'),
+                number_format((float) ($g['avg_pre_score'] ?? 0), 1, ',', ''),
+                number_format((float) ($g['avg_post_score'] ?? 0), 1, ',', ''),
                 (string) ($g['pct_mejoria'] ?? '0'),
                 (string) ($g['pct_sin_cambios'] ?? '0'),
                 (string) ($g['pct_sin_mejoria'] ?? '0'),
@@ -960,6 +1036,8 @@ final class EvaluacionesController
                     (string) ($row['municipality'] ?? ''),
                     (string) ($row['test_name'] ?? 'Todas'),
                     (string) ($row['con_ambos'] ?? '0'),
+                    number_format((float) ($row['avg_pre_score'] ?? 0), 1, ',', ''),
+                    number_format((float) ($row['avg_post_score'] ?? 0), 1, ',', ''),
                     (string) ($row['pct_mejoria'] ?? '0'),
                     (string) ($row['pct_sin_cambios'] ?? '0'),
                     (string) ($row['pct_sin_mejoria'] ?? '0'),
@@ -1039,6 +1117,12 @@ final class EvaluacionesController
         if (!empty($filters['phase'])) {
             $filterParts[] = 'Tipo de test: ' . self::evalPhaseFilterLabel((string) $filters['phase']);
         }
+        if (!empty($filters['impact'])) {
+            $filterParts[] = 'Impacto: ' . self::evalImpactFilterLabel((string) $filters['impact']);
+        }
+        if (!empty($filters['search'])) {
+            $filterParts[] = 'Búsqueda: ' . (string) $filters['search'];
+        }
 
         $summaryRows = '';
         $global = $impactSummary['global'] ?? null;
@@ -1047,6 +1131,8 @@ final class EvaluacionesController
                 . '<td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td>'
                 . '<td>Todas</td>'
                 . '<td>' . (int) ($global['con_ambos'] ?? 0) . '</td>'
+                . '<td>' . $esc(number_format((float) ($global['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td>' . $esc(number_format((float) ($global['avg_post_score'] ?? 0), 1)) . '%</td>'
                 . '<td>' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td>'
                 . '<td>' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td>'
                 . '<td>' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td>'
@@ -1057,6 +1143,8 @@ final class EvaluacionesController
                 . '<td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td>'
                 . '<td>' . (int) ($mun['con_ambos'] ?? 0) . '</td>'
+                . '<td>' . $esc(number_format((float) ($mun['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td>' . $esc(number_format((float) ($mun['avg_post_score'] ?? 0), 1)) . '%</td>'
                 . '<td>' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td>'
                 . '<td>' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td>'
                 . '<td>' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td>'
@@ -1087,13 +1175,203 @@ final class EvaluacionesController
             . '<tr><td colspan="12">Filtros: ' . $esc($filterParts !== [] ? implode(' | ', $filterParts) : 'Sin filtros aplicados') . '</td></tr>'
             . '</table><br>'
             . '<table border="1" cellpadding="6" cellspacing="0">'
-            . '<tr style="background:#2a5543;color:#ffffff;font-weight:700"><th>Municipio</th><th>Temática</th><th>Con PRE+POST</th><th>Con mejoría</th><th>Sin cambios</th><th>Sin mejoría</th></tr>'
-            . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="6">Sin datos de impacto.</td></tr>')
+            . '<tr style="background:#2a5543;color:#ffffff;font-weight:700"><th>Municipio</th><th>Temática</th><th>Con PRE+POST</th><th>PRE prom.</th><th>POST prom.</th><th>Con mejoría</th><th>Sin cambios</th><th>Sin mejoría</th></tr>'
+            . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="8">Sin datos de impacto.</td></tr>')
             . '</table><br>'
             . '<table border="1" cellpadding="6" cellspacing="0">'
             . '<tr style="background:#2a5543;color:#ffffff;font-weight:700"><th>Temática</th><th>Documento</th><th>Persona</th><th>Subregión</th><th>Municipio</th><th>PRE</th><th>Fecha PRE</th><th>POST</th><th>Fecha POST</th><th>Cambio</th><th>Resultado impacto</th></tr>'
             . ($detailRows !== '' ? $detailRows : '<tr><td colspan="11">Sin registros.</td></tr>')
             . '</table>'
+            . '</body></html>';
+    }
+
+    /**
+     * Excel (.xls HTML): solo tabla «Resultado impacto global» (mismos filtros que el listado).
+     *
+     * @param array{global: ?array, by_municipality: array} $impactSummary
+     * @param array<string, mixed> $filters
+     * @param array<string, array{name: string, color: string}> $testsFull
+     */
+    private function buildEvaluacionesImpactoGlobalExcelHtml(
+        array $impactSummary,
+        array $filters,
+        array $testsFull
+    ): string {
+        $esc = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+
+        $filterParts = [];
+        if (!empty($filters['test_key'])) {
+            $tk = (string) $filters['test_key'];
+            $filterParts[] = 'Temática: ' . (string) ($testsFull[$tk]['name'] ?? $tk);
+        }
+        if (!empty($filters['document_number'])) {
+            $filterParts[] = 'Documento: ' . (string) $filters['document_number'];
+        }
+        if (!empty($filters['search'])) {
+            $filterParts[] = 'Búsqueda: ' . (string) $filters['search'];
+        }
+        if (!empty($filters['subregion'])) {
+            $filterParts[] = 'Subregión: ' . (string) $filters['subregion'];
+        }
+        $munExcel = $this->evalMunicipalityFilterLabel($filters);
+        if ($munExcel !== '') {
+            $filterParts[] = 'Municipio(s): ' . $munExcel;
+        }
+        if (!empty($filters['date_from'])) {
+            $filterParts[] = 'Desde: ' . (string) $filters['date_from'];
+        }
+        if (!empty($filters['date_to'])) {
+            $filterParts[] = 'Hasta: ' . (string) $filters['date_to'];
+        }
+        if (!empty($filters['phase'])) {
+            $filterParts[] = 'Tipo de test: ' . self::evalPhaseFilterLabel((string) $filters['phase']);
+        }
+        if (!empty($filters['impact'])) {
+            $filterParts[] = 'Impacto: ' . self::evalImpactFilterLabel((string) $filters['impact']);
+        }
+
+        $summaryRows = '';
+        $global = $impactSummary['global'] ?? null;
+        if (is_array($global)) {
+            $summaryRows .= '<tr style="font-weight:700;background:#f5f0e6">'
+                . '<td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td>'
+                . '<td>Todas</td>'
+                . '<td>' . (int) ($global['con_ambos'] ?? 0) . '</td>'
+                . '<td>' . $esc(number_format((float) ($global['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td>' . $esc(number_format((float) ($global['avg_post_score'] ?? 0), 1)) . '%</td>'
+                . '<td>' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td>'
+                . '<td>' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td>'
+                . '<td>' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td>'
+                . '</tr>';
+        }
+        foreach ($impactSummary['by_municipality'] ?? [] as $mun) {
+            $summaryRows .= '<tr>'
+                . '<td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td>'
+                . '<td>' . (int) ($mun['con_ambos'] ?? 0) . '</td>'
+                . '<td>' . $esc(number_format((float) ($mun['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td>' . $esc(number_format((float) ($mun['avg_post_score'] ?? 0), 1)) . '%</td>'
+                . '<td>' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td>'
+                . '<td>' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td>'
+                . '<td>' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td>'
+                . '</tr>';
+        }
+
+        return '<html><head><meta charset="UTF-8"></head><body>'
+            . '<table border="0">'
+            . '<tr><td colspan="8" style="font-size:16pt;font-weight:700;color:#2a5543">Resultado impacto global — personas con PRE y POST por temática</td></tr>'
+            . '<tr><td colspan="8">Fecha de exportación: ' . $esc(date('d/m/Y H:i')) . '</td></tr>'
+            . '<tr><td colspan="8">Filtros: ' . $esc($filterParts !== [] ? implode(' | ', $filterParts) : 'Sin filtros aplicados') . '</td></tr>'
+            . '</table><br>'
+            . '<table border="1" cellpadding="6" cellspacing="0">'
+            . '<tr style="background:#2a5543;color:#ffffff;font-weight:700">'
+            . '<th>Municipio</th><th>Temática</th><th>Con PRE+POST</th><th>PRE prom.</th><th>POST prom.</th>'
+            . '<th>Con mejoría</th><th>Sin cambios</th><th>Sin mejoría</th></tr>'
+            . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="8">Sin datos de impacto.</td></tr>')
+            . '</table>'
+            . '</body></html>';
+    }
+
+    /**
+     * PDF horizontal: solo «Resultado impacto global» con logos institucionales.
+     *
+     * @param array{global: ?array, by_municipality: array} $impactSummary
+     * @param array<string, mixed> $filters
+     * @param array<string, array{name: string, color: string}> $testsFull
+     */
+    private function buildEvaluacionesImpactoGlobalPdfHtml(
+        array $impactSummary,
+        array $filters,
+        array $testsFull
+    ): string {
+        $esc = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+
+        $meta = [];
+        if (!empty($filters['test_key'])) {
+            $tk = (string) $filters['test_key'];
+            $meta[] = '<strong>Temática:</strong> ' . $esc((string) ($testsFull[$tk]['name'] ?? $tk));
+        }
+        if (!empty($filters['document_number'])) {
+            $meta[] = '<strong>Documento:</strong> ' . $esc((string) $filters['document_number']);
+        }
+        if (!empty($filters['search'])) {
+            $meta[] = '<strong>Búsqueda:</strong> ' . $esc((string) $filters['search']);
+        }
+        if (!empty($filters['subregion'])) {
+            $meta[] = '<strong>Subregión:</strong> ' . $esc((string) $filters['subregion']);
+        }
+        $munPdf = $this->evalMunicipalityFilterLabel($filters);
+        if ($munPdf !== '') {
+            $meta[] = '<strong>Municipio(s):</strong> ' . $esc($munPdf);
+        }
+        if (!empty($filters['date_from'])) {
+            $meta[] = '<strong>Desde:</strong> ' . $esc((string) $filters['date_from']);
+        }
+        if (!empty($filters['date_to'])) {
+            $meta[] = '<strong>Hasta:</strong> ' . $esc((string) $filters['date_to']);
+        }
+        if (!empty($filters['phase'])) {
+            $meta[] = '<strong>Tipo de test:</strong> ' . $esc(self::evalPhaseFilterLabel((string) $filters['phase']));
+        }
+        if (!empty($filters['impact'])) {
+            $meta[] = '<strong>Impacto:</strong> ' . $esc(self::evalImpactFilterLabel((string) $filters['impact']));
+        }
+
+        $summaryBuf = [];
+        $global = $impactSummary['global'] ?? null;
+        if (is_array($global)) {
+            $summaryBuf[] = '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td>Todas</td>'
+                . '<td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td>'
+                . '<td class="num">' . $esc(number_format((float) ($global['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc(number_format((float) ($global['avg_post_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td>'
+                . '<td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td>'
+                . '<td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+        }
+        foreach ($impactSummary['by_municipality'] ?? [] as $mun) {
+            $summaryBuf[] = '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td>'
+                . '<td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td>'
+                . '<td class="num">' . $esc(number_format((float) ($mun['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc(number_format((float) ($mun['avg_post_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td>'
+                . '<td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td>'
+                . '<td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+        }
+        $summaryRows = implode('', $summaryBuf);
+
+        $base = dirname(__DIR__, 2) . '/public/assets/img';
+        $logoAntSrc = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
+        $logoHomoSrc = PdfImageHelper::imageDataUri($base . '/logoHomo.png');
+        $logoAnt = $logoAntSrc !== '' ? '<img src="' . $logoAntSrc . '" alt="" class="logo">' : '';
+        $logoHomo = $logoHomoSrc !== '' ? '<img src="' . $logoHomoSrc . '" alt="" class="logo">' : '';
+
+        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Impacto global evaluaciones</title><style>'
+            . 'body{font-family:DejaVu Sans,Arial,Helvetica,sans-serif;font-size:8.5px;color:#1f2a24;margin:18px 22px;}'
+            . 'table{width:100%;border-collapse:collapse;}'
+            . '.header td{vertical-align:middle;}'
+            . '.logo{height:34px;}'
+            . '.title{text-align:center;font-size:15px;font-weight:700;color:#2a5543;}'
+            . '.subtitle{text-align:center;font-size:8.5px;color:#5d6c65;}'
+            . '.meta{margin:8px 0 12px 0;font-size:8px;}'
+            . '.meta p{margin:2px 0;}'
+            . '.section{margin-top:10px;}'
+            . '.section-title{background:#2a5543;color:#fff;font-weight:700;padding:5px 8px;font-size:9px;}'
+            . 'th{background:#eef5f0;color:#1f2a24;font-weight:700;border:1px solid #cfdad3;padding:3px 4px;text-align:left;}'
+            . 'td{border:1px solid #d9e2dd;padding:3px 4px;}'
+            . '.num{text-align:right;}'
+            . '.total-row td{background:#f5f0e6;font-weight:700;}'
+            . '</style></head><body>'
+            . '<table class="header"><tr><td style="width:25%">' . $logoAnt . '</td><td style="width:50%">'
+            . '<div class="title">Resultado impacto global</div>'
+            . '<div class="subtitle">Personas con PRE y POST por temática · Equipo de Promoción y Prevención</div></td>'
+            . '<td style="width:25%;text-align:right">' . $logoHomo . '</td></tr></table>'
+            . '<div class="meta"><p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p>'
+            . '<p>' . ($meta !== [] ? implode(' · ', $meta) : '<em>Sin filtros aplicados</em>') . '</p></div>'
+            . '<div class="section"><div class="section-title">Cuadro por municipio y temática</div><table><thead><tr>'
+            . '<th>Municipio</th><th>Temática</th><th class="num">Con PRE+POST</th><th class="num">PRE prom.</th><th class="num">POST prom.</th>'
+            . '<th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>'
+            . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="8">Sin datos de impacto.</td></tr>')
+            . '</tbody></table></div>'
             . '</body></html>';
     }
 
@@ -1386,14 +1664,26 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
         if (!empty($filters['phase'])) {
             $meta[] = 'Tipo de test: ' . $esc(self::evalPhaseFilterLabel((string) $filters['phase']));
         }
+        if (!empty($filters['impact'])) {
+            $meta[] = 'Impacto: ' . $esc(self::evalImpactFilterLabel((string) $filters['impact']));
+        }
+        if (!empty($filters['search'])) {
+            $meta[] = 'Búsqueda: ' . $esc((string) $filters['search']);
+        }
 
         $summaryBuf = [];
         $global = $impactSummary['global'] ?? null;
         if (is_array($global)) {
-            $summaryBuf[] = '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td>Todas</td><td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            $summaryBuf[] = '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td>Todas</td><td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td>'
+                . '<td class="num">' . $esc(number_format((float) ($global['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc(number_format((float) ($global['avg_post_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
         }
         foreach ($impactSummary['by_municipality'] ?? [] as $mun) {
-            $summaryBuf[] = '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td><td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            $summaryBuf[] = '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td><td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td>'
+                . '<td class="num">' . $esc(number_format((float) ($mun['avg_pre_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc(number_format((float) ($mun['avg_post_score'] ?? 0), 1)) . '%</td>'
+                . '<td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
         }
         $summaryRows = implode('', $summaryBuf);
 
@@ -1461,7 +1751,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
                 ? '<p style="font-size:7.5px;color:#666;">El bloque «Resultado impacto global por municipio» corresponde al mismo conjunto filtrado que los totales anteriores (no solo a las filas de la tabla detalle).</p>'
                 : '')
             . '</div>'
-            . '<div class="section"><div class="section-title">Resultado impacto global por municipio y temática</div><table><thead><tr><th>Municipio</th><th>Temática</th><th class="num">Con PRE+POST</th><th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>' . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="6">Sin datos de impacto.</td></tr>') . '</tbody></table></div>'
+            . '<div class="section"><div class="section-title">Resultado impacto global por municipio y temática</div><table><thead><tr><th>Municipio</th><th>Temática</th><th class="num">Con PRE+POST</th><th class="num">PRE prom.</th><th class="num">POST prom.</th><th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>' . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="8">Sin datos de impacto.</td></tr>') . '</tbody></table></div>'
             . '<div class="section"><div class="section-title">Detalle comparativo por persona</div><table><thead><tr><th>Temática</th><th>Documento</th><th>Persona</th><th>Subregión</th><th>Municipio</th><th class="num">PRE</th><th class="num">POST</th><th class="num">Cambio</th><th>Resultado impacto</th></tr></thead><tbody>' . ($detailRows !== '' ? $detailRows : '<tr><td colspan="9">Sin registros.</td></tr>') . '</tbody></table></div>'
             . '</body></html>';
     }

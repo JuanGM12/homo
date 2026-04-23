@@ -2420,24 +2420,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const evalExportLink = document.querySelector('[data-eval-export-link]');
     const evalExportPdfLink = document.querySelector('[data-eval-export-pdf-link]');
 
-    [evalExportLink, evalExportPdfLink].forEach((link) => {
-        if (!link) {
-            return;
-        }
-
-        link.addEventListener('click', () => {
-            Swal.fire({
-                toast: true,
-                position: 'top-end',
-                icon: 'info',
-                title: 'Preparando descarga...',
-                text: 'La exportación puede tardar unos segundos según la cantidad de registros.',
-                showConfirmButton: false,
-                timer: 2800,
-                timerProgressBar: true,
+    const bindEvalExportToast = (root) => {
+        const scope = root && root.querySelectorAll ? root : document;
+        scope.querySelectorAll('[data-eval-export-link], [data-eval-export-pdf-link], [data-eval-impact-csv], [data-eval-impact-pdf]').forEach((link) => {
+            if (link.dataset.homoEvalExportToastBound === '1') {
+                return;
+            }
+            link.dataset.homoEvalExportToastBound = '1';
+            link.addEventListener('click', () => {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'info',
+                    title: 'Preparando descarga...',
+                    text: 'La exportación puede tardar unos segundos según la cantidad de registros.',
+                    showConfirmButton: false,
+                    timer: 2800,
+                    timerProgressBar: true,
+                });
             });
         });
-    });
+    };
+
+    bindEvalExportToast(document);
 
     if (evalFilterForm && evalResults) {
         let evalFilterTimer = null;
@@ -2457,6 +2462,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (evalExportPdfLink) {
                 evalExportPdfLink.setAttribute('href', '/evaluaciones/exportar-pdf' + (query ? `?${query}` : ''));
             }
+
+            const impactParams = new URLSearchParams(cleanParams);
+            impactParams.set('solo_impacto_global', '1');
+            const impactQs = impactParams.toString();
+            evalResults.querySelectorAll('[data-eval-impact-csv]').forEach((a) => {
+                a.setAttribute('href', '/evaluaciones/exportar-csv?' + impactQs);
+            });
+            evalResults.querySelectorAll('[data-eval-impact-pdf]').forEach((a) => {
+                a.setAttribute('href', '/evaluaciones/exportar-pdf?' + impactQs);
+            });
+            bindEvalExportToast(evalResults);
         };
 
         const applyEvalFilters = (page = 1) => {
