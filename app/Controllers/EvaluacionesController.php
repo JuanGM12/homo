@@ -486,8 +486,8 @@ final class EvaluacionesController
                 unset($searchFilters['phase'], $searchFilters['impact'], $searchFilters['search']);
                 $searchFilters['limit'] = 8000;
                 $records = $repo->search($searchFilters);
-                $comparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
-                $comparisonRows = $this->applyComparisonFilters($comparisonRows, $filters);
+                $allComparisonRows = EvaluacionesReportService::buildComparisonRows($records, $testsFull);
+                $comparisonRows = $this->applyComparisonFilters($allComparisonRows, $filters);
                 $impactSummary  = EvaluacionesReportService::summarizeByMunicipality($comparisonRows);
             }
 
@@ -864,16 +864,21 @@ final class EvaluacionesController
     {
         $search = strtolower(trim((string) ($filters['search'] ?? '')));
         $impact = trim((string) ($filters['impact'] ?? ''));
+        $testKey = trim((string) ($filters['test_key'] ?? ''));
         $phaseFilter = trim((string) ($filters['phase'] ?? ''));
         if (!in_array($phaseFilter, ['pre', 'post'], true)) {
             $phaseFilter = '';
         }
 
-        if ($search === '' && $impact === '' && $phaseFilter === '') {
+        if ($search === '' && $impact === '' && $testKey === '' && $phaseFilter === '') {
             return $rows;
         }
 
-        return array_values(array_filter($rows, static function (array $row) use ($search, $impact, $phaseFilter): bool {
+        return array_values(array_filter($rows, static function (array $row) use ($search, $impact, $testKey, $phaseFilter): bool {
+            if ($testKey !== '' && (string) ($row['test_key'] ?? '') !== $testKey) {
+                return false;
+            }
+
             if ($impact !== '' && (string) ($row['impact'] ?? '') !== $impact) {
                 return false;
             }
@@ -936,6 +941,7 @@ final class EvaluacionesController
             $lines[] = 'Resumen impacto (solo personas con PRE y POST)';
             $lines[] = implode($sep, [
                 'Ámbito',
+                'Temática',
                 'N con PRE+POST',
                 'Con mejoría %',
                 'Sin cambios %',
@@ -943,6 +949,7 @@ final class EvaluacionesController
             ]);
             $lines[] = implode($sep, [
                 (string) ($g['municipality'] ?? ''),
+                'Todas',
                 (string) ($g['con_ambos'] ?? '0'),
                 (string) ($g['pct_mejoria'] ?? '0'),
                 (string) ($g['pct_sin_cambios'] ?? '0'),
@@ -951,6 +958,7 @@ final class EvaluacionesController
             foreach ($impactSummary['by_municipality'] ?? [] as $row) {
                 $lines[] = implode($sep, [
                     (string) ($row['municipality'] ?? ''),
+                    (string) ($row['test_name'] ?? 'Todas'),
                     (string) ($row['con_ambos'] ?? '0'),
                     (string) ($row['pct_mejoria'] ?? '0'),
                     (string) ($row['pct_sin_cambios'] ?? '0'),
@@ -1037,6 +1045,7 @@ final class EvaluacionesController
         if (is_array($global)) {
             $summaryRows .= '<tr style="font-weight:700;background:#e8f1eb">'
                 . '<td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td>'
+                . '<td>Todas</td>'
                 . '<td>' . (int) ($global['con_ambos'] ?? 0) . '</td>'
                 . '<td>' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td>'
                 . '<td>' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td>'
@@ -1046,6 +1055,7 @@ final class EvaluacionesController
         foreach ($impactSummary['by_municipality'] ?? [] as $mun) {
             $summaryRows .= '<tr>'
                 . '<td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td>'
                 . '<td>' . (int) ($mun['con_ambos'] ?? 0) . '</td>'
                 . '<td>' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td>'
                 . '<td>' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td>'
@@ -1077,8 +1087,8 @@ final class EvaluacionesController
             . '<tr><td colspan="12">Filtros: ' . $esc($filterParts !== [] ? implode(' | ', $filterParts) : 'Sin filtros aplicados') . '</td></tr>'
             . '</table><br>'
             . '<table border="1" cellpadding="6" cellspacing="0">'
-            . '<tr style="background:#2a5543;color:#ffffff;font-weight:700"><th>Municipio</th><th>Con PRE+POST</th><th>Con mejoría</th><th>Sin cambios</th><th>Sin mejoría</th></tr>'
-            . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="5">Sin datos de impacto.</td></tr>')
+            . '<tr style="background:#2a5543;color:#ffffff;font-weight:700"><th>Municipio</th><th>Temática</th><th>Con PRE+POST</th><th>Con mejoría</th><th>Sin cambios</th><th>Sin mejoría</th></tr>'
+            . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="6">Sin datos de impacto.</td></tr>')
             . '</table><br>'
             . '<table border="1" cellpadding="6" cellspacing="0">'
             . '<tr style="background:#2a5543;color:#ffffff;font-weight:700"><th>Temática</th><th>Documento</th><th>Persona</th><th>Subregión</th><th>Municipio</th><th>PRE</th><th>Fecha PRE</th><th>POST</th><th>Fecha POST</th><th>Cambio</th><th>Resultado impacto</th></tr>'
@@ -1380,10 +1390,10 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
         $summaryBuf = [];
         $global = $impactSummary['global'] ?? null;
         if (is_array($global)) {
-            $summaryBuf[] = '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            $summaryBuf[] = '<tr class="total-row"><td>' . $esc((string) ($global['municipality'] ?? 'Total (filtro actual)')) . '</td><td>Todas</td><td class="num">' . (int) ($global['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($global['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($global['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
         }
         foreach ($impactSummary['by_municipality'] ?? [] as $mun) {
-            $summaryBuf[] = '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
+            $summaryBuf[] = '<tr><td>' . $esc((string) ($mun['municipality'] ?? '')) . '</td><td>' . $esc((string) ($mun['test_name'] ?? 'Todas')) . '</td><td class="num">' . (int) ($mun['con_ambos'] ?? 0) . '</td><td class="num">' . $esc((string) ($mun['pct_mejoria'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_cambios'] ?? '0')) . '%</td><td class="num">' . $esc((string) ($mun['pct_sin_mejoria'] ?? '0')) . '%</td></tr>';
         }
         $summaryRows = implode('', $summaryBuf);
 
@@ -1451,7 +1461,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#223;padding:22px;font-size:11
                 ? '<p style="font-size:7.5px;color:#666;">El bloque «Resultado impacto global por municipio» corresponde al mismo conjunto filtrado que los totales anteriores (no solo a las filas de la tabla detalle).</p>'
                 : '')
             . '</div>'
-            . '<div class="section"><div class="section-title">Resultado impacto global por municipio</div><table><thead><tr><th>Municipio</th><th class="num">Con PRE+POST</th><th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>' . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="5">Sin datos de impacto.</td></tr>') . '</tbody></table></div>'
+            . '<div class="section"><div class="section-title">Resultado impacto global por municipio y temática</div><table><thead><tr><th>Municipio</th><th>Temática</th><th class="num">Con PRE+POST</th><th class="num">Con mejoría</th><th class="num">Sin cambios</th><th class="num">Sin mejoría</th></tr></thead><tbody>' . ($summaryRows !== '' ? $summaryRows : '<tr><td colspan="6">Sin datos de impacto.</td></tr>') . '</tbody></table></div>'
             . '<div class="section"><div class="section-title">Detalle comparativo por persona</div><table><thead><tr><th>Temática</th><th>Documento</th><th>Persona</th><th>Subregión</th><th>Municipio</th><th class="num">PRE</th><th class="num">POST</th><th class="num">Cambio</th><th>Resultado impacto</th></tr></thead><tbody>' . ($detailRows !== '' ? $detailRows : '<tr><td colspan="9">Sin registros.</td></tr>') . '</tbody></table></div>'
             . '</body></html>';
     }

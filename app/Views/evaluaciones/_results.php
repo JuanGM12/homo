@@ -46,7 +46,7 @@ $impactMeta = [
             <button class="accordion-button collapsed eval-impact-accordion-btn" type="button"
                 data-bs-toggle="collapse" data-bs-target="#evalImpactCollapse"
                 aria-expanded="false" aria-controls="evalImpactCollapse">
-                <i class="bi bi-bar-chart me-2"></i>Resultado impacto global — personas con PRE y POST
+                <i class="bi bi-bar-chart me-2"></i>Resultado impacto global — personas con PRE y POST por temática
             </button>
         </h2>
         <div id="evalImpactCollapse" class="accordion-collapse collapse"
@@ -57,6 +57,7 @@ $impactMeta = [
                         <thead>
                             <tr>
                                 <th>Municipio</th>
+                                <th>Temática</th>
                                 <th class="text-end">Con PRE+POST</th>
                                 <th class="text-end">PRE prom.</th>
                                 <th class="text-end">POST prom.</th>
@@ -68,6 +69,7 @@ $impactMeta = [
                         <tbody>
                             <tr class="eval-impact-total-row">
                                 <td><strong><?= htmlspecialchars((string) ($impactGlobal['municipality'] ?? 'Total'), ENT_QUOTES, 'UTF-8') ?></strong></td>
+                                <td><strong>Todas</strong></td>
                                 <td class="text-end fw-semibold"><?= (int) ($impactGlobal['con_ambos'] ?? 0) ?></td>
                                 <td class="text-end"><span class="eval-impact-neutral eval-pct-chip"><?= number_format((float) ($impactGlobal['avg_pre_score'] ?? 0), 1) ?>%</span></td>
                                 <td class="text-end"><span class="eval-impact-neutral eval-pct-chip"><?= number_format((float) ($impactGlobal['avg_post_score'] ?? 0), 1) ?>%</span></td>
@@ -78,6 +80,7 @@ $impactMeta = [
                             <?php foreach ($impactByMun as $mun): ?>
                                 <tr>
                                     <td><?= htmlspecialchars((string) ($mun['municipality'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($mun['test_name'] ?? 'Todas'), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td class="text-end"><?= (int) ($mun['con_ambos'] ?? 0) ?></td>
                                     <td class="text-end"><span class="eval-impact-neutral eval-pct-chip"><?= number_format((float) ($mun['avg_pre_score'] ?? 0), 1) ?>%</span></td>
                                     <td class="text-end"><span class="eval-impact-neutral eval-pct-chip"><?= number_format((float) ($mun['avg_post_score'] ?? 0), 1) ?>%</span></td>

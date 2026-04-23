@@ -81,7 +81,7 @@ final class App
         $this->router->post('/aoat/editar', [\App\Controllers\AoatController::class, 'update'])->middleware('auth');
         $this->router->post('/aoat/cambiar-estado', [\App\Controllers\AoatController::class, 'updateState'])->middleware('auth');
         $this->router->post('/aoat/cambiar-estado-masivo', [\App\Controllers\AoatController::class, 'updateStateBulk'])->middleware('auth');
-        $this->router->post('/aoat/eliminar', [\App\Controllers\AoatController::class, 'destroy'])->middleware('auth', 'role:admin');
+        $this->router->post('/aoat/eliminar', [\App\Controllers\AoatController::class, 'destroy'])->middleware('auth');
         $this->router->post('/aoat/marcar-realizado', [\App\Controllers\AoatController::class, 'markAsRealizado'])->middleware('auth');
         $this->router->get('/aoat/reportes', [\App\Controllers\AoatController::class, 'reportForm'])->middleware('auth');
         $this->router->post('/aoat/reportes/enviar', [\App\Controllers\AoatController::class, 'sendWeeklyReport'])->middleware('auth');
