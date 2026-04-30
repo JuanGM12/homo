@@ -7,7 +7,8 @@ namespace App\Services;
 use App\Repositories\AoatMetaRuleRepository;
 
 /**
- * Seguimiento territorial de AoAT: metas (Asesoria + Asistencia tecnica) por municipio y mes.
+ * Seguimiento territorial de AoAT: metas (Asesoría + Asistencia técnica) por municipio y mes;
+ * para abogados el conteo mensual usa SAFER y política pública (Mesa / PPMSMYPA) sobre el mismo tipo de actividades.
  * Los municipios "asignados" se infieren de los registros historicos del profesional.
  */
 final class AoatSeguimientoService
@@ -35,7 +36,8 @@ final class AoatSeguimientoService
      *   months: list<array{num:int,label:string,key:string}>,
      *   rows: list<array<string, mixed>>,
      *   legend: array<string, string>,
-     *   global_targets: list<array<string, mixed>>
+     *   global_targets: list<array<string, mixed>>,
+     *   meta_month_subtitle: string
      * }
      */
     public function buildMatrix(array $records, array $filters): array
@@ -89,10 +91,6 @@ final class AoatSeguimientoService
             $mun = (string) $t['municipality'];
             $prole = (string) $t['professional_role'];
 
-            if ($vista === 'meta' && $this->isProfesionalSocialRole($prole)) {
-                continue;
-            }
-
             $monthCounts = [];
             $monthCells = [];
             $consolidado = 0;
@@ -118,7 +116,7 @@ final class AoatSeguimientoService
                 }
 
                 $rule = $this->resolveRuleForRoleMonth($prole, $year, $m);
-                $brk = $this->metaBreakdownInMonth($prepared, $uid, $sub, $mun, $year, $m);
+                $brk = $this->metaBreakdownInMonth($prepared, $uid, $sub, $mun, $year, $m, $prole);
                 $c = $brk['total'];
                 $monthCounts['m' . $m] = $c;
                 $consolidado += $c;
@@ -146,6 +144,8 @@ final class AoatSeguimientoService
                     'count' => $c,
                     'asesoria' => $brk['asesoria'],
                     'asistencia_tecnica' => $brk['asistencia_tecnica'],
+                    'abogado_safer' => $brk['abogado_safer'] ?? null,
+                    'abogado_politica' => $brk['abogado_politica'] ?? null,
                     'tier' => $this->monthCellTier($year, $m, $target, $c),
                     'target' => $target,
                 ];
@@ -162,12 +162,19 @@ final class AoatSeguimientoService
                 $metaLabel = $this->buildMetaLabel($metaLabels, $monthlyTarget, $metaScope);
                 $expectedTotal = $hasExpectedTotal ? $expectedTotalAcc : null;
                 $debe = $expectedTotal !== null ? $consolidado - $expectedTotal : null;
+                if ($this->isProfesionalSocialRole($prole)) {
+                    $metaLabel = 'Solo conteo A+AT (sin meta)';
+                    $monthlyTarget = null;
+                    $expectedTotal = null;
+                    $debe = null;
+                }
             }
 
             $rows[] = [
                 'user_id' => $uid,
                 'advisor_name' => trim((string) $t['advisor_name']),
                 'professional_role' => $prole,
+                'meta_breakdown_mode' => $this->isAbogadoRole($prole) ? 'abogado' : 'standard',
                 'professional_role_label' => $this->roleLabel($prole),
                 'subregion' => $sub,
                 'municipality' => $mun,
@@ -224,17 +231,25 @@ final class AoatSeguimientoService
         }
         unset($r);
 
+        $abogadoRoleFilter = $roleFilter !== '' && $this->isAbogadoRole($roleFilter);
+
         $legend = $vista === 'actividad'
             ? [
                 'meta' => 'Vista de actividades: solo se cuentan registros AoAT con tipo "Actividad". No aplica meta ni saldo.',
                 'territory' => 'Cada fila sigue basada en territorios donde el profesional tiene historial AoAT (misma grilla que la vista de metas).',
             ]
             : [
-                'meta' => $includeGlobalMonthly
-                    ? 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo. Profesional social no se lista aqui. Psicologia y Derecho cambian meta por tramo del ano; Medicina usa meta global mensual entre todos.'
-                    : 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo. Profesional social no se lista aqui. Psicologia y Derecho cambian meta por tramo del ano.',
-                'territory' => 'Cada fila (subregion + municipio + profesional) surge de registros AoAT existentes. Un cero en rojo es deficit en un mes ya iniciado; un mes futuro en calendario se muestra distinto aunque el total sea 0.',
+                'meta' => $abogadoRoleFilter
+                    ? 'Abogado: solo cuentan AoAT tipo Asesoría o Asistencia técnica. El total mensual frente a la meta son registros con respuesta útil en SAFER y/o en política pública (Mesa Municipal de Salud Mental o PPMSMYPA): al menos uno de esos dos bloques distinto de solo «No aplica». El detalle muestra S = SAFER y P = política pública (un mismo registro puede sumar en ambos).'
+                    : ($includeGlobalMonthly
+                        ? 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo (profesional social: mismo conteo A+AT que psicologia, sin meta numerica ni saldo). Psicologia y Derecho cambian meta por tramo del ano; Medicina usa meta global mensual entre todos.'
+                        : 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo (profesional social: mismo conteo A+AT que psicologia, sin meta numerica ni saldo). Psicologia y Derecho cambian meta por tramo del ano.'),
+                'territory' => 'Cada fila (subregión + municipio + profesional) surge de registros AoAT existentes. Un cero en rojo es deficit en un mes ya iniciado; un mes futuro en calendario se muestra distinto aunque el total sea 0.',
             ];
+
+        $metaMonthSubtitle = $vista === 'meta'
+            ? ($abogadoRoleFilter ? 'S · P' : 'A+AT')
+            : 'Act.';
 
         return [
             'vista' => $vista,
@@ -242,6 +257,7 @@ final class AoatSeguimientoService
             'rows' => $rows,
             'legend' => $legend,
             'global_targets' => $globalTargets,
+            'meta_month_subtitle' => $metaMonthSubtitle,
         ];
     }
 
@@ -268,6 +284,8 @@ final class AoatSeguimientoService
                 'activity_date' => $activityDate,
                 'activity_type' => $activityType,
                 'is_meta' => in_array($activityType, self::META_ACTIVITY_TYPES, true),
+                'abogado_safer_hit' => self::abogadoSaferHit($payload),
+                'abogado_politica_hit' => self::abogadoPoliticaHit($payload),
             ];
         }
 
@@ -291,7 +309,7 @@ final class AoatSeguimientoService
                 continue;
             }
             $pr = (string) $r['professional_role'];
-            if ($roleFilter !== '' && $this->normalizeRoleToken($pr) !== $this->normalizeRoleToken($roleFilter)) {
+            if ($roleFilter !== '' && !$this->matchesSeguimientoRoleFilter($pr, $roleFilter)) {
                 continue;
             }
             if ($subregionFilter !== '' && $r['subregion'] !== $subregionFilter) {
@@ -317,10 +335,16 @@ final class AoatSeguimientoService
     }
 
     /**
-     * Cuenta Asesoria y Asistencia tecnica por separado.
+     * Cuenta Asesoria y Asistencia tecnica por separado (roles estándar), o SAFER / política pública para abogados.
      *
      * @param list<array<string, mixed>> $prepared
-     * @return array{asesoria:int,asistencia_tecnica:int,total:int}
+     * @return array{
+     *   asesoria:int,
+     *   asistencia_tecnica:int,
+     *   total:int,
+     *   abogado_safer?:int|null,
+     *   abogado_politica?:int|null
+     * }
      */
     private function metaBreakdownInMonth(
         array $prepared,
@@ -328,8 +352,13 @@ final class AoatSeguimientoService
         string $subregion,
         string $municipality,
         int $year,
-        int $month
+        int $month,
+        string $professionalRole
     ): array {
+        if ($this->isAbogadoRole($professionalRole)) {
+            return $this->metaBreakdownAbogadoInMonth($prepared, $userId, $subregion, $municipality, $year, $month);
+        }
+
         $asesoria = 0;
         $asistencia = 0;
         foreach ($prepared as $r) {
@@ -361,7 +390,115 @@ final class AoatSeguimientoService
             'asesoria' => $asesoria,
             'asistencia_tecnica' => $asistencia,
             'total' => $asesoria + $asistencia,
+            'abogado_safer' => null,
+            'abogado_politica' => null,
         ];
+    }
+
+    /**
+     * Abogado: total mensual (meta) = AoAT meta con hit SAFER y/o política pública (sin duplicar fila en el total).
+     *
+     * @param list<array<string, mixed>> $prepared
+     * @return array{asesoria:int,asistencia_tecnica:int,total:int,abogado_safer:int,abogado_politica:int}
+     */
+    private function metaBreakdownAbogadoInMonth(
+        array $prepared,
+        int $userId,
+        string $subregion,
+        string $municipality,
+        int $year,
+        int $month
+    ): array {
+        $safer = 0;
+        $politica = 0;
+        $union = 0;
+
+        foreach ($prepared as $r) {
+            if (!$r['is_meta']) {
+                continue;
+            }
+            if ((int) $r['user_id'] !== $userId) {
+                continue;
+            }
+            if ($r['subregion'] !== $subregion || $r['municipality'] !== $municipality) {
+                continue;
+            }
+            $d = (string) ($r['activity_date'] ?? '');
+            if ($d === '' || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $mch)) {
+                continue;
+            }
+            if ((int) $mch[1] !== $year || (int) $mch[2] !== $month) {
+                continue;
+            }
+
+            $hitS = !empty($r['abogado_safer_hit']);
+            $hitP = !empty($r['abogado_politica_hit']);
+            if (!$hitS && !$hitP) {
+                continue;
+            }
+
+            $union++;
+            if ($hitS) {
+                $safer++;
+            }
+            if ($hitP) {
+                $politica++;
+            }
+        }
+
+        return [
+            'asesoria' => 0,
+            'asistencia_tecnica' => 0,
+            'abogado_safer' => $safer,
+            'abogado_politica' => $politica,
+            'total' => $union,
+        ];
+    }
+
+    private function isAbogadoRole(string $professionalRole): bool
+    {
+        return $this->stripSpanishAccents($this->normalizeRoleToken($professionalRole)) === 'abogado';
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private static function abogadoSaferHit(array $payload): bool
+    {
+        return self::abogadoCheckboxGroupHasNonNoAplica($payload['safer'] ?? null);
+    }
+
+    /**
+     * Política pública: responde Mesa Municipal y/o PPMSMYPA (basta una con valor distinto de solo «No aplica»).
+     *
+     * @param array<string, mixed> $payload
+     */
+    private static function abogadoPoliticaHit(array $payload): bool
+    {
+        return self::abogadoCheckboxGroupHasNonNoAplica($payload['mesa_salud_mental'] ?? null)
+            || self::abogadoCheckboxGroupHasNonNoAplica($payload['ppmsmypa'] ?? null);
+    }
+
+    /** @param mixed $raw payload checkbox group */
+    private static function abogadoCheckboxGroupHasNonNoAplica(mixed $raw): bool
+    {
+        if (!is_array($raw) || $raw === []) {
+            return false;
+        }
+        $vals = [];
+        foreach ($raw as $item) {
+            $t = trim((string) $item);
+            if ($t !== '') {
+                $vals[] = mb_strtolower($t, 'UTF-8');
+            }
+        }
+        foreach ($vals as $v) {
+            if ($v !== 'no aplica') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -451,6 +588,21 @@ final class AoatSeguimientoService
         $r = $this->stripSpanishAccents($this->normalizeRoleToken($professionalRole));
 
         return str_contains($r, 'profesional') && str_contains($r, 'social');
+    }
+
+    /**
+     * Filtro «Psicólogo» incluye profesionales sociales del mismo grupo operativo.
+     */
+    private function matchesSeguimientoRoleFilter(string $professionalRole, string $roleFilter): bool
+    {
+        $pr = $this->normalizeRoleToken($professionalRole);
+        $fl = $this->normalizeRoleToken($roleFilter);
+        if ($pr === $fl) {
+            return true;
+        }
+        $flPlain = $this->stripSpanishAccents($fl);
+
+        return $flPlain === 'psicologo' && $this->isProfesionalSocialRole($professionalRole);
     }
 
     public function monthlyTargetForRole(string $professionalRole): ?int

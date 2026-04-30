@@ -2307,12 +2307,8 @@ final class AoatController
 
     private function buildExcelImageTag(string $path, string $alt): string
     {
-        $src = PdfImageHelper::imageDataUri($path);
-        if ($src === '') {
-            return '<span style="font-size:12px;font-weight:700;color:#35645b;">' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '</span>';
-        }
-
-        return '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '" style="height:54px;width:auto;">';
+        unset($path);
+        return PdfImageHelper::institutionBrandTextForExcelHtml($alt);
     }
 
     /**

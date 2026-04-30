@@ -644,12 +644,8 @@ final class EncuestaOpinionAoatController
 
     private function buildExcelImageTag(string $path, string $alt): string
     {
-        $src = PdfImageHelper::imageDataUri($path);
-        if ($src === '') {
-            return '';
-        }
-
-        return '<img src="' . $src . '" alt="' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '" style="height:48px;width:auto;">';
+        unset($path);
+        return PdfImageHelper::institutionBrandTextForExcelHtml($alt);
     }
 
     private function validateForm(Request $request): array

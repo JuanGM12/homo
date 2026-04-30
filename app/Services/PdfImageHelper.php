@@ -9,6 +9,17 @@ namespace App\Services;
  */
 final class PdfImageHelper
 {
+    /**
+     * Marca institucional solo texto para exportaciones «Excel» (.html servido como .xls).
+     * Microsoft Excel no incorpora bien &lt;img src="data:image/...;base64,..."&gt;: suele crear
+     * vínculos a objeto externos y muestra «No se puede mostrar la imagen vinculada».
+     */
+    public static function institutionBrandTextForExcelHtml(string $label): string
+    {
+        return '<span style="display:inline-block;font-weight:700;color:#35645b;font-size:11px;line-height:1.25;">'
+            . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</span>';
+    }
+
     public static function imageDataUri(string $path): string
     {
         if (!is_readable($path)) {

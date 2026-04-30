@@ -169,6 +169,7 @@ $filterDefaultsJs = [
             <span class="aoat-seg-chip"><span class="aoat-seg-swatch aoat-seg-swatch--bad"></span> Cero (mes ya iniciado)</span>
             <span class="aoat-seg-chip"><span class="aoat-seg-swatch aoat-seg-swatch--upcoming"></span> Mes futuro (aún no aplica)</span>
             <span class="aoat-seg-chip"><span class="aoat-seg-swatch aoat-seg-swatch--na"></span> Sin meta</span>
+            <div id="aoat-seg-legend-meta-dynamic" class="w-100 small text-muted mt-1 lh-sm"></div>
         </div>
         <div class="d-none flex-wrap align-items-center gap-3 small" id="aoat-seg-legend-actividad">
             <span class="fw-semibold text-body-secondary"><i class="bi bi-circle-half me-1"></i>Vista actividades</span>
@@ -183,8 +184,8 @@ $filterDefaultsJs = [
         <div class="card border-0 shadow-sm rounded-4 aoat-seg-readme">
             <div class="card-body p-3 small text-body-secondary">
                 <div id="aoat-seg-readme-meta">
-                    <p class="mb-2"><strong>Profesional social:</strong> no tiene meta A+AT en este seguimiento; en la vista «Asistencias técnicas y asesorías» no se muestran esas filas (sí en «Actividades» si aplica).</p>
-                    <p class="mb-2"><strong>Meta:</strong> solo <strong>Asesoría</strong> y <strong>Asistencia técnica</strong>. Psicólogo/Abogado: <strong>2/mes</strong> de enero a marzo y <strong>3/mes</strong> desde abril. <strong>Médico:</strong> meta global mensual de <strong>8</strong> entre todos.</p>
+                    <p class="mb-2"><strong>Profesional social:</strong> en la vista de metas aparece con el mismo conteo <strong>A+AT</strong> que el psicólogo (grupo operativo), pero <strong>sin meta mensual ni saldo</strong>. Con filtro «Psicólogo» también se listan profesionales sociales.</p>
+                    <p class="mb-2"><strong>Meta:</strong> solo <strong>Asesoría</strong> y <strong>Asistencia técnica</strong>. Psicólogo: <strong>2/mes</strong> de enero a marzo y <strong>3/mes</strong> desde abril. <strong>Abogado:</strong> misma meta numérica por territorio, pero el conteo mensual son registros con respuesta en <strong>SAFER</strong> y/o en <strong>política pública</strong> (Mesa de Salud Mental o PPMSMYPA); el total del mes no duplica el mismo registro. <strong>Médico:</strong> meta global mensual de <strong>8</strong> entre todos.</p>
                     <p class="mb-2"><strong>Total / Meta / Saldo:</strong> suma del periodo vs meta (meses × meta mensual). <strong>Saldo negativo</strong> = faltan actividades; <strong>saldo positivo</strong> = va a favor, por encima de la meta.</p>
                     <p class="mb-2"><strong>Colores:</strong> un mes <strong>posterior al mes calendario actual</strong> con total 0 se muestra en gris azulado (no es un incumplimiento: ese mes aún no «cuenta» en la práctica).</p>
                     <p class="mb-0"><strong>Municipios:</strong> aparecen si ya hay al menos un registro AoAT en esa subregión y municipio (según rol y filtros).</p>
@@ -223,7 +224,18 @@ $filterDefaultsJs = [
     var FILTER_DEFAULTS = <?= json_encode($filterDefaultsJs, JSON_UNESCAPED_UNICODE) ?>;
     var initial = <?= json_encode($initialMeta ?? ['months' => [], 'rows' => [], 'vista' => 'meta'], JSON_UNESCAPED_UNICODE) ?>;
 
-    function monthBubbleTitle(tier) {
+    function monthBubbleTitle(tier, vista, breakdownKind) {
+        var bk = breakdownKind || 'standard';
+        if (vista === 'meta' && bk === 'abogado') {
+            switch (tier) {
+                case 'ok': return 'Cumple la meta este mes (SAFER / política pública)';
+                case 'warn': return 'Hay registros que cuentan pero aún no alcanza la meta del mes';
+                case 'bad': return 'Sin registros que cuenten para la meta en este mes (ya iniciado)';
+                case 'upcoming': return 'Mes calendario futuro: aún no aplica exigencia de registros';
+                case 'na': return 'Sin meta numérica mensual para este rol';
+                default: return 'Total mensual que cuenta para la meta (SAFER y/o política pública)';
+            }
+        }
         switch (tier) {
             case 'ok': return 'Cumple la meta este mes (A+AT)';
             case 'warn': return 'Hay actividades pero aún no alcanza la meta del mes';
@@ -235,25 +247,57 @@ $filterDefaultsJs = [
         }
     }
 
-    function monthCellHtml(mc, vista) {
+    function monthCellHtml(mc, vista, breakdownKind) {
         var a = mc && mc.asesoria != null ? mc.asesoria : 0;
         var at = mc && mc.asistencia_tecnica != null ? mc.asistencia_tecnica : 0;
         var total = mc && mc.count != null ? mc.count : 0;
         var tier = mc && mc.tier ? mc.tier : 'na';
+        var bk = breakdownKind || 'standard';
         if (vista === 'actividad') {
             return (
                 '<div class="aoat-seg-month-visual">' +
-                '<div class="aoat-seg-month-bubble aoat-seg-month-bubble--plain" title="' + escapeHtml(monthBubbleTitle('plain')) + '">' + total + '</div>' +
+                '<div class="aoat-seg-month-bubble aoat-seg-month-bubble--plain" title="' + escapeHtml(monthBubbleTitle('plain', vista, bk)) + '">' + total + '</div>' +
                 '<div class="aoat-seg-month-mini aoat-seg-month-mini--act">Actividad</div>' +
+                '</div>'
+            );
+        }
+        if (bk === 'mixed') {
+            return (
+                '<div class="aoat-seg-month-visual">' +
+                '<div class="aoat-seg-month-bubble aoat-seg-month-bubble--' + tier + '" title="Total mixto (varios roles en el resumen).">' + total + '</div>' +
+                '<div class="aoat-seg-month-mini text-muted small">Mixto</div>' +
+                '</div>'
+            );
+        }
+        if (bk === 'abogado') {
+            var s = mc && mc.abogado_safer != null ? mc.abogado_safer : 0;
+            var p = mc && mc.abogado_politica != null ? mc.abogado_politica : 0;
+            return (
+                '<div class="aoat-seg-month-visual">' +
+                '<div class="aoat-seg-month-bubble aoat-seg-month-bubble--' + tier + '" title="' + escapeHtml(monthBubbleTitle(tier, vista, bk)) + '">' + total + '</div>' +
+                '<div class="aoat-seg-month-mini">S' + s + ' · P' + p + '</div>' +
                 '</div>'
             );
         }
         return (
             '<div class="aoat-seg-month-visual">' +
-            '<div class="aoat-seg-month-bubble aoat-seg-month-bubble--' + tier + '" title="' + escapeHtml(monthBubbleTitle(tier)) + '">' + total + '</div>' +
+            '<div class="aoat-seg-month-bubble aoat-seg-month-bubble--' + tier + '" title="' + escapeHtml(monthBubbleTitle(tier, vista, bk)) + '">' + total + '</div>' +
             '<div class="aoat-seg-month-mini">A' + a + ' · AT' + at + '</div>' +
             '</div>'
         );
+    }
+
+    function resolveAggregateBreakdownKind(rows) {
+        var hasAbogado = false;
+        var hasStandard = false;
+        (rows || []).forEach(function (row) {
+            var mode = row.meta_breakdown_mode || 'standard';
+            if (mode === 'abogado') hasAbogado = true;
+            else hasStandard = true;
+        });
+        if (hasAbogado && hasStandard) return 'mixed';
+        if (hasAbogado) return 'abogado';
+        return 'standard';
     }
 
     function aggregateRows(rows, months, vista) {
@@ -263,7 +307,8 @@ $filterDefaultsJs = [
             expected: vista === 'meta' ? 0 : null,
             debe: vista === 'meta' ? 0 : null,
             hasExpected: false,
-            month_cells: {}
+            month_cells: {},
+            breakdown_kind: resolveAggregateBreakdownKind(rows)
         };
 
         months.forEach(function (m) {
@@ -271,6 +316,8 @@ $filterDefaultsJs = [
                 count: 0,
                 asesoria: 0,
                 asistencia_tecnica: 0,
+                abogado_safer: 0,
+                abogado_politica: 0,
                 tier: vista === 'actividad' ? 'plain' : 'na'
             };
         });
@@ -293,6 +340,8 @@ $filterDefaultsJs = [
                 target.count += Number(source && source.count != null ? source.count : 0);
                 target.asesoria += Number(source && source.asesoria != null ? source.asesoria : 0);
                 target.asistencia_tecnica += Number(source && source.asistencia_tecnica != null ? source.asistencia_tecnica : 0);
+                target.abogado_safer += Number(source && source.abogado_safer != null ? source.abogado_safer : 0);
+                target.abogado_politica += Number(source && source.abogado_politica != null ? source.abogado_politica : 0);
             });
         });
 
@@ -307,6 +356,10 @@ $filterDefaultsJs = [
     function buildSummaryRow(summary, months, vista, type, label, detail) {
         var tr = document.createElement('tr');
         tr.className = 'aoat-seg-summary-row aoat-seg-summary-row--' + type;
+        var bk = summary.breakdown_kind || 'standard';
+        var pill = vista === 'actividad'
+            ? 'Totales de actividades'
+            : (bk === 'abogado' ? 'Totales S · P' : (bk === 'mixed' ? 'Totales (mixto)' : 'Totales A+AT'));
 
         tr.innerHTML =
             '<td class="aoat-seg-sticky aoat-seg-td-item aoat-seg-summary-sticky">' +
@@ -321,13 +374,13 @@ $filterDefaultsJs = [
                 '<div class="aoat-seg-prof-name fw-semibold">' + escapeHtml(type === 'group' ? 'Subtotal por profesional' : 'Total general') + '</div>' +
             '</td>' +
             '<td class="aoat-seg-td-role aoat-seg-summary-label">' +
-                '<span class="aoat-seg-summary-pill">' + escapeHtml(vista === 'actividad' ? 'Totales de actividades' : 'Totales A+AT') + '</span>' +
+                '<span class="aoat-seg-summary-pill">' + escapeHtml(pill) + '</span>' +
             '</td>';
 
         months.forEach(function (m) {
             var td = document.createElement('td');
             td.className = 'text-center aoat-seg-month-td aoat-seg-summary-month';
-            td.innerHTML = monthCellHtml(summary.month_cells[m.key], vista);
+            td.innerHTML = monthCellHtml(summary.month_cells[m.key], vista, bk);
             tr.appendChild(td);
         });
 
@@ -432,10 +485,12 @@ $filterDefaultsJs = [
                 '</td>';
 
             months.forEach(function (m) {
-                var mc = row.month_cells && row.month_cells[m.key] ? row.month_cells[m.key] : { count: 0, tier: 'na', asesoria: 0, asistencia_tecnica: 0 };
+                var mc = row.month_cells && row.month_cells[m.key]
+                    ? row.month_cells[m.key]
+                    : { count: 0, tier: 'na', asesoria: 0, asistencia_tecnica: 0, abogado_safer: null, abogado_politica: null };
                 var td = document.createElement('td');
                 td.className = 'text-center aoat-seg-month-td';
-                td.innerHTML = monthCellHtml(mc, vista);
+                td.innerHTML = monthCellHtml(mc, vista, row.meta_breakdown_mode || 'standard');
                 tr.appendChild(td);
             });
 
@@ -501,9 +556,9 @@ $filterDefaultsJs = [
         return '<div class="aoat-seg-debe-note">Al día</div>';
     }
 
-    function rebuildHead(months, vista) {
+    function rebuildHead(months, vista, metaMonthSubtitle) {
         var v = vista === 'actividad' ? 'actividad' : 'meta';
-        var monthSub = v === 'actividad' ? 'Act.' : 'A+AT';
+        var monthSub = v === 'actividad' ? 'Act.' : (metaMonthSubtitle || 'A+AT');
         var thead = document.getElementById('aoat-seg-thead');
         var tail = '<th class="text-center aoat-seg-th-kpi">Total</th>';
         if (v === 'meta') {
@@ -523,6 +578,18 @@ $filterDefaultsJs = [
             '</tr>';
     }
 
+    function renderMetaLegendDynamic(matrix) {
+        var el = document.getElementById('aoat-seg-legend-meta-dynamic');
+        if (!el) return;
+        var vista = matrix && matrix.vista === 'actividad' ? 'actividad' : 'meta';
+        if (vista !== 'meta') {
+            el.textContent = '';
+            return;
+        }
+        var legend = matrix && matrix.legend;
+        el.textContent = legend && legend.meta ? String(legend.meta) : '';
+    }
+
     function applyVistaChrome(vista) {
         var v = vista === 'actividad' ? 'actividad' : 'meta';
         var titleEl = document.getElementById('aoat-seg-page-title');
@@ -539,7 +606,7 @@ $filterDefaultsJs = [
             if (v === 'actividad') {
                 leadMain.innerHTML = 'Una fila por <strong>territorio y profesional</strong> según registros AoAT. Cada mes: cantidad de registros con tipo <strong>Actividad</strong> (sin meta ni saldo).';
             } else {
-                leadMain.innerHTML = 'Una fila por <strong>territorio y profesional</strong> (subregión + municipio + quien registra) según registros AoAT. Cada mes: total que cuenta para la meta (A+AT); abajo el detalle.';
+                leadMain.innerHTML = 'Una fila por <strong>territorio y profesional</strong> (subregión + municipio + quien registra) según registros AoAT. En metas: según el rol, cada mes muestra el total frente a la meta y el detalle (A+AT o S·P para abogados).';
             }
         }
         if (roleLab) {
@@ -667,8 +734,9 @@ $filterDefaultsJs = [
                 var m = j.matrix;
                 var vista = m.vista === 'actividad' ? 'actividad' : 'meta';
                 applyVistaChrome(vista);
-                rebuildHead(m.months || [], vista);
+                rebuildHead(m.months || [], vista, m.meta_month_subtitle || 'A+AT');
                 renderGlobalTargets(m);
+                renderMetaLegendDynamic(m);
                 renderBody(m);
             })
             .catch(function () {
@@ -712,8 +780,9 @@ $filterDefaultsJs = [
     } else {
         var iv = initial.vista === 'actividad' ? 'actividad' : 'meta';
         applyVistaChrome(iv);
-        rebuildHead(initial.months || [], iv);
+        rebuildHead(initial.months || [], iv, initial.meta_month_subtitle || 'A+AT');
         renderGlobalTargets(initial);
+        renderMetaLegendDynamic(initial);
         renderBody(initial);
     }
 })();

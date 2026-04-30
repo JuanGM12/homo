@@ -115,10 +115,22 @@ final class AoatSeguimientoController
             return '"' . str_replace('"', '""', $v) . '"';
         };
 
+        $roleFilterRaw = trim((string) ($filters['role'] ?? ''));
+        $roleNorm = preg_replace('/\s+/', ' ', strtolower(str_replace('_', ' ', $roleFilterRaw)));
+        $colMetaA = 'Asesorías';
+        $colMetaB = 'Asistencia técnica';
+        if ($roleNorm === 'abogado') {
+            $colMetaA = 'SAFER';
+            $colMetaB = 'Política pública';
+        } elseif ($roleNorm === '') {
+            $colMetaA = 'Asesoría o SAFER';
+            $colMetaB = 'AT o política pública';
+        }
+
         $lines = [];
         $titleCsv = $vista === 'actividad'
             ? 'Seguimiento territorial AoAT — Actividades por municipio (tipo Actividad)'
-            : 'Seguimiento territorial AoAT — Metas por municipio (Asesoría y Asistencia técnica)';
+            : 'Seguimiento territorial AoAT — Metas por municipio (' . $colMetaA . ' / ' . $colMetaB . ')';
         $lines[] = $esc($titleCsv);
         $lines[] = $esc('Fecha de exportación: ' . date('d/m/Y H:i'));
         $lines[] = $esc('Filtros aplicados: ' . $this->resolveSeguimientoFilterDescription($filters, $records));
@@ -151,8 +163,8 @@ final class AoatSeguimientoController
             ];
             foreach ($matrix['months'] as $mh) {
                 $mn = $this->monthNameEs((int) $mh['num']);
-                $header[] = $mn . ' — Asesorías';
-                $header[] = $mn . ' — Asistencia técnica';
+                $header[] = $mn . ' — ' . $colMetaA;
+                $header[] = $mn . ' — ' . $colMetaB;
                 $header[] = $mn . ' — Total para meta';
             }
             $header[] = 'Total en el periodo';
@@ -198,11 +210,15 @@ final class AoatSeguimientoController
                 foreach ($matrix['months'] as $mh) {
                     $k = $mh['key'];
                     $mc = is_array($row['month_cells'][$k] ?? null) ? $row['month_cells'][$k] : [];
-                    $a = (int) ($mc['asesoria'] ?? 0);
-                    $at = (int) ($mc['asistencia_tecnica'] ?? 0);
                     $tot = (int) ($mc['count'] ?? ($row['months'][$k] ?? 0));
-                    $fields[] = (string) $a;
-                    $fields[] = (string) $at;
+                    $mode = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+                    if ($mode === 'abogado') {
+                        $fields[] = (string) (int) ($mc['abogado_safer'] ?? 0);
+                        $fields[] = (string) (int) ($mc['abogado_politica'] ?? 0);
+                    } else {
+                        $fields[] = (string) (int) ($mc['asesoria'] ?? 0);
+                        $fields[] = (string) (int) ($mc['asistencia_tecnica'] ?? 0);
+                    }
                     $fields[] = (string) $tot;
                 }
                 $fields[] = (string) ($row['consolidado_meta'] ?? '');
@@ -355,6 +371,7 @@ final class AoatSeguimientoController
 
         $roles = [
             ['value' => 'psicologo', 'label' => 'Psicólogo'],
+            ['value' => 'profesional social', 'label' => 'Profesional social'],
             ['value' => 'abogado', 'label' => 'Abogado'],
             ['value' => 'medico', 'label' => 'Médico'],
         ];
@@ -530,13 +547,18 @@ final class AoatSeguimientoController
     {
         $esc = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
         $vista = ($filters['vista'] ?? 'meta') === 'actividad' ? 'actividad' : 'meta';
+        $roleFilterRaw = trim((string) ($filters['role'] ?? ''));
+        $roleNorm = preg_replace('/\s+/', ' ', strtolower(str_replace('_', ' ', $roleFilterRaw)));
+        $abogadoPdfMeta = $vista !== 'actividad' && $roleNorm === 'abogado';
         $base = dirname(__DIR__, 2) . '/public/assets/img';
         $logoAntioquia = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
         $logoHomo = PdfImageHelper::imageDataUri($base . '/logoHomo.png');
 
         $docSub = $vista === 'actividad'
             ? 'Actividades por municipio · Tipo «Actividad» (sin metas)'
-            : 'Metas por municipio · Asesoría y Asistencia técnica';
+            : ($abogadoPdfMeta
+                ? 'Metas por municipio · Abogado (SAFER y política pública)'
+                : 'Metas por municipio · Asesoría y Asistencia técnica');
 
         $headerLogos = '<td style="width:22%;">' . ($logoAntioquia !== '' ? '<img src="' . $esc($logoAntioquia) . '" alt="Gobernación de Antioquia" style="height:34px;width:auto;">' : '') . '</td>'
             . '<td style="width:56%;text-align:center;"><div class="doctitle">Seguimiento territorial AoAT</div>'
@@ -548,13 +570,19 @@ final class AoatSeguimientoController
             ? '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
             . 'Solo se cuentan registros AoAT con tipo <em>Actividad</em>. '
             . 'No hay meta mensual ni saldo: cada celda es el total de ese mes.</div>'
-            : '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
-            . 'Solo cuentan actividades registradas como <em>Asesoría</em> o <em>Asistencia técnica</em>. '
-            . 'En cada mes verás tres líneas: asesorías realizadas, asistencias técnicas realizadas y el <strong>total</strong> frente a la meta. '
-            . ($showGlobalMedLegend
-                ? 'Psicología y Derecho pueden cambiar por tramo del año; Medicina usa una meta global mensual entre todos. '
-                : 'Psicología y Derecho pueden cambiar por tramo del año. ')
-            . '<strong>Saldo al final:</strong> negativo = faltan actividades; cero = cumple la meta; positivo = va a favor, por encima de la meta del periodo mostrado.</div>';
+            : ($abogadoPdfMeta
+                ? '<div class="legend"><strong>Cómo leer el cuadro (abogado):</strong> '
+                . 'Solo cuentan registros <em>Asesoría</em> o <em>Asistencia técnica</em> con respuesta útil en <strong>SAFER</strong> '
+                . 'y/o en <strong>política pública</strong> (Mesa Municipal de Salud Mental o PPMSMYPA): al menos uno de esos dos bloques distinto de solo «No aplica». '
+                . 'El <strong>total</strong> del mes no duplica el mismo registro. Las líneas muestran SAFER y política pública (un registro puede aparecer en ambas). '
+                . '<strong>Saldo:</strong> negativo = faltan registros; cero = cumple; positivo = va a favor.</div>'
+                : '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
+                . 'Solo cuentan actividades registradas como <em>Asesoría</em> o <em>Asistencia técnica</em>. '
+                . 'En cada mes verás tres líneas: asesorías realizadas, asistencias técnicas realizadas y el <strong>total</strong> frente a la meta. '
+                . ($showGlobalMedLegend
+                    ? 'Psicología y Derecho pueden cambiar por tramo del año; Medicina usa una meta global mensual entre todos. '
+                    : 'Psicología y Derecho pueden cambiar por tramo del año. ')
+                . '<strong>Saldo al final:</strong> negativo = faltan actividades; cero = cumple la meta; positivo = va a favor, por encima de la meta del periodo mostrado.</div>');
 
         $filterBlock = '<div class="meta"><p><strong>Fecha de exportación:</strong> ' . $esc(date('d/m/Y H:i')) . '</p>'
             . '<p><strong>Filtros aplicados:</strong> ' . $esc($this->resolveSeguimientoFilterDescription($filters, $records)) . '</p>'
@@ -598,17 +626,28 @@ final class AoatSeguimientoController
             foreach ($matrix['months'] ?? [] as $mh) {
                 $k = $mh['key'];
                 $mc = is_array($row['month_cells'][$k] ?? null) ? $row['month_cells'][$k] : [];
-                $a = (int) ($mc['asesoria'] ?? 0);
-                $at = (int) ($mc['asistencia_tecnica'] ?? 0);
                 $tot = (int) ($mc['count'] ?? ($row['months'][$k] ?? 0));
                 if ($vista === 'actividad') {
                     $rowsHtml .= '<td class="monthcell" style="text-align:center;"><strong>' . $tot . '</strong></td>';
                 } else {
-                    $rowsHtml .= '<td class="monthcell">'
-                        . '<div>Asesorías: <strong>' . $a . '</strong></div>'
-                        . '<div>Asist. técnica: <strong>' . $at . '</strong></div>'
-                        . '<div class="monthtot">Total: <strong>' . $tot . '</strong></div>'
-                        . '</td>';
+                    $modeRow = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+                    if ($modeRow === 'abogado') {
+                        $s = (int) ($mc['abogado_safer'] ?? 0);
+                        $p = (int) ($mc['abogado_politica'] ?? 0);
+                        $rowsHtml .= '<td class="monthcell">'
+                            . '<div>SAFER: <strong>' . $s . '</strong></div>'
+                            . '<div>Pol. pública: <strong>' . $p . '</strong></div>'
+                            . '<div class="monthtot">Total: <strong>' . $tot . '</strong></div>'
+                            . '</td>';
+                    } else {
+                        $a = (int) ($mc['asesoria'] ?? 0);
+                        $at = (int) ($mc['asistencia_tecnica'] ?? 0);
+                        $rowsHtml .= '<td class="monthcell">'
+                            . '<div>Asesorías: <strong>' . $a . '</strong></div>'
+                            . '<div>Asist. técnica: <strong>' . $at . '</strong></div>'
+                            . '<div class="monthtot">Total: <strong>' . $tot . '</strong></div>'
+                            . '</td>';
+                    }
                 }
             }
 
