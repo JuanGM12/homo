@@ -229,7 +229,7 @@ $filterDefaultsJs = [
         if (vista === 'meta' && bk === 'abogado') {
             switch (tier) {
                 case 'ok': return 'Cumple la meta este mes (SAFER / política pública)';
-                case 'warn': return 'Hay registros que cuentan pero aún no alcanza la meta del mes';
+                case 'warn': return 'Hay registros pero aún no cumple ambas metas del mes (SAFER y política pública según administración)';
                 case 'bad': return 'Sin registros que cuenten para la meta en este mes (ya iniciado)';
                 case 'upcoming': return 'Mes calendario futuro: aún no aplica exigencia de registros';
                 case 'na': return 'Sin meta numérica mensual para este rol';
@@ -300,13 +300,159 @@ $filterDefaultsJs = [
         return 'standard';
     }
 
+    function metaPeriodCellHtml(row, vista) {
+        if (vista !== 'meta') {
+            return '<span class="text-muted">—</span>';
+        }
+        var bk = row.meta_breakdown_mode || 'standard';
+        if (
+            bk === 'abogado'
+            && row.expected_safer_periodo != null
+            && row.expected_politica_periodo != null
+        ) {
+            var es = row.expected_safer_periodo;
+            var ep = row.expected_politica_periodo;
+            return '<div class="aoat-seg-total-sp text-center lh-sm py-1">' +
+                '<div class="fw-semibold mb-1"><span class="text-muted small text-uppercase">SAFER</span> ' +
+                '<span class="aoat-seg-kpi">' + escapeHtml(String(es)) + '</span></div>' +
+                '<div class="fw-semibold"><span class="text-muted small">Pol.pública</span> ' +
+                '<span class="aoat-seg-kpi">' + escapeHtml(String(ep)) + '</span></div>' +
+                '</div>';
+        }
+        return row.expected === null || row.expected === undefined
+            ? '<span class="text-muted">—</span>'
+            : '<span class="aoat-seg-kpi">' + String(row.expected) + '</span>';
+    }
+
+    function summaryMetaPeriodCellHtml(summary, vista, bk) {
+        if (vista !== 'meta' || bk !== 'abogado') {
+            return summary.expected === null ? '<span class="text-muted">—</span>' : '<span class="aoat-seg-kpi">' + String(summary.expected) + '</span>';
+        }
+        if (
+            summary.expected_safer_periodo == null
+            || summary.expected_politica_periodo == null
+        ) {
+            return summary.expected === null ? '<span class="text-muted">—</span>' : '<span class="aoat-seg-kpi">' + String(summary.expected) + '</span>';
+        }
+        var es = summary.expected_safer_periodo;
+        var ep = summary.expected_politica_periodo;
+        return '<div class="aoat-seg-total-sp text-center lh-sm py-1">' +
+            '<div class="fw-semibold mb-1"><span class="text-muted small text-uppercase">SAFER</span> ' +
+            '<span class="aoat-seg-kpi">' + escapeHtml(String(es)) + '</span></div>' +
+            '<div class="fw-semibold"><span class="text-muted small">Pol.pública</span> ' +
+            '<span class="aoat-seg-kpi">' + escapeHtml(String(ep)) + '</span></div>' +
+            '</div>';
+    }
+
+    function saldoPeriodCellHtml(row, vista) {
+        if (vista !== 'meta') {
+            return '<span class="text-muted">—</span>';
+        }
+        var bk = row.meta_breakdown_mode || 'standard';
+        if (
+            bk === 'abogado'
+            && row.debe_safer != null
+            && row.debe_politica != null
+        ) {
+            var ds = row.debe_safer;
+            var dp = row.debe_politica;
+            return '<div class="aoat-seg-total-sp text-center lh-sm py-1">' +
+                '<div class="fw-semibold mb-1"><span class="text-muted small text-uppercase">SAFER</span> ' +
+                '<span class="aoat-seg-kpi">' + escapeHtml(String(ds)) + '</span>' + saldoNoteHtml(ds) + '</div>' +
+                '<div class="fw-semibold"><span class="text-muted small">Pol.pública</span> ' +
+                '<span class="aoat-seg-kpi">' + escapeHtml(String(dp)) + '</span>' + saldoNoteHtml(dp) + '</div>' +
+                '</div>';
+        }
+        var debeVal = row.debe === null || row.debe === undefined ? '—' : String(row.debe);
+        var debeNote = saldoNoteHtml(row.debe);
+        return '<span class="aoat-seg-kpi">' + debeVal + '</span>' + debeNote;
+    }
+
+    function summarySaldoPeriodCellHtml(summary, vista, bk) {
+        if (vista !== 'meta' || bk !== 'abogado') {
+            var debeTier0 = summary.debe === null ? 'na' : (summary.debe >= 0 ? 'ok' : 'bad');
+            var debeNote0 = saldoNoteHtml(summary.debe);
+            return {
+                tier: debeTier0,
+                html: '<span class="aoat-seg-kpi">' + (summary.debe === null ? '—' : String(summary.debe)) + '</span>' + debeNote0
+            };
+        }
+        if (summary.debe_safer == null || summary.debe_politica == null) {
+            var debeTier1 = summary.debe === null ? 'na' : (summary.debe >= 0 ? 'ok' : 'bad');
+            var debeNote1 = saldoNoteHtml(summary.debe);
+            return {
+                tier: debeTier1,
+                html: '<span class="aoat-seg-kpi">' + (summary.debe === null ? '—' : String(summary.debe)) + '</span>' + debeNote1
+            };
+        }
+        var ds = summary.debe_safer;
+        var dp = summary.debe_politica;
+        var tierAb = (ds >= 0 && dp >= 0) ? 'ok' : 'bad';
+        var htmlAb = '<div class="aoat-seg-total-sp text-center lh-sm py-1">' +
+            '<div class="fw-semibold mb-1"><span class="text-muted small text-uppercase">SAFER</span> ' +
+            '<span class="aoat-seg-kpi">' + escapeHtml(String(ds)) + '</span>' + saldoNoteHtml(ds) + '</div>' +
+            '<div class="fw-semibold"><span class="text-muted small">Pol.pública</span> ' +
+            '<span class="aoat-seg-kpi">' + escapeHtml(String(dp)) + '</span>' + saldoNoteHtml(dp) + '</div>' +
+            '</div>';
+        return { tier: tierAb, html: htmlAb };
+    }
+
+    function totalPeriodCellHtml(row, vista) {
+        if (vista !== 'meta') {
+            return '<span class="aoat-seg-kpi">' + String(row.consolidado_meta || 0) + '</span>';
+        }
+        var bk = row.meta_breakdown_mode || 'standard';
+        if (
+            bk === 'abogado'
+            && row.consolidado_safer_periodo != null
+            && row.consolidado_politica_periodo != null
+        ) {
+            var s = row.consolidado_safer_periodo;
+            var p = row.consolidado_politica_periodo;
+            return '<div class="aoat-seg-total-sp text-center lh-sm py-1">' +
+                '<div class="fw-semibold mb-1"><span class="text-muted small text-uppercase">SAFER</span> ' +
+                '<span class="aoat-seg-kpi">' + escapeHtml(String(s)) + '</span></div>' +
+                '<div class="fw-semibold"><span class="text-muted small">Pol.pública</span> ' +
+                '<span class="aoat-seg-kpi">' + escapeHtml(String(p)) + '</span></div>' +
+                '</div>';
+        }
+        return '<span class="aoat-seg-kpi">' + String(row.consolidado_meta || 0) + '</span>';
+    }
+
+    function summaryTotalPeriodCellHtml(summary, vista, bk) {
+        if (vista !== 'meta' || bk !== 'abogado') {
+            return '<span class="aoat-seg-kpi">' + String(summary.consolidado_meta || 0) + '</span>';
+        }
+        if (
+            summary.consolidado_safer_periodo == null
+            || summary.consolidado_politica_periodo == null
+        ) {
+            return '<span class="aoat-seg-kpi">' + String(summary.consolidado_meta || 0) + '</span>';
+        }
+        var s = summary.consolidado_safer_periodo;
+        var p = summary.consolidado_politica_periodo;
+        return '<div class="aoat-seg-total-sp text-center lh-sm py-1">' +
+            '<div class="fw-semibold mb-1"><span class="text-muted small text-uppercase">SAFER</span> ' +
+            '<span class="aoat-seg-kpi">' + escapeHtml(String(s)) + '</span></div>' +
+            '<div class="fw-semibold"><span class="text-muted small">Pol.pública</span> ' +
+            '<span class="aoat-seg-kpi">' + escapeHtml(String(p)) + '</span></div>' +
+            '</div>';
+    }
+
     function aggregateRows(rows, months, vista) {
         var summary = {
             territories: rows.length,
             consolidado_meta: 0,
+            consolidado_safer_periodo: null,
+            consolidado_politica_periodo: null,
             expected: vista === 'meta' ? 0 : null,
             debe: vista === 'meta' ? 0 : null,
+            expected_safer_periodo: null,
+            expected_politica_periodo: null,
+            debe_safer: null,
+            debe_politica: null,
             hasExpected: false,
+            hasAbogadoPeriodMeta: false,
             month_cells: {},
             breakdown_kind: resolveAggregateBreakdownKind(rows)
         };
@@ -332,6 +478,33 @@ $filterDefaultsJs = [
                 if (row.debe !== null && row.debe !== undefined) {
                     summary.debe += Number(row.debe || 0);
                 }
+                if (
+                    row.consolidado_safer_periodo != null
+                    && row.consolidado_politica_periodo != null
+                ) {
+                    if (summary.consolidado_safer_periodo === null) {
+                        summary.consolidado_safer_periodo = 0;
+                        summary.consolidado_politica_periodo = 0;
+                    }
+                    summary.consolidado_safer_periodo += Number(row.consolidado_safer_periodo);
+                    summary.consolidado_politica_periodo += Number(row.consolidado_politica_periodo);
+                }
+                if (
+                    row.expected_safer_periodo != null
+                    && row.expected_politica_periodo != null
+                ) {
+                    summary.hasAbogadoPeriodMeta = true;
+                    if (summary.expected_safer_periodo === null) {
+                        summary.expected_safer_periodo = 0;
+                        summary.expected_politica_periodo = 0;
+                        summary.debe_safer = 0;
+                        summary.debe_politica = 0;
+                    }
+                    summary.expected_safer_periodo += Number(row.expected_safer_periodo);
+                    summary.expected_politica_periodo += Number(row.expected_politica_periodo);
+                    summary.debe_safer += Number(row.debe_safer != null ? row.debe_safer : 0);
+                    summary.debe_politica += Number(row.debe_politica != null ? row.debe_politica : 0);
+                }
             }
 
             months.forEach(function (m) {
@@ -348,6 +521,12 @@ $filterDefaultsJs = [
         if (vista === 'meta' && !summary.hasExpected) {
             summary.expected = null;
             summary.debe = null;
+        }
+        if (vista === 'meta' && !summary.hasAbogadoPeriodMeta) {
+            summary.expected_safer_periodo = null;
+            summary.expected_politica_periodo = null;
+            summary.debe_safer = null;
+            summary.debe_politica = null;
         }
 
         return summary;
@@ -386,20 +565,19 @@ $filterDefaultsJs = [
 
         var tdCons = document.createElement('td');
         tdCons.className = 'text-center fw-semibold align-middle aoat-seg-summary-kpi';
-        tdCons.innerHTML = '<span class="aoat-seg-kpi">' + String(summary.consolidado_meta) + '</span>';
+        tdCons.innerHTML = summaryTotalPeriodCellHtml(summary, vista, bk);
         tr.appendChild(tdCons);
 
         if (vista === 'meta') {
             var tdMeta = document.createElement('td');
             tdMeta.className = 'text-center align-middle aoat-seg-summary-kpi';
-            tdMeta.innerHTML = summary.expected === null ? '<span class="text-muted">—</span>' : '<span class="aoat-seg-kpi">' + String(summary.expected) + '</span>';
+            tdMeta.innerHTML = summaryMetaPeriodCellHtml(summary, vista, bk);
             tr.appendChild(tdMeta);
 
             var tdDebe = document.createElement('td');
-            var debeTier = summary.debe === null ? 'na' : (summary.debe >= 0 ? 'ok' : 'bad');
-            var debeNote = saldoNoteHtml(summary.debe);
-            tdDebe.className = 'text-center fw-semibold aoat-seg-debe-td aoat-seg-debe--' + debeTier + ' aoat-seg-summary-kpi';
-            tdDebe.innerHTML = '<span class="aoat-seg-kpi">' + (summary.debe === null ? '—' : String(summary.debe)) + '</span>' + debeNote;
+            var saldoPack = summarySaldoPeriodCellHtml(summary, vista, bk);
+            tdDebe.className = 'text-center fw-semibold aoat-seg-debe-td aoat-seg-debe--' + saldoPack.tier + ' aoat-seg-summary-kpi';
+            tdDebe.innerHTML = saldoPack.html;
             tr.appendChild(tdDebe);
         }
 
@@ -496,20 +674,20 @@ $filterDefaultsJs = [
 
             var tdCons = document.createElement('td');
             tdCons.className = 'text-center fw-semibold align-middle';
-            tdCons.innerHTML = '<span class="aoat-seg-kpi">' + String(row.consolidado_meta) + '</span>';
+            tdCons.innerHTML = totalPeriodCellHtml(row, vista);
             tr.appendChild(tdCons);
 
             if (vista === 'meta') {
                 var tdMeta = document.createElement('td');
                 tdMeta.className = 'text-center align-middle';
-                tdMeta.innerHTML = row.expected === null ? '<span class="text-muted">—</span>' : '<span class="aoat-seg-kpi">' + String(row.expected) + '</span>';
+                tdMeta.innerHTML = metaPeriodCellHtml(row, vista);
                 tr.appendChild(tdMeta);
 
                 var tdDebe = document.createElement('td');
-                tdDebe.className = 'text-center fw-semibold aoat-seg-debe-td aoat-seg-debe--' + (row.debe_tier || 'na');
-                var debeVal = row.debe === null ? '—' : String(row.debe);
-                var debeNote = saldoNoteHtml(row.debe);
-                tdDebe.innerHTML = '<span class="aoat-seg-kpi">' + debeVal + '</span>' + debeNote;
+                var saldoRowPack = saldoPeriodCellHtml(row, vista);
+                var rowDebeTier = row.debe_tier || 'na';
+                tdDebe.className = 'text-center fw-semibold aoat-seg-debe-td aoat-seg-debe--' + rowDebeTier;
+                tdDebe.innerHTML = saldoRowPack;
                 tr.appendChild(tdDebe);
             }
 
@@ -556,13 +734,24 @@ $filterDefaultsJs = [
         return '<div class="aoat-seg-debe-note">Al día</div>';
     }
 
-    function rebuildHead(months, vista, metaMonthSubtitle) {
+    function rebuildHead(months, vista, metaMonthSubtitle, metaTotalHint, metaPeriodHint) {
         var v = vista === 'actividad' ? 'actividad' : 'meta';
         var monthSub = v === 'actividad' ? 'Act.' : (metaMonthSubtitle || 'A+AT');
         var thead = document.getElementById('aoat-seg-thead');
-        var tail = '<th class="text-center aoat-seg-th-kpi">Total</th>';
+        var hint = String(metaTotalHint || '').trim();
+        var metaHint = String(metaPeriodHint || '').trim();
+        var totalHeadInner = 'Total';
+        if (v === 'meta' && hint !== '') {
+            totalHeadInner += '<span class="d-block aoat-seg-th-sub">' + escapeHtml(hint) + '</span>';
+        }
+        var tail = '<th class="text-center aoat-seg-th-kpi">' + totalHeadInner + '</th>';
         if (v === 'meta') {
-            tail += '<th class="text-center aoat-seg-th-kpi">Meta</th><th class="text-center aoat-seg-th-kpi">Saldo<div class="aoat-seg-th-hint">Falta / A favor</div></th>';
+            var metaHeadInner = 'Meta';
+            if (metaHint !== '') {
+                metaHeadInner += '<span class="d-block aoat-seg-th-sub">' + escapeHtml(metaHint) + '</span>';
+            }
+            tail += '<th class="text-center aoat-seg-th-kpi">' + metaHeadInner + '</th>';
+            tail += '<th class="text-center aoat-seg-th-kpi">Saldo<div class="aoat-seg-th-hint">Falta / A favor</div></th>';
         }
         thead.innerHTML = '<tr>' +
             '<th class="aoat-seg-sticky"><span class="d-block">N.º</span><span class="aoat-seg-th-hint">en grupo</span></th>' +
@@ -734,7 +923,7 @@ $filterDefaultsJs = [
                 var m = j.matrix;
                 var vista = m.vista === 'actividad' ? 'actividad' : 'meta';
                 applyVistaChrome(vista);
-                rebuildHead(m.months || [], vista, m.meta_month_subtitle || 'A+AT');
+                rebuildHead(m.months || [], vista, m.meta_month_subtitle || 'A+AT', m.meta_total_column_hint || '', m.meta_period_column_hint || '');
                 renderGlobalTargets(m);
                 renderMetaLegendDynamic(m);
                 renderBody(m);
@@ -780,7 +969,7 @@ $filterDefaultsJs = [
     } else {
         var iv = initial.vista === 'actividad' ? 'actividad' : 'meta';
         applyVistaChrome(iv);
-        rebuildHead(initial.months || [], iv, initial.meta_month_subtitle || 'A+AT');
+        rebuildHead(initial.months || [], iv, initial.meta_month_subtitle || 'A+AT', initial.meta_total_column_hint || '', initial.meta_period_column_hint || '');
         renderGlobalTargets(initial);
         renderMetaLegendDynamic(initial);
         renderBody(initial);

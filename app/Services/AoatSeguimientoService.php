@@ -37,7 +37,9 @@ final class AoatSeguimientoService
      *   rows: list<array<string, mixed>>,
      *   legend: array<string, string>,
      *   global_targets: list<array<string, mixed>>,
-     *   meta_month_subtitle: string
+     *   meta_month_subtitle: string,
+     *   meta_total_column_hint: ?string,
+     *   meta_period_column_hint: ?string
      * }
      */
     public function buildMatrix(array $records, array $filters): array
@@ -99,6 +101,8 @@ final class AoatSeguimientoService
             $metaLabels = [];
             $metaScope = null;
             $displayMonthlyTarget = null;
+            $expectedSaferAcc = 0;
+            $expectedPoliticaAcc = 0;
 
             foreach ($monthRange as $m) {
                 if ($vista === 'actividad') {
@@ -121,23 +125,71 @@ final class AoatSeguimientoService
                 $monthCounts['m' . $m] = $c;
                 $consolidado += $c;
 
-                $target = $rule !== null && (string) ($rule['scope'] ?? '') === 'per_territory'
-                    ? (int) ($rule['target_value'] ?? 0)
-                    : null;
+                if (!$this->isAbogadoRole($prole)) {
+                    $target = $rule !== null && (string) ($rule['scope'] ?? '') === 'per_territory'
+                        ? (int) ($rule['target_value'] ?? 0)
+                        : null;
 
-                if ($target !== null) {
-                    $expectedTotalAcc += $target;
-                    $hasExpectedTotal = true;
-                    if ($displayMonthlyTarget === null) {
-                        $displayMonthlyTarget = $target;
+                    if ($target !== null) {
+                        if ($this->monthCountsTowardPeriodMeta($year, $m)) {
+                            $expectedTotalAcc += $target;
+                            $hasExpectedTotal = true;
+                        }
+                        if ($displayMonthlyTarget === null) {
+                            $displayMonthlyTarget = $target;
+                        }
                     }
+
+                    if ($rule !== null) {
+                        $metaLabels[] = $this->ruleShortLabel($rule);
+                        if ($metaScope === null) {
+                            $metaScope = (string) ($rule['scope'] ?? '');
+                        }
+                    }
+
+                    $monthCells['m' . $m] = [
+                        'count' => $c,
+                        'asesoria' => $brk['asesoria'],
+                        'asistencia_tecnica' => $brk['asistencia_tecnica'],
+                        'abogado_safer' => $brk['abogado_safer'] ?? null,
+                        'abogado_politica' => $brk['abogado_politica'] ?? null,
+                        'tier' => $this->monthCellTier($year, $m, $target, $c),
+                        'target' => $target,
+                        'target_safer' => null,
+                        'target_politica' => null,
+                    ];
+
+                    continue;
                 }
 
-                if ($rule !== null) {
+                $ts = 0;
+                $tp = 0;
+                if ($rule !== null && (string) ($rule['scope'] ?? '') === 'per_territory') {
+                    $pair = $this->abogadoMonthlyTargetsFromRule($rule);
+                    $ts = $pair['safer'];
+                    $tp = $pair['politica'];
+                    if ($ts > 0 || $tp > 0) {
+                        if ($this->monthCountsTowardPeriodMeta($year, $m)) {
+                            $hasExpectedTotal = true;
+                            $expectedSaferAcc += $ts;
+                            $expectedPoliticaAcc += $tp;
+                        }
+                    }
+
                     $metaLabels[] = $this->ruleShortLabel($rule);
                     if ($metaScope === null) {
                         $metaScope = (string) ($rule['scope'] ?? '');
                     }
+                }
+
+                $s = (int) ($brk['abogado_safer'] ?? 0);
+                $p = (int) ($brk['abogado_politica'] ?? 0);
+                $tier = ($rule !== null && (string) ($rule['scope'] ?? '') === 'per_territory' && ($ts > 0 || $tp > 0))
+                    ? $this->monthCellTierAbogado($year, $m, $ts, $tp, $s, $p, $c)
+                    : 'na';
+
+                if ($displayMonthlyTarget === null && ($ts > 0 || $tp > 0)) {
+                    $displayMonthlyTarget = max($ts, $tp);
                 }
 
                 $monthCells['m' . $m] = [
@@ -146,8 +198,10 @@ final class AoatSeguimientoService
                     'asistencia_tecnica' => $brk['asistencia_tecnica'],
                     'abogado_safer' => $brk['abogado_safer'] ?? null,
                     'abogado_politica' => $brk['abogado_politica'] ?? null,
-                    'tier' => $this->monthCellTier($year, $m, $target, $c),
-                    'target' => $target,
+                    'tier' => $tier,
+                    'target' => null,
+                    'target_safer' => $ts,
+                    'target_politica' => $tp,
                 ];
             }
 
@@ -156,17 +210,50 @@ final class AoatSeguimientoService
                 $metaLabel = null;
                 $metaScope = null;
                 $expectedTotal = null;
+                $expectedSaferPeriodo = null;
+                $expectedPoliticaPeriodo = null;
                 $debe = null;
+                $debeSafer = null;
+                $debePolitica = null;
+                $debeTier = 'na';
+                $consolidadoSaferPeriodo = null;
+                $consolidadoPoliticaPeriodo = null;
             } else {
                 $monthlyTarget = $displayMonthlyTarget;
                 $metaLabel = $this->buildMetaLabel($metaLabels, $monthlyTarget, $metaScope);
-                $expectedTotal = $hasExpectedTotal ? $expectedTotalAcc : null;
-                $debe = $expectedTotal !== null ? $consolidado - $expectedTotal : null;
+
+                $consolidadoSaferPeriodo = null;
+                $consolidadoPoliticaPeriodo = null;
+                $expectedSaferPeriodo = null;
+                $expectedPoliticaPeriodo = null;
+                $expectedTotal = null;
+                $debe = null;
+                $debeSafer = null;
+                $debePolitica = null;
+                $debeTier = 'na';
+
                 if ($this->isProfesionalSocialRole($prole)) {
                     $metaLabel = 'Solo conteo A+AT (sin meta)';
                     $monthlyTarget = null;
-                    $expectedTotal = null;
-                    $debe = null;
+                } elseif ($this->isAbogadoRole($prole)) {
+                    $consolidadoSaferPeriodo = 0;
+                    $consolidadoPoliticaPeriodo = 0;
+                    foreach ($monthRange as $mx) {
+                        $mk = 'm' . $mx;
+                        $mc = $monthCells[$mk] ?? [];
+                        $consolidadoSaferPeriodo += (int) ($mc['abogado_safer'] ?? 0);
+                        $consolidadoPoliticaPeriodo += (int) ($mc['abogado_politica'] ?? 0);
+                    }
+
+                    $expectedSaferPeriodo = $hasExpectedTotal ? $expectedSaferAcc : null;
+                    $expectedPoliticaPeriodo = $hasExpectedTotal ? $expectedPoliticaAcc : null;
+                    $debeSafer = $expectedSaferPeriodo !== null ? $consolidadoSaferPeriodo - $expectedSaferPeriodo : null;
+                    $debePolitica = $expectedPoliticaPeriodo !== null ? $consolidadoPoliticaPeriodo - $expectedPoliticaPeriodo : null;
+                    $debeTier = $this->abogadoPeriodDebeTier($debeSafer, $debePolitica);
+                } else {
+                    $expectedTotal = $hasExpectedTotal ? $expectedTotalAcc : null;
+                    $debe = $expectedTotal !== null ? $consolidado - $expectedTotal : null;
+                    $debeTier = $debe === null ? 'na' : ($debe >= 0 ? 'ok' : 'bad');
                 }
             }
 
@@ -184,9 +271,15 @@ final class AoatSeguimientoService
                 'meta_label' => $metaLabel,
                 'meta_scope' => $metaScope,
                 'consolidado_meta' => $consolidado,
+                'consolidado_safer_periodo' => $consolidadoSaferPeriodo,
+                'consolidado_politica_periodo' => $consolidadoPoliticaPeriodo,
                 'expected' => $expectedTotal,
+                'expected_safer_periodo' => $expectedSaferPeriodo ?? null,
+                'expected_politica_periodo' => $expectedPoliticaPeriodo ?? null,
                 'debe' => $debe,
-                'debe_tier' => $debe === null ? 'na' : ($debe >= 0 ? 'ok' : 'bad'),
+                'debe_safer' => $debeSafer ?? null,
+                'debe_politica' => $debePolitica ?? null,
+                'debe_tier' => $debeTier,
             ];
         }
 
@@ -240,7 +333,7 @@ final class AoatSeguimientoService
             ]
             : [
                 'meta' => $abogadoRoleFilter
-                    ? 'Abogado: solo cuentan AoAT tipo Asesoría o Asistencia técnica. El total mensual frente a la meta son registros con respuesta útil en SAFER y/o en política pública (Mesa Municipal de Salud Mental o PPMSMYPA): al menos uno de esos dos bloques distinto de solo «No aplica». El detalle muestra S = SAFER y P = política pública (un mismo registro puede sumar en ambos).'
+                    ? 'Abogado: solo cuentan AoAT tipo Asesoría o Asistencia técnica. El total mensual frente a la meta son registros con respuesta útil en SAFER y/o en política pública (Mesa Municipal de Salud Mental o PPMSMYPA): al menos uno de esos dos bloques distinto de solo «No aplica». El detalle muestra S = SAFER y P = política pública (un mismo registro puede sumar en ambos). Las metas mensuales de SAFER y de política pública por tramo se definen en Administración · Metas AoAT.'
                     : ($includeGlobalMonthly
                         ? 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo (profesional social: mismo conteo A+AT que psicologia, sin meta numerica ni saldo). Psicologia y Derecho cambian meta por tramo del ano; Medicina usa meta global mensual entre todos.'
                         : 'Solo Asesoria y Asistencia tecnica cuentan para la meta y el saldo (profesional social: mismo conteo A+AT que psicologia, sin meta numerica ni saldo). Psicologia y Derecho cambian meta por tramo del ano.'),
@@ -251,6 +344,18 @@ final class AoatSeguimientoService
             ? ($abogadoRoleFilter ? 'S · P' : 'A+AT')
             : 'Act.';
 
+        $metaTotalColumnHint = null;
+        $metaPeriodColumnHint = null;
+        if ($vista === 'meta') {
+            foreach ($rows as $rx) {
+                if (($rx['meta_breakdown_mode'] ?? '') === 'abogado') {
+                    $metaTotalColumnHint = 'Σ SAFER · Pol.pública';
+                    $metaPeriodColumnHint = 'Σ meta SAFER · meta Pol.pública';
+                    break;
+                }
+            }
+        }
+
         return [
             'vista' => $vista,
             'months' => $monthsMeta,
@@ -258,6 +363,8 @@ final class AoatSeguimientoService
             'legend' => $legend,
             'global_targets' => $globalTargets,
             'meta_month_subtitle' => $metaMonthSubtitle,
+            'meta_total_column_hint' => $metaTotalColumnHint,
+            'meta_period_column_hint' => $metaPeriodColumnHint,
         ];
     }
 
@@ -616,6 +723,9 @@ final class AoatSeguimientoService
         if ($rule === null || (string) ($rule['scope'] ?? '') !== 'per_territory') {
             return null;
         }
+        if ($this->stripSpanishAccents($this->normalizeRoleToken($professionalRole)) === 'abogado') {
+            return null;
+        }
 
         return (int) ($rule['target_value'] ?? 0);
     }
@@ -658,6 +768,48 @@ final class AoatSeguimientoService
         return 'bad';
     }
 
+    /**
+     * Metas mensuales SAFER / política pública desde la regla de administración (rol abogado).
+     *
+     * @return array{safer:int, politica:int}
+     */
+    private function abogadoMonthlyTargetsFromRule(array $rule): array
+    {
+        $fallback = (int) ($rule['target_value'] ?? 0);
+        $ts = $rule['target_safer'] ?? null;
+        $tp = $rule['target_politica'] ?? null;
+        $safer = ($ts !== null && $ts !== '') ? max(0, (int) $ts) : $fallback;
+        $politica = ($tp !== null && $tp !== '') ? max(0, (int) $tp) : $fallback;
+
+        return ['safer' => $safer, 'politica' => $politica];
+    }
+
+    private function monthCellTierAbogado(int $year, int $month, int $ts, int $tp, int $sCount, int $pCount, int $unionCount): string
+    {
+        $legS = $ts <= 0 || $sCount >= $ts;
+        $legP = $tp <= 0 || $pCount >= $tp;
+        if ($legS && $legP) {
+            return 'ok';
+        }
+        if ($this->isCalendarMonthStrictlyAfterToday($year, $month)) {
+            return 'upcoming';
+        }
+        if ($sCount > 0 || $pCount > 0 || $unionCount > 0) {
+            return 'warn';
+        }
+
+        return 'bad';
+    }
+
+    private function abogadoPeriodDebeTier(?int $debeSafer, ?int $debePolitica): string
+    {
+        if ($debeSafer === null || $debePolitica === null) {
+            return 'na';
+        }
+
+        return ($debeSafer >= 0 && $debePolitica >= 0) ? 'ok' : 'bad';
+    }
+
     private function isCalendarMonthStrictlyAfterToday(int $year, int $month): bool
     {
         if ($month < 1 || $month > 12) {
@@ -668,6 +820,15 @@ final class AoatSeguimientoService
         $cell = $year * 12 + $month;
 
         return $cell > $cur;
+    }
+
+    /**
+     * Solo los meses ya iniciados en el calendario suman a la meta del periodo
+     * (evita exigir mayo-jun cuando la grilla muestra Ene-Jun y hoy es abril).
+     */
+    private function monthCountsTowardPeriodMeta(int $year, int $month): bool
+    {
+        return !$this->isCalendarMonthStrictlyAfterToday($year, $month);
     }
 
     /**
@@ -725,13 +886,21 @@ final class AoatSeguimientoService
      */
     private function ruleShortLabel(array $rule): string
     {
-        $target = (int) ($rule['target_value'] ?? 0);
         $scope = (string) ($rule['scope'] ?? 'per_territory');
         $from = (int) ($rule['month_from'] ?? 1);
         $to = (int) ($rule['month_to'] ?? 12);
         $range = $from === $to
             ? $this->monthShortLabel($from)
             : $this->monthShortLabel($from) . '-' . $this->monthShortLabel($to);
+
+        $rk = (string) ($rule['role_key'] ?? '');
+        if ($rk === 'abogado' && $scope === 'per_territory') {
+            $pair = $this->abogadoMonthlyTargetsFromRule($rule);
+
+            return 'Meta S ' . $pair['safer'] . '/mes · P ' . $pair['politica'] . '/mes (' . $range . ')';
+        }
+
+        $target = (int) ($rule['target_value'] ?? 0);
 
         if ($scope === 'global_monthly') {
             return 'Meta global ' . $target . '/mes (' . $range . ')';

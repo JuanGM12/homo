@@ -54,6 +54,34 @@ final class AoatMetaRulesController
             if ($monthTo < $monthFrom) {
                 [$monthFrom, $monthTo] = [$monthTo, $monthFrom];
             }
+
+            if ($roleKey === 'abogado' && $scope === 'per_territory') {
+                $ts = max(0, (int) ($row['target_safer'] ?? 0));
+                $tp = max(0, (int) ($row['target_politica'] ?? 0));
+                if ($ts === 0 && $tp === 0 && $targetValue > 0) {
+                    $ts = $targetValue;
+                    $tp = $targetValue;
+                }
+                if ($active === 1 && $ts <= 0 && $tp <= 0) {
+                    continue;
+                }
+                $legacyTarget = max($ts, $tp);
+                $clean[] = [
+                    'role_key' => $roleKey,
+                    'scope' => $scope,
+                    'target_value' => $legacyTarget,
+                    'target_safer' => $ts,
+                    'target_politica' => $tp,
+                    'month_from' => $monthFrom,
+                    'month_to' => $monthTo,
+                    'rule_year' => $ruleYearRaw === '' ? null : max(2020, min(2100, (int) $ruleYearRaw)),
+                    'active' => $active,
+                    'notes' => $notes,
+                ];
+
+                continue;
+            }
+
             if ($targetValue <= 0 && $active === 1) {
                 continue;
             }
@@ -62,6 +90,8 @@ final class AoatMetaRulesController
                 'role_key' => $roleKey,
                 'scope' => $scope,
                 'target_value' => $targetValue,
+                'target_safer' => null,
+                'target_politica' => null,
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
                 'rule_year' => $ruleYearRaw === '' ? null : max(2020, min(2100, (int) $ruleYearRaw)),

@@ -31,6 +31,7 @@ $months = [
             <p class="small text-muted mb-3">
                 Usa <strong>Por territorio</strong> cuando la meta aplica por profesional y municipio.
                 Usa <strong>Global mensual</strong> cuando la meta se mide entre todos los registros del rol en cada mes.
+                Para <strong>Abogado · Por territorio</strong> define por separado la meta mensual de <strong>SAFER</strong> y de <strong>política pública</strong> (Mesa / PPMSMYPA); el cuadro territorial y el saldo usan esos valores sin cambiar código.
             </p>
 
             <form method="post" action="/admin/aoat-metas" id="aoat-meta-rules-form">
@@ -40,7 +41,7 @@ $months = [
                             <tr>
                                 <th>Rol</th>
                                 <th>Tipo</th>
-                                <th>Meta</th>
+                                <th class="aoat-rule-meta-th">Meta</th>
                                 <th>Desde</th>
                                 <th>Hasta</th>
                                 <th>Año</th>
@@ -51,9 +52,16 @@ $months = [
                         </thead>
                         <tbody id="aoat-meta-rules-body">
                             <?php foreach ($rules as $idx => $rule): ?>
-                                <tr data-rule-row>
+                                <?php
+                                $rk = (string) ($rule['role_key'] ?? '');
+                                $sc = (string) ($rule['scope'] ?? '');
+                                $dualAbogado = $rk === 'abogado' && $sc === 'per_territory';
+                                $tsAdmin = (int) ($rule['target_safer'] ?? ($dualAbogado ? ($rule['target_value'] ?? 0) : ($rule['target_value'] ?? 0)));
+                                $tpAdmin = (int) ($rule['target_politica'] ?? ($dualAbogado ? ($rule['target_value'] ?? 0) : ($rule['target_value'] ?? 0)));
+                                ?>
+                                <tr data-rule-row data-dual-abogado="<?= $dualAbogado ? '1' : '0' ?>">
                                     <td>
-                                        <select name="rules[<?= (int) $idx ?>][role_key]" class="form-select form-select-sm">
+                                        <select data-name="role_key" name="rules[<?= (int) $idx ?>][role_key]" class="form-select form-select-sm aoat-rule-role">
                                             <?php foreach ($roleOptions as $option): ?>
                                                 <option value="<?= htmlspecialchars((string) $option['value'], ENT_QUOTES, 'UTF-8') ?>" <?= (string) ($rule['role_key'] ?? '') === (string) $option['value'] ? 'selected' : '' ?>>
                                                     <?= htmlspecialchars((string) $option['label'], ENT_QUOTES, 'UTF-8') ?>
@@ -62,7 +70,7 @@ $months = [
                                         </select>
                                     </td>
                                     <td>
-                                        <select name="rules[<?= (int) $idx ?>][scope]" class="form-select form-select-sm">
+                                        <select data-name="scope" name="rules[<?= (int) $idx ?>][scope]" class="form-select form-select-sm aoat-rule-scope">
                                             <?php foreach ($scopeOptions as $option): ?>
                                                 <option value="<?= htmlspecialchars((string) $option['value'], ENT_QUOTES, 'UTF-8') ?>" <?= (string) ($rule['scope'] ?? '') === (string) $option['value'] ? 'selected' : '' ?>>
                                                     <?= htmlspecialchars((string) $option['label'], ENT_QUOTES, 'UTF-8') ?>
@@ -70,8 +78,16 @@ $months = [
                                             <?php endforeach; ?>
                                         </select>
                                     </td>
-                                    <td>
-                                        <input type="number" min="0" step="1" name="rules[<?= (int) $idx ?>][target_value]" class="form-control form-control-sm" value="<?= (int) ($rule['target_value'] ?? 0) ?>">
+                                    <td class="aoat-rule-meta-td">
+                                        <div class="aoat-meta-standard <?= $dualAbogado ? 'd-none' : '' ?>" data-meta-standard>
+                                            <input type="number" min="0" step="1" data-name="target_value" class="form-control form-control-sm aoat-in-target-value" value="<?= (int) ($rule['target_value'] ?? 0) ?>" <?= $dualAbogado ? 'disabled' : '' ?>>
+                                        </div>
+                                        <div class="aoat-meta-abogado <?= $dualAbogado ? '' : 'd-none' ?>" data-meta-abogado>
+                                            <label class="small text-muted mb-0 text-uppercase">SAFER</label>
+                                            <input type="number" min="0" step="1" data-name="target_safer" class="form-control form-control-sm mb-2 aoat-in-target-safer" value="<?= $dualAbogado ? $tsAdmin : 0 ?>" <?= $dualAbogado ? '' : 'disabled' ?>>
+                                            <label class="small text-muted mb-0">Pol. pública</label>
+                                            <input type="number" min="0" step="1" data-name="target_politica" class="form-control form-control-sm aoat-in-target-politica" value="<?= $dualAbogado ? $tpAdmin : 0 ?>" <?= $dualAbogado ? '' : 'disabled' ?>>
+                                        </div>
                                     </td>
                                     <td>
                                         <select name="rules[<?= (int) $idx ?>][month_from]" class="form-select form-select-sm">
@@ -119,22 +135,32 @@ $months = [
 </section>
 
 <template id="aoat-meta-rule-template">
-    <tr data-rule-row>
+    <tr data-rule-row data-dual-abogado="0">
         <td>
-            <select class="form-select form-select-sm" data-name="role_key">
+            <select class="form-select form-select-sm aoat-rule-role" data-name="role_key">
                 <?php foreach ($roleOptions as $option): ?>
                     <option value="<?= htmlspecialchars((string) $option['value'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars((string) $option['label'], ENT_QUOTES, 'UTF-8') ?></option>
                 <?php endforeach; ?>
             </select>
         </td>
         <td>
-            <select class="form-select form-select-sm" data-name="scope">
+            <select class="form-select form-select-sm aoat-rule-scope" data-name="scope">
                 <?php foreach ($scopeOptions as $option): ?>
                     <option value="<?= htmlspecialchars((string) $option['value'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars((string) $option['label'], ENT_QUOTES, 'UTF-8') ?></option>
                 <?php endforeach; ?>
             </select>
         </td>
-        <td><input type="number" min="0" step="1" class="form-control form-control-sm" data-name="target_value" value="1"></td>
+        <td class="aoat-rule-meta-td">
+            <div class="" data-meta-standard>
+                <input type="number" min="0" step="1" class="form-control form-control-sm aoat-in-target-value" data-name="target_value" value="1">
+            </div>
+            <div class="d-none" data-meta-abogado>
+                <label class="small text-muted mb-0 text-uppercase">SAFER</label>
+                <input type="number" min="0" step="1" class="form-control form-control-sm mb-2 aoat-in-target-safer" data-name="target_safer" value="1">
+                <label class="small text-muted mb-0">Pol. pública</label>
+                <input type="number" min="0" step="1" class="form-control form-control-sm aoat-in-target-politica" data-name="target_politica" value="1">
+            </div>
+        </td>
         <td>
             <select class="form-select form-select-sm" data-name="month_from">
                 <?php foreach ($months as $monthNum => $monthLabel): ?>
@@ -163,8 +189,14 @@ $months = [
     var template = document.getElementById('aoat-meta-rule-template');
 
     function reindexRows() {
+        if (!body) return;
         Array.from(body.querySelectorAll('[data-rule-row]')).forEach(function (row, idx) {
             Array.from(row.querySelectorAll('[data-name], [name]')).forEach(function (field) {
+                if (field.closest('button')) return;
+                if (field.disabled) {
+                    field.removeAttribute('name');
+                    return;
+                }
                 var key = field.getAttribute('data-name');
                 if (!key) {
                     var current = field.getAttribute('name') || '';
@@ -181,7 +213,7 @@ $months = [
         if (!template || !body) return;
         var fragment = template.content.cloneNode(true);
         body.appendChild(fragment);
-        reindexRows();
+        refreshAllMetaEditors();
     }
 
     if (addBtn) {
@@ -197,9 +229,66 @@ $months = [
             var row = trigger.closest('[data-rule-row]');
             if (row) {
                 row.remove();
-                reindexRows();
+                refreshAllMetaEditors();
             }
         });
     }
+
+    function isDualAbogadoRow(row) {
+        var roleEl = row.querySelector('.aoat-rule-role');
+        var scopeEl = row.querySelector('.aoat-rule-scope');
+        var role = roleEl ? String(roleEl.value || '') : '';
+        var scope = scopeEl ? String(scopeEl.value || '') : '';
+        return role === 'abogado' && scope === 'per_territory';
+    }
+
+    function syncMetaEditors(row) {
+        var dual = isDualAbogadoRow(row);
+        row.setAttribute('data-dual-abogado', dual ? '1' : '0');
+        var std = row.querySelector('[data-meta-standard]');
+        var abo = row.querySelector('[data-meta-abogado]');
+        var inpVal = row.querySelector('.aoat-in-target-value');
+        var inpS = row.querySelector('.aoat-in-target-safer');
+        var inpP = row.querySelector('.aoat-in-target-politica');
+        if (!std || !abo) return;
+        if (dual) {
+            std.classList.add('d-none');
+            abo.classList.remove('d-none');
+            if (inpVal) inpVal.disabled = true;
+            if (inpS) inpS.disabled = false;
+            if (inpP) inpP.disabled = false;
+            if (inpS && inpP && (!inpS.value || inpS.value === '0') && (!inpP.value || inpP.value === '0') && inpVal && inpVal.value && inpVal.value !== '0') {
+                inpS.value = inpVal.value;
+                inpP.value = inpVal.value;
+            }
+        } else {
+            abo.classList.add('d-none');
+            std.classList.remove('d-none');
+            if (inpVal) inpVal.disabled = false;
+            if (inpS) inpS.disabled = true;
+            if (inpP) inpP.disabled = true;
+            if (inpVal && inpS && inpP && (!inpVal.value || inpVal.value === '0')) {
+                var m = Math.max(parseInt(inpS.value, 10) || 0, parseInt(inpP.value, 10) || 0);
+                if (m > 0) inpVal.value = String(m);
+            }
+        }
+        reindexRows();
+    }
+
+    function refreshAllMetaEditors() {
+        if (!body) return;
+        Array.from(body.querySelectorAll('[data-rule-row]')).forEach(syncMetaEditors);
+    }
+
+    if (body) {
+        body.addEventListener('change', function (event) {
+            var t = event.target;
+            if (!t.closest('.aoat-rule-role') && !t.closest('.aoat-rule-scope')) return;
+            var row = t.closest('[data-rule-row]');
+            if (row) syncMetaEditors(row);
+        });
+    }
+
+    refreshAllMetaEditors();
 })();
 </script>

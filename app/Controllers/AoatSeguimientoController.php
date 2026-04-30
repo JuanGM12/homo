@@ -167,8 +167,18 @@ final class AoatSeguimientoController
                 $header[] = $mn . ' — ' . $colMetaB;
                 $header[] = $mn . ' — Total para meta';
             }
-            $header[] = 'Total en el periodo';
-            $header[] = 'Meta del periodo';
+            $totalHdr = 'Total en el periodo';
+            $hintCsv = trim((string) ($matrix['meta_total_column_hint'] ?? ''));
+            if ($hintCsv !== '') {
+                $totalHdr .= ' (' . $hintCsv . ')';
+            }
+            $header[] = $totalHdr;
+            $metaHdr = 'Meta del periodo';
+            $hintCsvMeta = trim((string) ($matrix['meta_period_column_hint'] ?? ''));
+            if ($hintCsvMeta !== '') {
+                $metaHdr .= ' (' . $hintCsvMeta . ')';
+            }
+            $header[] = $metaHdr;
             $header[] = 'Saldo';
             $header[] = 'Interpretación del saldo';
         }
@@ -178,8 +188,6 @@ final class AoatSeguimientoController
             $metaLabel = trim((string) ($row['meta_label'] ?? ''));
             $pl = (int) ($row['prof_line'] ?? 0);
             $pt = (int) ($row['prof_total_lines'] ?? 0);
-            $debe = $row['debe'] ?? null;
-            $interpretacion = $this->interpretacionDebeExport($debe);
 
             if ($vista === 'actividad') {
                 $fields = [
@@ -221,10 +229,10 @@ final class AoatSeguimientoController
                     }
                     $fields[] = (string) $tot;
                 }
-                $fields[] = (string) ($row['consolidado_meta'] ?? '');
-                $fields[] = $row['expected'] === null ? '' : (string) $row['expected'];
-                $fields[] = $debe === null ? '' : (string) $debe;
-                $fields[] = $interpretacion;
+                $fields[] = $this->seguimientoCsvTotalPeriodoMetaCell($row);
+                $fields[] = $this->seguimientoCsvMetaPeriodoCell($row);
+                $fields[] = $this->seguimientoCsvSaldoPeriodoCell($row);
+                $fields[] = $this->interpretacionDebeCsvRow($row);
             }
             $lines[] = implode(';', array_map($esc, $fields));
         }
@@ -522,6 +530,81 @@ final class AoatSeguimientoController
         };
     }
 
+    /**
+     * Columna «Total en el periodo» en CSV (vista metas): abogados muestran SAFER y política pública acumulados.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function seguimientoCsvTotalPeriodoMetaCell(array $row): string
+    {
+        $mode = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+        if ($mode === 'abogado') {
+            $s = $row['consolidado_safer_periodo'] ?? null;
+            $p = $row['consolidado_politica_periodo'] ?? null;
+            if ($s !== null && $p !== null) {
+                return 'SAFER ' . (string) (int) $s . ' · Pol.pública ' . (string) (int) $p;
+            }
+        }
+
+        return (string) ($row['consolidado_meta'] ?? '');
+    }
+
+    /**
+     * Columna «Meta del periodo» en CSV (vista metas): abogados muestran ambas metas acumuladas.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function seguimientoCsvMetaPeriodoCell(array $row): string
+    {
+        $mode = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+        if ($mode === 'abogado') {
+            $es = $row['expected_safer_periodo'] ?? null;
+            $ep = $row['expected_politica_periodo'] ?? null;
+            if ($es !== null && $ep !== null) {
+                return 'SAFER ' . (string) (int) $es . ' · Pol.pública ' . (string) (int) $ep;
+            }
+        }
+
+        return $row['expected'] === null ? '' : (string) (int) $row['expected'];
+    }
+
+    /**
+     * Columna «Saldo» en CSV (vista metas): abogados muestran saldo por dimensión.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function seguimientoCsvSaldoPeriodoCell(array $row): string
+    {
+        $mode = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+        if ($mode === 'abogado') {
+            $ds = $row['debe_safer'] ?? null;
+            $dp = $row['debe_politica'] ?? null;
+            if ($ds !== null && $dp !== null) {
+                return 'SAFER ' . (string) (int) $ds . ' · Pol.pública ' . (string) (int) $dp;
+            }
+        }
+
+        return $row['debe'] === null ? '' : (string) (int) $row['debe'];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function interpretacionDebeCsvRow(array $row): string
+    {
+        $mode = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+        if ($mode === 'abogado') {
+            $ds = $row['debe_safer'] ?? null;
+            $dp = $row['debe_politica'] ?? null;
+            if ($ds !== null && $dp !== null) {
+                return 'SAFER: ' . $this->interpretacionDebeExport($ds)
+                    . ' · Pol.pública: ' . $this->interpretacionDebeExport($dp);
+            }
+        }
+
+        return $this->interpretacionDebeExport($row['debe'] ?? null);
+    }
+
     private function interpretacionDebeExport(mixed $debe): string
     {
         if ($debe === null) {
@@ -575,7 +658,8 @@ final class AoatSeguimientoController
                 . 'Solo cuentan registros <em>Asesoría</em> o <em>Asistencia técnica</em> con respuesta útil en <strong>SAFER</strong> '
                 . 'y/o en <strong>política pública</strong> (Mesa Municipal de Salud Mental o PPMSMYPA): al menos uno de esos dos bloques distinto de solo «No aplica». '
                 . 'El <strong>total</strong> del mes no duplica el mismo registro. Las líneas muestran SAFER y política pública (un registro puede aparecer en ambas). '
-                . '<strong>Saldo:</strong> negativo = faltan registros; cero = cumple; positivo = va a favor.</div>'
+                . '<strong>Meta del periodo y saldo</strong> se detallan por SAFER y política pública según los valores configurados en Administración · Metas AoAT. '
+                . '<strong>Saldo:</strong> negativo = faltan registros en esa dimensión; cero = cumple; positivo = va a favor.</div>'
                 : '<div class="legend"><strong>Cómo leer el cuadro:</strong> '
                 . 'Solo cuentan actividades registradas como <em>Asesoría</em> o <em>Asistencia técnica</em>. '
                 . 'En cada mes verás tres líneas: asesorías realizadas, asistencias técnicas realizadas y el <strong>total</strong> frente a la meta. '
@@ -588,6 +672,9 @@ final class AoatSeguimientoController
             . '<p><strong>Filtros aplicados:</strong> ' . $esc($this->resolveSeguimientoFilterDescription($filters, $records)) . '</p>'
             . '<p><strong>Cantidad de filas (territorios):</strong> ' . $esc((string) count($matrix['rows'] ?? [])) . '</p></div>';
 
+        $metaTotalHintPdf = trim((string) ($matrix['meta_total_column_hint'] ?? ''));
+        $metaPeriodHintPdf = trim((string) ($matrix['meta_period_column_hint'] ?? ''));
+
         $thead = '<tr>'
             . '<th>Nº mun.</th><th>Subregión</th><th>Municipio</th><th>Profesional</th><th>Rol</th>';
         if ($vista !== 'actividad') {
@@ -597,9 +684,17 @@ final class AoatSeguimientoController
             $label = $this->monthNameEs((int) $mh['num']);
             $thead .= '<th>' . $esc($label) . '</th>';
         }
-        $thead .= '<th>Total periodo</th>';
+        $thead .= '<th>Total periodo';
+        if ($vista !== 'actividad' && $metaTotalHintPdf !== '') {
+            $thead .= '<br><span style="font-size:6px;font-weight:normal;line-height:1.15;">' . $esc($metaTotalHintPdf) . '</span>';
+        }
+        $thead .= '</th>';
         if ($vista !== 'actividad') {
-            $thead .= '<th>Meta periodo</th><th>Saldo</th>';
+            $thead .= '<th>Meta periodo';
+            if ($metaPeriodHintPdf !== '') {
+                $thead .= '<br><span style="font-size:6px;font-weight:normal;line-height:1.15;">' . $esc($metaPeriodHintPdf) . '</span>';
+            }
+            $thead .= '</th><th>Saldo</th>';
         }
         $thead .= '</tr>';
 
@@ -623,6 +718,8 @@ final class AoatSeguimientoController
                 $rowsHtml .= '<td style="text-align:center;">' . $esc($mmStr) . '</td>';
             }
 
+            $modePdfRow = (string) ($row['meta_breakdown_mode'] ?? 'standard');
+
             foreach ($matrix['months'] ?? [] as $mh) {
                 $k = $mh['key'];
                 $mc = is_array($row['month_cells'][$k] ?? null) ? $row['month_cells'][$k] : [];
@@ -630,8 +727,7 @@ final class AoatSeguimientoController
                 if ($vista === 'actividad') {
                     $rowsHtml .= '<td class="monthcell" style="text-align:center;"><strong>' . $tot . '</strong></td>';
                 } else {
-                    $modeRow = (string) ($row['meta_breakdown_mode'] ?? 'standard');
-                    if ($modeRow === 'abogado') {
+                    if ($modePdfRow === 'abogado') {
                         $s = (int) ($mc['abogado_safer'] ?? 0);
                         $p = (int) ($mc['abogado_politica'] ?? 0);
                         $rowsHtml .= '<td class="monthcell">'
@@ -653,10 +749,49 @@ final class AoatSeguimientoController
 
             $debe = $row['debe'] ?? null;
             $debeStr = $debe === null ? '—' : (string) (int) $debe;
-            $rowsHtml .= '<td style="text-align:center;">' . (int) ($row['consolidado_meta'] ?? 0) . '</td>';
+            $totalPeriodoInner = '';
+            if ($vista === 'actividad') {
+                $totalPeriodoInner = (string) (int) ($row['consolidado_meta'] ?? 0);
+            } else {
+                if ($modePdfRow === 'abogado') {
+                    $sp = $row['consolidado_safer_periodo'] ?? null;
+                    $pp = $row['consolidado_politica_periodo'] ?? null;
+                    if ($sp !== null && $pp !== null) {
+                        $totalPeriodoInner = '<div>SAFER: <strong>' . (string) (int) $sp . '</strong></div>'
+                            . '<div>Pol. pública: <strong>' . (string) (int) $pp . '</strong></div>';
+                    }
+                }
+                if ($totalPeriodoInner === '') {
+                    $totalPeriodoInner = (string) (int) ($row['consolidado_meta'] ?? 0);
+                }
+            }
+            $rowsHtml .= '<td style="text-align:center;">' . $totalPeriodoInner . '</td>';
             if ($vista !== 'actividad') {
-                $rowsHtml .= '<td style="text-align:center;">' . ($row['expected'] === null ? '—' : (int) $row['expected']) . '</td>'
-                    . '<td style="text-align:center;">' . $esc($debeStr) . '</td>';
+                $metaPeriodoInner = '—';
+                if ($modePdfRow === 'abogado') {
+                    $es = $row['expected_safer_periodo'] ?? null;
+                    $ep = $row['expected_politica_periodo'] ?? null;
+                    if ($es !== null && $ep !== null) {
+                        $metaPeriodoInner = '<div>Meta SAFER: <strong>' . (string) (int) $es . '</strong></div>'
+                            . '<div>Meta Pol.pública: <strong>' . (string) (int) $ep . '</strong></div>';
+                    }
+                }
+                if ($metaPeriodoInner === '—' && ($row['expected'] ?? null) !== null) {
+                    $metaPeriodoInner = (string) (int) $row['expected'];
+                }
+
+                $saldoInner = $esc($debeStr);
+                if ($modePdfRow === 'abogado') {
+                    $ds = $row['debe_safer'] ?? null;
+                    $dp = $row['debe_politica'] ?? null;
+                    if ($ds !== null && $dp !== null) {
+                        $saldoInner = '<div>SAFER: <strong>' . (string) (int) $ds . '</strong></div>'
+                            . '<div>Pol.pública: <strong>' . (string) (int) $dp . '</strong></div>';
+                    }
+                }
+
+                $rowsHtml .= '<td style="text-align:center;">' . $metaPeriodoInner . '</td>'
+                    . '<td style="text-align:center;">' . $saldoInner . '</td>';
             }
             $rowsHtml .= '</tr>';
         }
