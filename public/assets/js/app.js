@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
     const HOMO_FILTER_STORAGE_PREFIX = 'homoFilters:v1:';
     const homoFilterPaths = new Set([
         '/aoat',
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return map;
     }
 
-    /** Valores de municipio desde query (municipality[], municipality, municipality[0]…). */
+    /** Valores de municipio desde query (municipality[], municipality, municipality[0]â€¦). */
     function homoGetAllMunicipalityValues(sp) {
         const out = [];
         const seen = new Set();
@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div style="font-size:1.4rem;font-weight:800;color:#24433d;">Encuesta registrada</div>
                         <div style="margin-top:0.75rem;color:#536b66;line-height:1.7;">
                             Tu opinión ha sido recibida por el <strong>Programa de Promoción y Prevención</strong>.<br>
-                            La información será tratada únicamente con fines estadísticos.
+                            La información será tratada Ãºnicamente con fines estadísticos.
                         </div>
                     </div>
                 </div>
@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
             Swal.fire({
                 icon: 'info',
                 title: 'Frase del mes',
-                text: '“Los sueños no se cumplen, sino que se trabajan”.',
+                text: 'â€œLos sueÃ±os no se cumplen, sino que se trabajanâ€.',
                 confirmButtonText: 'Seguir trabajando',
             });
         });
@@ -332,8 +332,8 @@ document.addEventListener('DOMContentLoaded', () => {
      * Sustituye el &lt;select multiple&gt; por un botón + panel con casillas (clic sin Ctrl).
      *
      * @param {HTMLSelectElement} sel
-     * @param {string} emptyLabel Texto cuando no hay selección (ej. «Todos los municipios»).
-     * @param {{ multiCountWord?: string, toggleTitle?: string }} [opts] multiCountWord: palabra tras el número (ej. «municipios», «actividades»).
+     * @param {string} emptyLabel Texto cuando no hay selección (ej. Â«Todos los municipiosÂ»).
+     * @param {{ multiCountWord?: string, toggleTitle?: string }} [opts] multiCountWord: palabra tras el nÃºmero (ej. Â«municipiosÂ», Â«actividadesÂ»).
      */
     function homoMountMunicipalityMultiWidget(sel, emptyLabel, opts = {}) {
         if (!(sel instanceof HTMLSelectElement)) {
@@ -641,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
             Swal.fire({
                 icon: 'error',
                 title: 'PRE - TEST no encontrado',
-                text: 'Para diligenciar el POST - TEST debes haber completado primero el PRE - TEST con el mismo número de documento.',
+                text: 'Para diligenciar el POST - TEST debes haber completado primero el PRE - TEST con el mismo nÃºmero de documento.',
             });
         };
 
@@ -664,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 Swal.fire({
                     icon: 'error',
                     title: 'Documento no válido',
-                    text: 'El número de documento debe contener solo números.',
+                    text: 'El nÃºmero de documento debe contener solo nÃºmeros.',
                 });
                 return;
             }
@@ -753,7 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Desactivar usuario',
-                    html: `¿Seguro que deseas desactivar al usuario <strong>${userName}</strong>?<br><span class="text-muted">Podrás reactivarlo más adelante editando su registro.</span>`,
+                    html: `Â¿Seguro que deseas desactivar al usuario <strong>${userName}</strong>?<br><span class="text-muted">Podrás reactivarlo más adelante editando su registro.</span>`,
                     showCancelButton: true,
                     confirmButtonText: 'Sí, desactivar',
                     cancelButtonText: 'Cancelar',
@@ -822,18 +822,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const municipality = plan.municipality || '';
                 const months = Array.isArray(plan.months) ? plan.months : [];
 
-                let html = `<p><strong>Año:</strong> ${year}<br><strong>Subregión:</strong> ${subregion}<br><strong>Municipio:</strong> ${municipality}</p>`;
+                let html = `<p><strong>AÃ±o:</strong> ${year}<br><strong>Subregión:</strong> ${subregion}<br><strong>Municipio:</strong> ${municipality}</p>`;
 
                 if (months.length > 0) {
                     html += '<div class="text-start"><hr><h6 class="fw-semibold mb-2">Meses planificados</h6>';
                     html += '<div class="small">';
                     months.forEach((m) => {
                         const label = m.label || '';
-                        const topics = Array.isArray(m.topics) ? m.topics.join('<br>• ') : '';
+                        const topics = Array.isArray(m.topics) ? m.topics.join('<br>â€¢ ') : '';
                         const population = m.population || '';
                         html += `<p class="mb-2"><strong>${label}</strong><br>`;
                         if (topics) {
-                            html += `Temas:<br>• ${topics}<br>`;
+                            html += `Temas:<br>â€¢ ${topics}<br>`;
                         }
                         if (population) {
                             html += `<span class="text-muted">Población objetivo:</span> ${population}`;
@@ -842,7 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     html += '</div></div>';
                 } else {
-                    html += '<p class="text-muted small mb-0">Aún no hay meses diligenciados en esta planeación.</p>';
+                    html += '<p class="text-muted small mb-0">AÃºn no hay meses diligenciados en esta planeación.</p>';
                 }
 
                 Swal.fire({
@@ -899,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let html = `<div class="plan-detail-shell">
             <div class="plan-detail-header">
-                <p class="plan-detail-meta"><strong>Año:</strong> ${escapeHtml(year)}</p>
+                <p class="plan-detail-meta"><strong>AÃ±o:</strong> ${escapeHtml(year)}</p>
                 <p class="plan-detail-meta"><strong>Asesor:</strong> ${escapeHtml(professional || 'Sin nombre')}</p>
                 <p class="plan-detail-meta"><strong>Subregion:</strong> ${escapeHtml(subregion)}</p>
                 <p class="plan-detail-meta"><strong>Rol:</strong> ${escapeHtml(professionalRole || 'Sin rol')}</p>
@@ -1199,6 +1199,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const municipio = data.municipality || '';
                 const estado = data.state || '';
                 const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
+                const auditMotive = data.audit_motive || '';
+                const auditObservation = data.audit_observation || '';
                 const canExportSingle = Boolean(data.can_export_single);
                 const exportPdfUrl = data.export_pdf_url || '';
                 const exportExcelUrl = data.export_excel_url || '';
@@ -1244,7 +1246,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     professional_compliance_note: 'Acciones realizadas ante la devolución (profesional)',
                 };
 
-                const entries = Object.entries(payload);
+                const isReturnField = (key) => {
+                    const normalized = String(key || '')
+                        .toLowerCase()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '');
+
+                    return normalized.includes('motivo de devolucion') || normalized.includes('comentarios de devolucion');
+                };
+
+                if (auditMotive || auditObservation) {
+                    html += '<hr><div class="alert alert-warning border border-warning-subtle shadow-sm text-start mt-3 mb-3">'
+                        + '<div class="d-flex align-items-center gap-2 mb-2"><i class="bi bi-arrow-return-left"></i><h6 class="fw-bold mb-0">Devolución del especialista</h6></div>';
+                    if (auditMotive) {
+                        html += `<p class="mb-2"><strong>Motivo de devolución:</strong><br>${formatTextBlock(String(auditMotive))}</p>`;
+                    }
+                    if (auditObservation) {
+                        html += `<p class="mb-0"><strong>Comentarios de devolución:</strong><br>${formatTextBlock(String(auditObservation))}</p>`;
+                    }
+                    html += '</div>';
+                }
+
+                const entries = Object.entries(payload).filter(([key]) => !isReturnField(key));
                 if (entries.length > 0) {
                     html += '<hr><div class="text-start small"><h6 class="fw-semibold mb-2">Respuestas del formulario</h6>';
                     entries.forEach(([key, value]) => {
@@ -1311,6 +1334,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const municipio = data.municipality || '';
                 const estado = data.state || '';
                 const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
+                const auditMotive = data.audit_motive || '';
+                const auditObservation = data.audit_observation || '';
                 const canExportSingle = Boolean(data.can_export_single);
                 const exportPdfUrl = data.export_pdf_url || '';
                 const exportExcelUrl = data.export_excel_url || '';
@@ -1356,7 +1381,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     professional_compliance_note: 'Acciones realizadas ante la devolución (profesional)',
                 };
 
-                const entries = Object.entries(payload);
+                const isReturnField = (key) => {
+                    const normalized = String(key || '')
+                        .toLowerCase()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '');
+
+                    return normalized.includes('motivo de devolucion') || normalized.includes('comentarios de devolucion');
+                };
+
+                if (auditMotive || auditObservation) {
+                    html += '<hr><div class="alert alert-warning border border-warning-subtle shadow-sm text-start mt-3 mb-3">'
+                        + '<div class="d-flex align-items-center gap-2 mb-2"><i class="bi bi-arrow-return-left"></i><h6 class="fw-bold mb-0">Devolución del especialista</h6></div>';
+                    if (auditMotive) {
+                        html += `<p class="mb-2"><strong>Motivo de devolución:</strong><br>${formatTextBlock(String(auditMotive))}</p>`;
+                    }
+                    if (auditObservation) {
+                        html += `<p class="mb-0"><strong>Comentarios de devolución:</strong><br>${formatTextBlock(String(auditObservation))}</p>`;
+                    }
+                    html += '</div>';
+                }
+
+                const entries = Object.entries(payload).filter(([key]) => !isReturnField(key));
                 if (entries.length > 0) {
                     html += '<hr><div class="text-start small"><h6 class="fw-semibold mb-2">Respuestas del formulario</h6>';
                     entries.forEach(([key, value]) => {
@@ -1544,7 +1590,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const noteRaw = (payloadApprove.professional_compliance_note && String(payloadApprove.professional_compliance_note).trim()) || '';
 
             let approveHtml = `<p class="small mb-0">Profesional: <strong>${escapeHtml(profesional)}</strong></p>
-<p class="small mt-2 mb-0">El profesional marcó el registro como <strong>Realizado</strong> tras los ajustes. ¿Confirmas la <strong>aprobación final</strong>?</p>`;
+<p class="small mt-2 mb-0">El profesional marcó el registro como <strong>Realizado</strong> tras los ajustes. Â¿Confirmas la <strong>aprobación final</strong>?</p>`;
             if (noteRaw) {
                 approveHtml += `<div class="alert alert-light border small text-start mt-2 mb-0"><strong>Lo que indicó el profesional al marcar Realizado:</strong><br>${formatTextBlock(noteRaw)}</div>`;
             }
@@ -1671,7 +1717,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const result = await Swal.fire({
-            title: '¿Eliminar esta AoAT?',
+            title: 'Â¿Eliminar esta AoAT?',
             html: '<p class="small mb-0">Esta acción no se puede deshacer. El registro se eliminará de forma permanente.</p>',
             icon: 'warning',
             showCancelButton: true,
@@ -2376,7 +2422,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     position: 'top-end',
                     icon: 'info',
                     title: 'Preparando descarga...',
-                    text: 'La exportación puede tardar unos segundos según la cantidad de registros.',
+                    text: 'La exportación puede tardar unos segundos segÃºn la cantidad de registros.',
                     showConfirmButton: false,
                     timer: 2600,
                     timerProgressBar: true,
@@ -2433,7 +2479,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     position: 'top-end',
                     icon: 'info',
                     title: 'Preparando descarga...',
-                    text: 'La exportación puede tardar unos segundos según la cantidad de registros.',
+                    text: 'La exportación puede tardar unos segundos segÃºn la cantidad de registros.',
                     showConfirmButton: false,
                     timer: 2800,
                     timerProgressBar: true,
@@ -2745,7 +2791,7 @@ document.addEventListener('DOMContentLoaded', () => {
             evalQrModalEl.dataset.evalThemeName = name;
 
             if (titleEl) {
-                titleEl.textContent = name ? `Códigos QR · ${name}` : 'Códigos QR';
+                titleEl.textContent = name ? `Códigos QR Â· ${name}` : 'Códigos QR';
             }
             if (preUrlInput) {
                 preUrlInput.value = preUrl;
@@ -2807,7 +2853,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!input || !input.value) {
                     return;
                 }
-                const title = which === 'post' ? `${theme} — POST` : `${theme} — PRE`;
+                const title = which === 'post' ? `${theme} â€” POST` : `${theme} â€” PRE`;
                 navigator.share({ title, text: title, url: input.value }).catch(() => {});
             }
         });
@@ -2861,4 +2907,6 @@ document.addEventListener(
     },
     true
 );
+
+
 

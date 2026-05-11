@@ -61,7 +61,7 @@ $formatActivityDate = static function (?string $value): array {
 
     $auditMotive = trim((string) ($record['audit_motive'] ?? ''));
     $auditObservation = trim((string) ($record['audit_observation'] ?? ''));
-    if ($state === 'Devuelta' && ($auditMotive !== '' || $auditObservation !== '')) {
+    if ($auditMotive !== '' || $auditObservation !== '') {
         $returnInfo = [];
         if ($auditMotive !== '') {
             $returnInfo['Motivo de devolución'] = $auditMotive;
