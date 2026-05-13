@@ -1795,6 +1795,8 @@ final class AoatController
             $totalRows += count($section['rows'] ?? []);
         }
 
+        $fieldLabels = $this->aoatExportFieldLabels();
+
         $html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte semanal AoAT</title>';
         $html .= '<style>
             body{font-family:DejaVu Sans,Arial,sans-serif;color:#2a5543;font-size:12px;margin:0;padding:0;background:#ffffff;}
@@ -1838,14 +1840,18 @@ final class AoatController
             }
 
             $html .= '<table><thead><tr>'
+                . '<th>Número AoAT</th>'
                 . '<th>Fecha actividad</th>'
                 . '<th>Profesional</th>'
                 . '<th>Actividad</th>'
+                . '<th>Con quién realizó</th>'
                 . '<th>Rol</th>'
-                . '<th>Acciones</th>'
                 . '<th>Subregión</th>'
-                . '<th>Municipio</th>'
-                . '</tr></thead><tbody>';
+                . '<th>Municipio</th>';
+            foreach ($fieldLabels as $fieldLabel) {
+                $html .= '<th>' . htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') . '</th>';
+            }
+            $html .= '</tr></thead><tbody>';
 
             foreach ($rows as $row) {
                 $payload = [];
@@ -1867,22 +1873,28 @@ final class AoatController
                 }
 
                 $professionalFullName = trim((string) ($row['professional_name'] ?? '') . ' ' . (string) ($row['professional_last_name'] ?? ''));
+                $aoatNumber = trim((string) ($payload['aoat_number'] ?? ''));
                 $activityType = (string) ($row['activity_type_json'] ?? '');
+                $activityWith = trim((string) ($payload['activity_with'] ?? ''));
                 $role = (string) ($row['professional_role'] ?? '');
                 $roleLabel = ucwords(str_replace('_', ' ', $role));
-                $actions = $this->buildActionsSummary($role, $payload);
                 $subregion = (string) ($row['subregion'] ?? '');
                 $municipality = (string) ($row['municipality'] ?? '');
 
                 $html .= '<tr>'
+                    . '<td>' . htmlspecialchars($aoatNumber !== '' ? $aoatNumber : 'No registrado', ENT_QUOTES, 'UTF-8') . '</td>'
                     . '<td>' . htmlspecialchars($formattedDate, ENT_QUOTES, 'UTF-8') . '</td>'
                     . '<td>' . htmlspecialchars($professionalFullName, ENT_QUOTES, 'UTF-8') . '</td>'
                     . '<td>' . htmlspecialchars($activityType, ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars($activityWith !== '' ? $activityWith : 'No registrado', ENT_QUOTES, 'UTF-8') . '</td>'
                     . '<td>' . htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') . '</td>'
-                    . '<td>' . htmlspecialchars($actions, ENT_QUOTES, 'UTF-8') . '</td>'
                     . '<td>' . htmlspecialchars($subregion, ENT_QUOTES, 'UTF-8') . '</td>'
-                    . '<td>' . htmlspecialchars($municipality, ENT_QUOTES, 'UTF-8') . '</td>'
-                    . '</tr>';
+                    . '<td>' . htmlspecialchars($municipality, ENT_QUOTES, 'UTF-8') . '</td>';
+                foreach (array_keys($fieldLabels) as $fieldKey) {
+                    $value = $this->formatAoatExportValue($payload[$fieldKey] ?? null);
+                    $html .= '<td>' . htmlspecialchars($value ?? 'No aplica', ENT_QUOTES, 'UTF-8') . '</td>';
+                }
+                $html .= '</tr>';
             }
 
             $html .= '</tbody></table></div>';
@@ -1931,7 +1943,7 @@ final class AoatController
             }
         } elseif ($role === 'medico') {
             if (!empty($payload['temas_hospital']) && is_array($payload['temas_hospital'])) {
-                $parts[] = implode(', ', $payload['temas_hospital']);
+                $parts[] = 'Temas hospital: ' . implode(', ', $payload['temas_hospital']);
             }
         } elseif ($role === 'abogado') {
             if (!empty($payload['mesa_salud_mental']) && is_array($payload['mesa_salud_mental'])) {
@@ -1945,11 +1957,31 @@ final class AoatController
             }
         } elseif ($role === 'profesional social' || $role === 'profesional_social') {
             if (!empty($payload['actividad_social']) && is_array($payload['actividad_social'])) {
-                $parts[] = implode(', ', $payload['actividad_social']);
+                $parts[] = 'Actividad social: ' . implode(', ', $payload['actividad_social']);
             }
         }
 
-        return implode(' | ', $parts);
+        return implode("\n", $parts);
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function aoatExportFieldLabels(): array
+    {
+        return [
+            'prev_suicidio' => 'Prevención suicidio',
+            'prev_violencias' => 'Prevención violencias',
+            'prev_adicciones' => 'Prevención adicciones',
+            'salud_mental' => 'Salud mental',
+            'proyecto' => 'Proyecto',
+            'mesa_salud_mental' => 'Mesa salud mental',
+            'ppmsmypa' => 'PPMSMYPA',
+            'safer' => 'SAFER',
+            'temas_hospital' => 'Temas hospital',
+            'actividad_social' => 'Actividad social',
+            'otro_caso' => 'Otro caso',
+        ];
     }
 
     /**
@@ -2082,9 +2114,14 @@ final class AoatController
             $filterParts[] = 'Hasta: ' . trim((string) $filters['to_date']);
         }
 
+        $fieldLabels = $this->aoatExportFieldLabels();
         $rowsHtml = '';
         foreach ($records as $row) {
+            $payload = $this->decodeAoatPayload($row);
             $professionalName = trim(((string) ($row['professional_name'] ?? '')) . ' ' . ((string) ($row['professional_last_name'] ?? '')));
+            $aoatNumber = trim((string) ($payload['aoat_number'] ?? ''));
+            $activityWith = trim((string) ($payload['activity_with'] ?? ''));
+
             $rowsHtml .= '<tr>'
                 . '<td>' . (int) ($row['id'] ?? 0) . '</td>'
                 . '<td>' . $esc((string) ($row['activity_date'] ?? '')) . '</td>'
@@ -2096,7 +2133,20 @@ final class AoatController
                 . '<td>' . $esc((string) ($row['state'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['audit_motive'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['audit_observation'] ?? '')) . '</td>'
-                . '</tr>';
+                . '<td>' . $esc($aoatNumber !== '' ? $aoatNumber : 'No registrado') . '</td>'
+                . '<td>' . $esc($activityWith !== '' ? $activityWith : 'No registrado') . '</td>';
+
+            foreach (array_keys($fieldLabels) as $fieldKey) {
+                $value = $this->formatAoatExportValue($payload[$fieldKey] ?? null);
+                $rowsHtml .= '<td>' . $esc($value ?? 'No aplica') . '</td>';
+            }
+
+            $rowsHtml .= '</tr>';
+        }
+
+        $headerHtml = '<th>ID</th><th>Fecha actividad</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Actividad</th><th>Estado AoAT</th><th>Motivo auditoría</th><th>Observación auditoría</th><th>Número AoAT</th><th>Con quién realizó</th>';
+        foreach ($fieldLabels as $fieldLabel) {
+            $headerHtml .= '<th>' . $esc($fieldLabel) . '</th>';
         }
 
         return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Registro AoAT</title>'
@@ -2130,9 +2180,9 @@ final class AoatController
             . '</div>'
             . '<p class="section-title">Listado</p>'
             . '<table><thead><tr>'
-            . '<th>ID</th><th>Fecha actividad</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Actividad</th><th>Estado AoAT</th><th>Motivo auditoría</th><th>Observación auditoría</th>'
+            . $headerHtml
             . '</tr></thead><tbody>'
-            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="10">Sin registros.</td></tr>')
+            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="23">Sin registros.</td></tr>')
             . '</tbody></table>'
             . '<p class="footer">Documento generado automáticamente desde la plataforma Equipo de Promoción y Prevención.</p>'
             . '</div></div></body></html>';
@@ -2175,22 +2225,51 @@ final class AoatController
         ];
 
         $questionRows = [];
-        foreach ($payload as $key => $value) {
-            $label = $this->aoatPayloadLabel((string) $key);
-            if (is_array($value)) {
-                $cleanValues = array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $value), static fn (string $item): bool => $item !== ''));
-                if ($cleanValues === []) {
-                    continue;
-                }
-                $questionRows[$label] = implode(', ', $cleanValues);
+        $preferredPayloadOrder = [
+            'aoat_number',
+            'activity_date',
+            'activity_type',
+            'activity_with',
+            'prev_suicidio',
+            'prev_violencias',
+            'prev_adicciones',
+            'salud_mental',
+            'proyecto',
+            self::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE,
+            'mesa_salud_mental',
+            'ppmsmypa',
+            'safer',
+            'temas_hospital',
+            'actividad_social',
+            'otro_caso',
+        ];
+
+        foreach ($preferredPayloadOrder as $key) {
+            if (!array_key_exists($key, $payload)) {
                 continue;
             }
 
-            $text = trim((string) $value);
-            if ($text === '') {
+            $formattedValue = $this->formatAoatExportValue($payload[$key]);
+            if ($formattedValue === null) {
                 continue;
             }
-            $questionRows[$label] = $text;
+
+            $questionRows[$this->aoatPayloadLabel($key)] = $formattedValue;
+        }
+
+        foreach ($payload as $key => $value) {
+            $key = (string) $key;
+            $label = $this->aoatPayloadLabel($key);
+            if (isset($questionRows[$label])) {
+                continue;
+            }
+
+            $formattedValue = $this->formatAoatExportValue($value);
+            if ($formattedValue === null) {
+                continue;
+            }
+
+            $questionRows[$label] = $formattedValue;
         }
 
         $renderLogo = static function (string $srcOrHtml, string $alt, bool $isPdf): string {
@@ -2275,6 +2354,25 @@ final class AoatController
         ];
 
         return $labels[$key] ?? ucwords(str_replace('_', ' ', $key));
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function formatAoatExportValue($value): ?string
+    {
+        if (is_array($value)) {
+            $cleanValues = array_values(array_filter(
+                array_map(static fn ($item): string => trim((string) $item), $value),
+                static fn (string $item): bool => $item !== ''
+            ));
+
+            return $cleanValues === [] ? null : implode(', ', $cleanValues);
+        }
+
+        $text = trim((string) $value);
+
+        return $text === '' ? null : $text;
     }
 
     private function formatExportDate(string $date): string
