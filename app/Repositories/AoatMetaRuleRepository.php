@@ -10,6 +10,8 @@ use PDOException;
 
 final class AoatMetaRuleRepository
 {
+    private ?bool $supportsDualTargets = null;
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -17,12 +19,7 @@ final class AoatMetaRuleRepository
     {
         try {
             $pdo = Connection::getPdo();
-            $stmt = $pdo->query(
-                "SELECT id, role_key, scope, target_value, target_safer, target_politica, month_from, month_to, rule_year, active, notes
-                 FROM aoat_meta_rules
-                 WHERE active = 1
-                 ORDER BY FIELD(role_key, 'psicologo', 'abogado', 'medico'), COALESCE(rule_year, 0), month_from, month_to, id"
-            );
+            $stmt = $pdo->query($this->baseSelectSql(true));
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
             if ($rows !== []) {
                 return array_map([$this, 'normalizeRuleRow'], $rows);
@@ -40,11 +37,7 @@ final class AoatMetaRuleRepository
     {
         try {
             $pdo = Connection::getPdo();
-            $stmt = $pdo->query(
-                "SELECT id, role_key, scope, target_value, target_safer, target_politica, month_from, month_to, rule_year, active, notes
-                 FROM aoat_meta_rules
-                 ORDER BY active DESC, FIELD(role_key, 'psicologo', 'abogado', 'medico'), COALESCE(rule_year, 0), month_from, month_to, id"
-            );
+            $stmt = $pdo->query($this->baseSelectSql(false));
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
             if ($rows !== []) {
                 return array_map([$this, 'normalizeRuleRow'], $rows);
@@ -65,28 +58,35 @@ final class AoatMetaRuleRepository
 
         try {
             $pdo->exec('DELETE FROM aoat_meta_rules');
-            $stmt = $pdo->prepare(
-                'INSERT INTO aoat_meta_rules (role_key, scope, target_value, target_safer, target_politica, month_from, month_to, rule_year, active, notes)
-                 VALUES (:role_key, :scope, :target_value, :target_safer, :target_politica, :month_from, :month_to, :rule_year, :active, :notes)'
+            $supportsDualTargets = $this->supportsDualTargets($pdo);
+            $stmt = $pdo->prepare($supportsDualTargets
+                ? 'INSERT INTO aoat_meta_rules (role_key, scope, target_value, target_safer, target_politica, month_from, month_to, rule_year, active, notes)
+                   VALUES (:role_key, :scope, :target_value, :target_safer, :target_politica, :month_from, :month_to, :rule_year, :active, :notes)'
+                : 'INSERT INTO aoat_meta_rules (role_key, scope, target_value, month_from, month_to, rule_year, active, notes)
+                   VALUES (:role_key, :scope, :target_value, :month_from, :month_to, :rule_year, :active, :notes)'
             );
 
             foreach ($rules as $rule) {
-                $stmt->execute([
+                $params = [
                     ':role_key' => (string) ($rule['role_key'] ?? ''),
                     ':scope' => (string) ($rule['scope'] ?? 'per_territory'),
                     ':target_value' => (int) ($rule['target_value'] ?? 0),
-                    ':target_safer' => array_key_exists('target_safer', $rule) && $rule['target_safer'] !== null && $rule['target_safer'] !== ''
-                        ? (int) $rule['target_safer']
-                        : null,
-                    ':target_politica' => array_key_exists('target_politica', $rule) && $rule['target_politica'] !== null && $rule['target_politica'] !== ''
-                        ? (int) $rule['target_politica']
-                        : null,
                     ':month_from' => (int) ($rule['month_from'] ?? 1),
                     ':month_to' => (int) ($rule['month_to'] ?? 12),
                     ':rule_year' => $rule['rule_year'] === null || $rule['rule_year'] === '' ? null : (int) $rule['rule_year'],
                     ':active' => !empty($rule['active']) ? 1 : 0,
                     ':notes' => trim((string) ($rule['notes'] ?? '')) ?: null,
-                ]);
+                ];
+                if ($supportsDualTargets) {
+                    $params[':target_safer'] = array_key_exists('target_safer', $rule) && $rule['target_safer'] !== null && $rule['target_safer'] !== ''
+                        ? (int) $rule['target_safer']
+                        : null;
+                    $params[':target_politica'] = array_key_exists('target_politica', $rule) && $rule['target_politica'] !== null && $rule['target_politica'] !== ''
+                        ? (int) $rule['target_politica']
+                        : null;
+                }
+
+                $stmt->execute($params);
             }
 
             $pdo->commit();
@@ -194,5 +194,34 @@ final class AoatMetaRuleRepository
             'active' => (int) ($row['active'] ?? 1),
             'notes' => trim((string) ($row['notes'] ?? '')),
         ];
+    }
+
+    private function baseSelectSql(bool $onlyActive): string
+    {
+        $supportsDualTargets = $this->supportsDualTargets();
+        $where = $onlyActive ? 'WHERE active = 1' : '';
+        $targetSaferSelect = $supportsDualTargets ? 'target_safer' : 'NULL AS target_safer';
+        $targetPoliticaSelect = $supportsDualTargets ? 'target_politica' : 'NULL AS target_politica';
+        $orderBy = $onlyActive
+            ? "ORDER BY FIELD(role_key, 'psicologo', 'abogado', 'medico'), COALESCE(rule_year, 0), month_from, month_to, id"
+            : "ORDER BY active DESC, FIELD(role_key, 'psicologo', 'abogado', 'medico'), COALESCE(rule_year, 0), month_from, month_to, id";
+
+        return "SELECT id, role_key, scope, target_value, {$targetSaferSelect}, {$targetPoliticaSelect}, month_from, month_to, rule_year, active, notes
+                FROM aoat_meta_rules
+                {$where}
+                {$orderBy}";
+    }
+
+    private function supportsDualTargets(?PDO $pdo = null): bool
+    {
+        if ($this->supportsDualTargets !== null) {
+            return $this->supportsDualTargets;
+        }
+
+        $pdo = $pdo ?? Connection::getPdo();
+        $stmt = $pdo->query("SHOW COLUMNS FROM aoat_meta_rules LIKE 'target_safer'");
+        $this->supportsDualTargets = (bool) ($stmt && $stmt->fetch(PDO::FETCH_ASSOC));
+
+        return $this->supportsDualTargets;
     }
 }

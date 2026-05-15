@@ -823,12 +823,12 @@ final class AoatSeguimientoService
     }
 
     /**
-     * Solo los meses ya iniciados en el calendario suman a la meta del periodo
-     * (evita exigir mayo-jun cuando la grilla muestra Ene-Jun y hoy es abril).
+     * La meta del periodo debe sumar todos los meses visibles del tramo filtrado.
+     * El estado "upcoming" solo afecta el color mensual, no la meta acumulada.
      */
     private function monthCountsTowardPeriodMeta(int $year, int $month): bool
     {
-        return !$this->isCalendarMonthStrictlyAfterToday($year, $month);
+        return $month >= 1 && $month <= 12 && $year >= 2020;
     }
 
     /**
