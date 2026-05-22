@@ -134,8 +134,11 @@ if ($subregion !== '') {
             <!-- Tarjeta acciones -->
             <div class="card border-0 shadow-sm rounded-4 mt-4">
                 <div class="card-body p-4 d-flex flex-column gap-3">
-                    <a href="/asistencia/exportar-csv?id=<?= (int) ($actividad['id'] ?? 0) ?>" class="asi-show-action-link text-success">
-                        <i class="bi bi-download me-2"></i>Exportar CSV
+                    <a href="/asistencia/exportar-excel?id=<?= (int) ($actividad['id'] ?? 0) ?>" title="Excel (.xlsx) con encabezados de columna verticales — sin abreviar" class="asi-show-action-link text-success">
+                        <i class="bi bi-file-earmark-spreadsheet me-2"></i>Exportar Excel
+                    </a>
+                    <a href="/asistencia/exportar-csv?id=<?= (int) ($actividad['id'] ?? 0) ?>" title="Texto separado por punto y coma (CSV), compatible con Excel sin formato" class="asi-show-action-link text-secondary small">
+                        <i class="bi bi-filetype-csv me-2"></i>Exportar CSV
                     </a>
                     <a href="/asistencia/exportar-pdf?id=<?= (int) ($actividad['id'] ?? 0) ?>" target="_blank" class="asi-show-action-link text-primary">
                         <i class="bi bi-file-pdf me-2"></i>Exportar PDF
@@ -212,6 +215,10 @@ if ($subregion !== '') {
                                         'email'  => $a['email'] ?? '',
                                         'zone'   => $a['zone'] ?? '',
                                         'sex'    => $a['sex'] ?? '',
+                                        'genero_identidad' => $a['genero_identidad'] ?? '',
+                                        'genero_identidad_otro' => $a['genero_identidad_otro'] ?? '',
+                                        'orientacion_sexual' => $a['orientacion_sexual'] ?? '',
+                                        'orientacion_sexual_otro' => $a['orientacion_sexual_otro'] ?? '',
                                         'age'    => ($a['age'] !== null && $a['age'] !== '') ? $a['age'] : '',
                                         'etnia'  => $etnia,
                                         'grupo'  => $grupoStr,
@@ -270,6 +277,10 @@ if ($subregion !== '') {
         { key: 'email',  label: 'Correo' },
         { key: 'zone',   label: 'Zona' },
         { key: 'sex',    label: 'Sexo' },
+        { key: 'genero_identidad', label: 'Identidad de género' },
+        { key: 'genero_identidad_otro', label: 'Identidad de género (otra especificación)' },
+        { key: 'orientacion_sexual', label: 'Orientación sexual' },
+        { key: 'orientacion_sexual_otro', label: 'Orientación sexual (otra especificación)' },
         { key: 'age',    label: 'Edad' },
         { key: 'etnia',  label: 'Etnia' },
         { key: 'grupo',  label: 'Grupo poblacional' },

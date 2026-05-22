@@ -101,6 +101,10 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         array (
             'setasign\\Fpdi\\' => 14,
         ),
+        'Z' => 
+        array (
+            'ZipStream\\' => 10,
+        ),
         'S' => 
         array (
             'Symfony\\Polyfill\\Php80\\' => 23,
@@ -111,9 +115,11 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         ),
         'P' => 
         array (
+            'Psr\\SimpleCache\\' => 16,
             'Psr\\Log\\' => 8,
             'Psr\\Http\\Message\\' => 17,
             'PhpOption\\' => 10,
+            'PhpOffice\\PhpSpreadsheet\\' => 25,
             'PHPMailer\\PHPMailer\\' => 20,
         ),
         'M' => 
@@ -121,6 +127,7 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
             'Mpdf\\PsrLogAwareTrait\\' => 22,
             'Mpdf\\PsrHttpMessageShim\\' => 24,
             'Mpdf\\' => 5,
+            'Matrix\\' => 7,
             'Masterminds\\' => 12,
         ),
         'G' => 
@@ -137,6 +144,11 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
             'Dompdf\\' => 7,
             'DeepCopy\\' => 9,
         ),
+        'C' => 
+        array (
+            'Composer\\Pcre\\' => 14,
+            'Complex\\' => 8,
+        ),
         'A' => 
         array (
             'App\\' => 4,
@@ -147,6 +159,10 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         'setasign\\Fpdi\\' => 
         array (
             0 => __DIR__ . '/..' . '/setasign/fpdi/src',
+        ),
+        'ZipStream\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/maennchen/zipstream-php/src',
         ),
         'Symfony\\Polyfill\\Php80\\' => 
         array (
@@ -168,6 +184,10 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         array (
             0 => __DIR__ . '/..' . '/sabberworm/php-css-parser/src',
         ),
+        'Psr\\SimpleCache\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/psr/simple-cache/src',
+        ),
         'Psr\\Log\\' => 
         array (
             0 => __DIR__ . '/..' . '/psr/log/src',
@@ -179,6 +199,10 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         'PhpOption\\' => 
         array (
             0 => __DIR__ . '/..' . '/phpoption/phpoption/src/PhpOption',
+        ),
+        'PhpOffice\\PhpSpreadsheet\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/phpoffice/phpspreadsheet/src/PhpSpreadsheet',
         ),
         'PHPMailer\\PHPMailer\\' => 
         array (
@@ -195,6 +219,10 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         'Mpdf\\' => 
         array (
             0 => __DIR__ . '/..' . '/mpdf/mpdf/src',
+        ),
+        'Matrix\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/markbaker/matrix/classes/src',
         ),
         'Masterminds\\' => 
         array (
@@ -219,6 +247,14 @@ class ComposerStaticInit23a43f4bf419dd45b0e75205e94b0f08
         'DeepCopy\\' => 
         array (
             0 => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy',
+        ),
+        'Composer\\Pcre\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/composer/pcre/src',
+        ),
+        'Complex\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/markbaker/complex/classes/src',
         ),
         'App\\' => 
         array (

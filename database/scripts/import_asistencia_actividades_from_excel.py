@@ -227,7 +227,6 @@ def normalize_group_item(item: str) -> str:
         "considera que la comunidad donde vive es campesina": "Considera que la comunidad donde vive es campesina",
         "considera que la comunidad en la que vive es campesina": "Considera que la comunidad donde vive es campesina",
         "¿considera que la comunidad en la que vive es campesina?": "Considera que la comunidad donde vive es campesina",
-        "ninguno": "Ninguno",
     }
     return mappings.get(key, item.strip())
 
@@ -241,6 +240,8 @@ def parse_group_population(raw_value: Any) -> list[str]:
     seen: OrderedDict[str, str] = OrderedDict()
     for part in parts:
         normalized = normalize_group_item(part)
+        if normalize_text(normalized) == "ninguno" or normalized == "Ninguno":
+            continue
         key = normalize_text(normalized)
         if key and key not in seen:
             seen[key] = normalized

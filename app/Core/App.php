@@ -112,6 +112,7 @@ final class App
         $this->router->post('/asistencia/nueva', [\App\Controllers\AsistenciaController::class, 'store'])->middleware('auth');
         $this->router->get('/asistencia/ver', [\App\Controllers\AsistenciaController::class, 'show'])->middleware('auth');
         $this->router->get('/asistencia/exportar-csv', [\App\Controllers\AsistenciaController::class, 'exportCsv'])->middleware('auth');
+        $this->router->get('/asistencia/exportar-excel', [\App\Controllers\AsistenciaController::class, 'exportExcel'])->middleware('auth');
         $this->router->get('/asistencia/exportar-pdf', [\App\Controllers\AsistenciaController::class, 'exportPdf'])->middleware('auth');
         $this->router->post('/asistencia/eliminar', [\App\Controllers\AsistenciaController::class, 'delete'])->middleware('auth');
         $this->router->post('/asistencia/cambiar-estado', [\App\Controllers\AsistenciaController::class, 'updateStatus'])->middleware('auth');

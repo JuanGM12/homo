@@ -1,6 +1,9 @@
 <?php
 /** @var array $actividad */
 /** @var string $tituloListado */
+/** @var array $fipc titulo, proceso y contrato (FIPC). */
+$fipc ??= [];
+$fipc += ['titulo' => '', 'proceso' => '', 'contrato' => ''];
 $code = (string) ($actividad['code'] ?? '');
 $tipos = $actividad['actividad_tipos'] ?? [];
 $tiposList = is_array($tipos) ? $tipos : [];
@@ -98,6 +101,16 @@ $listadoCerrado = ((string) ($actividad['status'] ?? '')) === 'Cerrado';
         font-weight: 700;
     }
 
+    .fipc-proceso-line {
+        margin: 0 auto .35rem;
+        max-width: 820px;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.35;
+        color: #30455d;
+        letter-spacing: 0.015em;
+    }
+
     .attendance-public-title {
         margin: 0;
         font-size: clamp(2.1rem, 4vw, 3.35rem);
@@ -109,8 +122,25 @@ $listadoCerrado = ((string) ($actividad['status'] ?? '')) === 'Cerrado';
     .attendance-public-subtitle {
         margin: .9rem auto 0;
         max-width: 620px;
-        font-size: 1.1rem;
+        font-size: 1.05rem;
+        font-weight: 600;
         color: var(--attendance-copy);
+        line-height: 1.35;
+    }
+
+    .fipc-contract-banner {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 1.25rem;
+        padding: .55rem 1.35rem;
+        border-radius: 999px;
+        border: 2px solid rgba(47, 107, 87, 0.55);
+        background: rgba(231, 242, 234, 0.95);
+        color: #20604a;
+        font-weight: 800;
+        font-size: .98rem;
+        letter-spacing: .02em;
     }
 
     .attendance-public-divider {
@@ -400,11 +430,12 @@ $listadoCerrado = ((string) ($actividad['status'] ?? '')) === 'Cerrado';
                 <img src="/assets/img/logoAntioquia.png" alt="Gobernación de Antioquia">
                 <img src="/assets/img/logoHomo.png" alt="HOMO">
             </div>
-            <p class="attendance-public-kicker">Equipo de Promoción y Prevención</p>
-            <h1 class="attendance-public-title">Registro de Asistencia</h1>
-            <p class="attendance-public-subtitle">
-                <?= htmlspecialchars((string) $tituloListado, ENT_QUOTES, 'UTF-8') ?> · diligenciamiento individual de asistentes.
-            </p>
+            <p class="fipc-proceso-line"><?= htmlspecialchars((string) $fipc['proceso'], ENT_QUOTES, 'UTF-8') ?></p>
+            <h1 class="attendance-public-title"><?= htmlspecialchars((string) $fipc['titulo'], ENT_QUOTES, 'UTF-8') ?></h1>
+            <p class="attendance-public-subtitle">Diligenciamiento individual de asistentes a este listado.</p>
+            <div class="fipc-contract-banner">
+                Contrato No. <?= htmlspecialchars((string) $fipc['contrato'], ENT_QUOTES, 'UTF-8') ?>
+            </div>
         </div>
 
         <div class="attendance-public-divider"></div>
@@ -519,15 +550,45 @@ $listadoCerrado = ((string) ($actividad['status'] ?? '')) === 'Cerrado';
                             <span class="attendance-mini-label">Sexo</span>
                             <select name="sex" id="sex" class="form-select">
                                 <option value="">Seleccione...</option>
-                                <option value="Masculino">Masculino</option>
-                                <option value="Femenino">Femenino</option>
-                                <option value="No binario">No binario</option>
-                                <option value="Transgénero, transexual o travesti">Transgénero, transexual o travesti</option>
+                                <option value="Hombre">Hombre</option>
+                                <option value="Mujer">Mujer</option>
+                                <option value="Intersexual">Intersexual</option>
                             </select>
                         </div>
                         <div class="attendance-mini-card">
                             <span class="attendance-mini-label">Edad</span>
                             <input type="number" name="age" id="age" class="form-control" min="1" max="120" placeholder="Años">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="genero_identidad" class="form-label">Identidad de género</label>
+                            <select name="genero_identidad" id="genero_identidad" class="form-select">
+                                <option value="">Seleccione...</option>
+                                <option value="Cisgenero">Cisgenero</option>
+                                <option value="Transgenero">Transgenero</option>
+                                <option value="Otra">Otra</option>
+                            </select>
+                            <div id="genero_identidad_otro_wrap" class="mt-2 d-none">
+                                <label for="genero_identidad_otro" class="form-label small">Especifique identidad</label>
+                                <input type="text" name="genero_identidad_otro" id="genero_identidad_otro" class="form-control" maxlength="150" placeholder="Cuál identidad describe mejor su caso" autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="orientacion_sexual" class="form-label">Orientación sexual</label>
+                            <select name="orientacion_sexual" id="orientacion_sexual" class="form-select">
+                                <option value="">Seleccione...</option>
+                                <option value="Lesbiana">Lesbiana</option>
+                                <option value="Gay">Gay</option>
+                                <option value="Bisexual">Bisexual</option>
+                                <option value="Heterosexual">Heterosexual</option>
+                                <option value="Otra">Otra</option>
+                            </select>
+                            <div id="orientacion_sexual_otro_wrap" class="mt-2 d-none">
+                                <label for="orientacion_sexual_otro" class="form-label small">Especifique orientación</label>
+                                <input type="text" name="orientacion_sexual_otro" id="orientacion_sexual_otro" class="form-control" maxlength="150" placeholder="Cuál orientación corresponde" autocomplete="off">
+                            </div>
                         </div>
                     </div>
 
@@ -565,10 +626,6 @@ $listadoCerrado = ((string) ($actividad['status'] ?? '')) === 'Cerrado';
                                         <input class="form-check-input" type="checkbox" name="grupo_poblacional[]" id="gp_comunidad" value="Considera que la comunidad donde vive es campesina">
                                         <label class="form-check-label" for="gp_comunidad">Considera que la comunidad donde vive es campesina</label>
                                     </div>
-                                    <div class="attendance-check-card form-check">
-                                        <input class="form-check-input" type="checkbox" name="grupo_poblacional[]" id="gp_ninguno" value="Ninguno">
-                                        <label class="form-check-label" for="gp_ninguno">Ninguno</label>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -603,15 +660,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (id('email')) id('email').value = data.email || '';
                 if (id('zone')) id('zone').value = data.zone || '';
                 if (id('sex')) id('sex').value = data.sex || '';
+                if (id('genero_identidad')) id('genero_identidad').value = data.genero_identidad || '';
+                if (id('genero_identidad_otro')) id('genero_identidad_otro').value = data.genero_identidad_otro || '';
+                if (id('orientacion_sexual')) id('orientacion_sexual').value = data.orientacion_sexual || '';
+                if (id('orientacion_sexual_otro')) id('orientacion_sexual_otro').value = data.orientacion_sexual_otro || '';
                 if (id('age')) id('age').value = data.age !== null && data.age !== '' ? data.age : '';
                 if (id('etnia')) id('etnia').value = data.etnia || '';
                 if (id('etnia_otro')) id('etnia_otro').value = data.etnia_otro || '';
                 var g = data.grupo_poblacional || [];
-                ['gp_discapacidad','gp_victima','gp_campesino','gp_comunidad','gp_ninguno'].forEach(function(idStr, idx) {
-                    var vals = ['Con discapacidad','Víctima del conflicto armado','Se considera campesino','Considera que la comunidad donde vive es campesina','Ninguno'];
+                ['gp_discapacidad','gp_victima','gp_campesino','gp_comunidad'].forEach(function(idStr, idx) {
+                    var vals = ['Con discapacidad','Víctima del conflicto armado','Se considera campesino','Considera que la comunidad donde vive es campesina'];
                     var cb = document.getElementById(idStr);
                     if (cb) cb.checked = g.indexOf(vals[idx]) !== -1;
                 });
+                if (typeof window.syncGeneroIdentidadOtro === 'function') window.syncGeneroIdentidadOtro();
+                if (typeof window.syncOrientacionOtro === 'function') window.syncOrientacionOtro();
             });
     }
     if (btnBuscar) btnBuscar.addEventListener('click', buscarDocumento);
@@ -625,6 +688,30 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         etniaSelect.addEventListener('change', syncEtniaOtro);
         syncEtniaOtro();
+    }
+
+    var genSel = document.getElementById('genero_identidad');
+    var genOtroWrap = document.getElementById('genero_identidad_otro_wrap');
+    window.syncGeneroIdentidadOtro = function () {
+        if (genSel && genOtroWrap) {
+            genOtroWrap.classList.toggle('d-none', genSel.value !== 'Otra');
+        }
+    };
+    if (genSel && genOtroWrap) {
+        genSel.addEventListener('change', window.syncGeneroIdentidadOtro);
+        window.syncGeneroIdentidadOtro();
+    }
+
+    var oriSel = document.getElementById('orientacion_sexual');
+    var oriOtroWrap = document.getElementById('orientacion_sexual_otro_wrap');
+    window.syncOrientacionOtro = function () {
+        if (oriSel && oriOtroWrap) {
+            oriOtroWrap.classList.toggle('d-none', oriSel.value !== 'Otra');
+        }
+    };
+    if (oriSel && oriOtroWrap) {
+        oriSel.addEventListener('change', window.syncOrientacionOtro);
+        window.syncOrientacionOtro();
     }
 });
 </script>
