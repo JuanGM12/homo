@@ -3,10 +3,12 @@
 /** @var array<int, array<string, mixed>> $answerRows */
 /** @var array $tests */
 /** @var bool $canDeleteResponse */
+/** @var bool $canConvertPostToPre */
 
 use App\Services\EvaluacionesQuestionCatalog;
 
 $canDeleteResponse = (bool) ($canDeleteResponse ?? false);
+$canConvertPostToPre = (bool) ($canConvertPostToPre ?? false);
 
 $testKey    = (string) ($response['test_key'] ?? '');
 $phase      = (string) ($response['phase'] ?? '');
@@ -38,20 +40,40 @@ $scoreColor = $scorePct >= 70 ? 'var(--app-primary-deep)' : ($scorePct >= 50 ? '
             <a href="/evaluaciones" class="asi-show-back-link">
                 <i class="bi bi-arrow-left me-1"></i> Volver al listado
             </a>
-            <?php if ($canDeleteResponse): ?>
-                <form
-                    method="post"
-                    action="/evaluaciones/eliminar"
-                    class="d-inline"
-                    data-sw-confirm="1"
-                    data-sw-title="Eliminar respuesta del test"
-                    data-sw-text="¿Eliminar de forma permanente esta respuesta y todas las respuestas por pregunta asociadas? Esta acción no se puede deshacer."
-                >
-                    <input type="hidden" name="id" value="<?= (int) ($response['id'] ?? 0) ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-trash me-1"></i>Eliminar registro
-                    </button>
-                </form>
+            <?php if ($canConvertPostToPre || $canDeleteResponse): ?>
+                <div class="d-flex flex-wrap gap-2 justify-content-end">
+                    <?php if ($canConvertPostToPre): ?>
+                        <form
+                            method="post"
+                            action="/evaluaciones/reclasificar-pre"
+                            class="d-inline"
+                            data-sw-confirm="1"
+                            data-sw-title="Cambiar a PRE - TEST"
+                            data-sw-text="¿Convertir este POST - TEST en PRE - TEST? Se recalculará el puntaje con la clave del PRE. La persona podrá diligenciar el POST después."
+                            data-sw-confirm-text="Sí, cambiar a PRE"
+                        >
+                            <input type="hidden" name="id" value="<?= (int) ($response['id'] ?? 0) ?>">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-arrow-repeat me-1"></i>Cambiar a PRE - TEST
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                    <?php if ($canDeleteResponse): ?>
+                        <form
+                            method="post"
+                            action="/evaluaciones/eliminar"
+                            class="d-inline"
+                            data-sw-confirm="1"
+                            data-sw-title="Eliminar respuesta del test"
+                            data-sw-text="¿Eliminar de forma permanente esta respuesta y todas las respuestas por pregunta asociadas? Esta acción no se puede deshacer."
+                        >
+                            <input type="hidden" name="id" value="<?= (int) ($response['id'] ?? 0) ?>">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash me-1"></i>Eliminar registro
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
         </div>
     </div>

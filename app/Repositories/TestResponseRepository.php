@@ -116,7 +116,7 @@ final class TestResponseRepository
     {
         $pdo = Connection::getPdo();
         $stmt = $pdo->prepare(
-            'SELECT question_number, selected_option, is_correct
+            'SELECT id, question_number, selected_option, is_correct
              FROM test_response_answers
              WHERE response_id = :response_id
              ORDER BY question_number ASC'
@@ -259,6 +259,63 @@ final class TestResponseRepository
 
             $pdo->commit();
         } catch (PDOException $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Reclasifica un POST como PRE (misma persona y temática).
+     *
+     * @param list<array{id: int, is_correct: int}> $answerUpdates
+     */
+    public function convertPostToPre(int $responseId, int $correctAnswers, float $scorePercent, array $answerUpdates): void
+    {
+        $pdo = Connection::getPdo();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare(
+                'UPDATE test_responses
+                 SET phase = :phase,
+                     correct_answers = :correct_answers,
+                     score_percent = :score_percent,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND phase = :expected_phase'
+            );
+            $stmt->execute([
+                ':phase' => 'pre',
+                ':correct_answers' => $correctAnswers,
+                ':score_percent' => $scorePercent,
+                ':id' => $responseId,
+                ':expected_phase' => 'post',
+            ]);
+
+            if ($stmt->rowCount() === 0) {
+                throw new \RuntimeException('No se pudo reclasificar el registro (ya no es POST o no existe).');
+            }
+
+            if ($answerUpdates !== []) {
+                $stmtAnswer = $pdo->prepare(
+                    'UPDATE test_response_answers
+                     SET is_correct = :is_correct
+                     WHERE id = :id AND response_id = :response_id'
+                );
+
+                foreach ($answerUpdates as $update) {
+                    $stmtAnswer->execute([
+                        ':is_correct' => (int) ($update['is_correct'] ?? 0),
+                        ':id' => (int) ($update['id'] ?? 0),
+                        ':response_id' => $responseId,
+                    ]);
+                }
+            }
+
+            $pdo->commit();
+        } catch (PDOException $e) {
+            $pdo->rollBack();
+            throw $e;
+        } catch (\RuntimeException $e) {
             $pdo->rollBack();
             throw $e;
         }

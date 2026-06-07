@@ -32,6 +32,7 @@ final class App
         $this->router->get('/evaluaciones', [\App\Controllers\EvaluacionesController::class, 'index']);
         $this->router->get('/evaluaciones/detalle', [\App\Controllers\EvaluacionesController::class, 'showDetail'])->middleware('auth');
         $this->router->post('/evaluaciones/eliminar', [\App\Controllers\EvaluacionesController::class, 'destroyResponse'])->middleware('auth', 'role:admin');
+        $this->router->post('/evaluaciones/reclasificar-pre', [\App\Controllers\EvaluacionesController::class, 'convertPostToPre'])->middleware('auth', 'role:admin');
         $this->router->get('/evaluaciones/exportar-csv', [\App\Controllers\EvaluacionesController::class, 'exportCsv'])->middleware('auth');
         $this->router->get('/evaluaciones/exportar-pdf', [\App\Controllers\EvaluacionesController::class, 'exportPdf'])->middleware('auth');
 

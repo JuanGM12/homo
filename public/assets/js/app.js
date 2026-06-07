@@ -2888,12 +2888,13 @@ document.addEventListener(
         }
         const title = form.getAttribute('data-sw-title') || 'Confirmar acción';
         const text = form.getAttribute('data-sw-text') || '';
+        const confirmText = form.getAttribute('data-sw-confirm-text') || 'Sí, eliminar';
         Swal.fire({
             icon: 'warning',
             title,
             text,
             showCancelButton: true,
-            confirmButtonText: 'Sí, eliminar',
+            confirmButtonText: confirmText,
             cancelButtonText: 'Cancelar',
             focusCancel: true,
             reverseButtons: true,

@@ -19,6 +19,9 @@ use Dompdf\Options;
 
 final class EvaluacionesController
 {
+    /** Temáticas donde PRE y POST comparten enunciados (admite reclasificar POST → PRE). */
+    private const CONVERTIBLE_POST_TO_PRE_TEST_KEYS = ['violencias', 'suicidios', 'adicciones'];
+
     /** Máximo de filas en la tabla detalle del PDF (mPDF escala mejor; el resumen por municipio usa todos los datos filtrados). */
     private const PDF_EVAL_DETAIL_MAX_ROWS = 750;
 
@@ -313,6 +316,71 @@ final class EvaluacionesController
     }
 
     /**
+     * Indica si un registro POST puede reclasificarse como PRE (admin).
+     * Hospitales quedan excluidos: PRE y POST tienen enunciados distintos.
+     */
+    public static function mayConvertPostToPre(array $response, TestResponseRepository $repo): bool
+    {
+        $testKey = (string) ($response['test_key'] ?? '');
+        $phase = strtolower((string) ($response['phase'] ?? ''));
+        if ($phase !== 'post' || !in_array($testKey, self::CONVERTIBLE_POST_TO_PRE_TEST_KEYS, true)) {
+            return false;
+        }
+
+        $documentNumber = trim((string) ($response['document_number'] ?? ''));
+        if ($documentNumber === '') {
+            return false;
+        }
+
+        return !$repo->existsForPerson($testKey, 'pre', $documentNumber);
+    }
+
+    /**
+     * Recalcula puntaje e is_correct usando la clave del PRE (mismas preguntas en violencias, suicidios y adicciones).
+     *
+     * @param array<int, array<string, mixed>> $answers
+     * @return array{
+     *     correct_answers: int,
+     *     score_percent: float,
+     *     answer_updates: list<array{id: int, is_correct: int}>
+     * }
+     */
+    private static function recalculatePreScoresFromAnswers(string $testKey, array $answers, int $totalQuestions): array
+    {
+        $correctCount = 0;
+        $answerUpdates = [];
+
+        foreach ($answers as $answer) {
+            $answerId = (int) ($answer['id'] ?? 0);
+            if ($answerId <= 0) {
+                continue;
+            }
+
+            $questionNumber = (int) ($answer['question_number'] ?? 0);
+            $selected = strtoupper((string) ($answer['selected_option'] ?? ''));
+            $correctLetter = self::correctLetterForQuestion($testKey, 'pre', $questionNumber);
+            $isCorrect = $correctLetter !== null && $selected === strtoupper((string) $correctLetter);
+            if ($isCorrect) {
+                ++$correctCount;
+            }
+
+            $answerUpdates[] = [
+                'id' => $answerId,
+                'is_correct' => $isCorrect ? 1 : 0,
+            ];
+        }
+
+        $total = $totalQuestions > 0 ? $totalQuestions : count($answerUpdates);
+        $scorePercent = $total > 0 ? round((float) ($correctCount / $total) * 100, 2) : 0.0;
+
+        return [
+            'correct_answers' => $correctCount,
+            'score_percent' => $scorePercent,
+            'answer_updates' => $answerUpdates,
+        ];
+    }
+
+    /**
      * Detalle de respuestas de un intento (PRE o POST) para seguimiento / errores.
      */
     public function showDetail(Request $request): Response
@@ -381,7 +449,114 @@ final class EvaluacionesController
             'answerRows' => $answerRows,
             'tests' => $tests,
             'canDeleteResponse' => Auth::isAdmin($user),
+            'canConvertPostToPre' => Auth::isAdmin($user) && self::mayConvertPostToPre($response, $repo),
         ]);
+    }
+
+    /**
+     * Admin: reclasifica un POST como PRE (violencias, suicidios, adicciones).
+     */
+    public function convertPostToPre(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        if (!Auth::isAdmin($user)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Solicitud no válida',
+                'message' => 'Indica un registro de evaluación válido.',
+            ]);
+
+            return Response::redirect('/evaluaciones');
+        }
+
+        $repo = new TestResponseRepository();
+        $response = $repo->findById($id);
+        if ($response === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'El registro de evaluación no existe.',
+            ]);
+
+            return Response::redirect('/evaluaciones');
+        }
+
+        $testKey = (string) ($response['test_key'] ?? '');
+        if (!self::userMayAccessTestKey($user, $testKey)) {
+            return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
+        }
+
+        if (!self::mayConvertPostToPre($response, $repo)) {
+            $phase = strtolower((string) ($response['phase'] ?? ''));
+            if ($phase !== 'post') {
+                $message = 'Solo se puede reclasificar un registro que actualmente sea POST - TEST.';
+            } elseif ($testKey === 'hospitales') {
+                $message = 'En Hospitales el PRE y el POST tienen preguntas distintas; no se puede reclasificar.';
+            } elseif ($repo->existsForPerson($testKey, 'pre', trim((string) ($response['document_number'] ?? '')))) {
+                $message = 'Ya existe un PRE - TEST para esta persona en la misma temática.';
+            } else {
+                $message = 'Este registro no puede reclasificarse como PRE - TEST.';
+            }
+
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No se puede reclasificar',
+                'message' => $message,
+            ]);
+
+            return Response::redirect('/evaluaciones/detalle?id=' . $id);
+        }
+
+        $answers = $repo->findAnswersByResponseId($id);
+        if ($answers === []) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Sin respuestas',
+                'message' => 'El registro no tiene respuestas guardadas; no se puede reclasificar.',
+            ]);
+
+            return Response::redirect('/evaluaciones/detalle?id=' . $id);
+        }
+
+        $totalQuestions = (int) ($response['total_questions'] ?? 0);
+        if ($totalQuestions <= 0) {
+            $totalQuestions = count($answers);
+        }
+
+        $recalculated = self::recalculatePreScoresFromAnswers($testKey, $answers, $totalQuestions);
+
+        try {
+            $repo->convertPostToPre(
+                $id,
+                $recalculated['correct_answers'],
+                $recalculated['score_percent'],
+                $recalculated['answer_updates']
+            );
+        } catch (\Throwable $e) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Error al reclasificar',
+                'message' => 'No fue posible cambiar el registro a PRE - TEST. Verifica que no exista otro PRE para la misma persona.',
+            ]);
+
+            return Response::redirect('/evaluaciones/detalle?id=' . $id);
+        }
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Registro reclasificado',
+            'message' => 'El POST - TEST se registró ahora como PRE - TEST. La persona podrá diligenciar el POST cuando corresponda.',
+        ]);
+
+        return Response::redirect('/evaluaciones/detalle?id=' . $id);
     }
 
     public function destroyResponse(Request $request): Response
