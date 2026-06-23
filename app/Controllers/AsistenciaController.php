@@ -8,6 +8,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\AsistenciaRepository;
 use App\Repositories\UserRepository;
+use App\Services\AsistenciaInformeService;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
@@ -242,6 +243,8 @@ final class AsistenciaController
             'filters'    => $filters,
             'activeTab'  => $activeTab,
             'canFilterAdvisor' => count($advisors) > 1,
+            'canConfigureInformeScope' => $this->userCanViewAllAsistencia($user),
+            'informeRoles' => self::informeRoleOptions(),
         ]);
     }
 
@@ -1163,6 +1166,127 @@ final class AsistenciaController
 
         return new Response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
+    public function exportInformeGestion(Request $request): Response
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return Response::redirect('/login');
+        }
+
+        $subregion = trim((string) $request->input('subregion', ''));
+        $municipalities = MunicipalityListRequest::parse($request);
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+
+        if ($subregion === '' || count($municipalities) !== 1 || $fromDate === '' || $toDate === '') {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Datos incompletos',
+                'message' => 'Para el informe de gestión debes elegir subregión, un solo municipio y el rango de fechas (desde y hasta).',
+            ]);
+
+            return Response::redirect('/asistencia');
+        }
+
+        if ($fromDate > $toDate) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Fechas no válidas',
+                'message' => 'La fecha inicial no puede ser posterior a la fecha final.',
+            ]);
+
+            return Response::redirect('/asistencia');
+        }
+
+        $municipality = $municipalities[0];
+        $informeModo = strtolower(trim((string) $request->input('informe_modo', 'propio')));
+        $isConsolidadoAdmin = false;
+
+        $filters = [
+            'subregion' => $subregion,
+            'municipality' => $municipality,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+        ];
+
+        if ($this->userCanViewAllAsistencia($user)) {
+            if ($informeModo === 'consolidado') {
+                $isConsolidadoAdmin = true;
+            } elseif ($informeModo === 'rol') {
+                $rolFiltro = strtolower(trim((string) $request->input('informe_rol', '')));
+                $allowedRoles = array_keys(self::informeRoleOptions());
+                if (!in_array($rolFiltro, $allowedRoles, true)) {
+                    Flash::set([
+                        'type' => 'error',
+                        'title' => 'Rol no válido',
+                        'message' => 'Selecciona un rol profesional para el informe.',
+                    ]);
+
+                    return Response::redirect('/asistencia');
+                }
+                $advisorIds = $this->advisorIdsByRole($rolFiltro);
+                $filters['advisor_user_ids'] = $advisorIds === [] ? [0] : $advisorIds;
+            } elseif ($informeModo === 'asesor') {
+                $advisorId = (int) $request->input('informe_advisor_user_id', 0);
+                if ($advisorId <= 0 || !$this->advisorIsVisibleForUser($user, $advisorId)) {
+                    Flash::set([
+                        'type' => 'error',
+                        'title' => 'Asesor no válido',
+                        'message' => 'Selecciona un asesor válido para generar el informe.',
+                    ]);
+
+                    return Response::redirect('/asistencia');
+                }
+                $filters['advisor_user_id'] = $advisorId;
+            } else {
+                $isConsolidadoAdmin = true;
+            }
+        } elseif ($this->userIsEspecialista($user)) {
+            $advisors = $this->visibleAdvisorsForUser($user);
+            $allowedAdvisorIds = array_map(static fn (array $advisor): int => (int) ($advisor['id'] ?? 0), $advisors);
+            $filters['advisor_user_ids'] = $allowedAdvisorIds === [] ? [0] : $allowedAdvisorIds;
+        } else {
+            $filters['advisor_user_id'] = (int) $user['id'];
+        }
+
+        $activities = $this->repo->findActivitiesForInforme($filters);
+        $service = new AsistenciaInformeService($this->repo);
+
+        try {
+            $content = $service->buildDocx(
+                $activities,
+                $user,
+                $subregion,
+                $municipality,
+                $fromDate,
+                $toDate,
+                $isConsolidadoAdmin
+            );
+        } catch (\Throwable) {
+            $content = '';
+        }
+
+        if ($content === '') {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Exportación',
+                'message' => 'No se pudo generar el informe de gestión en Word.',
+            ]);
+
+            return Response::redirect('/asistencia');
+        }
+
+        $safeMun = preg_replace('/[^a-zA-Z0-9_-]+/', '_', $municipality) ?: 'municipio';
+        $filename = 'informe_gestion_' . $safeMun . '_' . date('Ymd_His') . '.docx';
+
+        return new Response($content, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Cache-Control' => 'no-store, no-cache, must-revalidate',
             'Pragma' => 'no-cache',
@@ -2231,5 +2355,39 @@ final class AsistenciaController
             . '<div class="pdf-x-strip">Señale con una X la condición que cumpla</div>'
             . '<table class="t-as">' . $thead . '<tbody>' . $tbody . '</tbody></table></div></div>'
             . '</body></html>';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function informeRoleOptions(): array
+    {
+        return [
+            'psicologo' => 'Psicólogo',
+            'medico' => 'Médico',
+            'abogado' => 'Abogado',
+            'trabajador_social' => 'Profesional social',
+        ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function advisorIdsByRole(string $roleKey): array
+    {
+        $roleKey = strtolower(trim($roleKey));
+        $ids = [];
+        foreach ($this->userRepo->findNonAdminAdvisors() as $advisor) {
+            $advisorId = (int) ($advisor['id'] ?? 0);
+            if ($advisorId <= 0) {
+                continue;
+            }
+            $advisorUser = $this->userRepo->find($advisorId);
+            if ($advisorUser !== null && $this->resolveActividadRoleFromUser($advisorUser) === $roleKey) {
+                $ids[] = $advisorId;
+            }
+        }
+
+        return $ids;
     }
 }

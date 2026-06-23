@@ -135,6 +135,11 @@ final class AsistenciaRepository
             $params[':to_date'] = $filters['to_date'];
         }
 
+        if (!empty($filters['exclude_status'])) {
+            $where[] = 'status <> :exclude_status';
+            $params[':exclude_status'] = (string) $filters['exclude_status'];
+        }
+
         $sql = 'SELECT * FROM asistencia_actividades';
         if ($where !== []) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
@@ -146,6 +151,76 @@ final class AsistenciaRepository
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return array_map([$this, 'decodeActividadTipos'], $rows);
+    }
+
+    /**
+     * Actividades para informe de gestión (excluye listados Pendiente).
+     *
+     * @param array<string, mixed> $filters
+     * @return list<array<string, mixed>>
+     */
+    public function findActivitiesForInforme(array $filters): array
+    {
+        $filters['exclude_status'] = 'Pendiente';
+
+        return $this->findWithFilters($filters);
+    }
+
+    /**
+     * Agrega asistentes de varias actividades: personas únicas y conteo por cargo.
+     *
+     * @param list<int> $actividadIds
+     * @return array{unique_persons: int, by_cargo: array<string, int>}
+     */
+    public function aggregateAsistentesForActivities(array $actividadIds): array
+    {
+        $actividadIds = array_values(array_filter(
+            array_map(static fn (mixed $id): int => (int) $id, $actividadIds),
+            static fn (int $id): bool => $id > 0
+        ));
+
+        if ($actividadIds === []) {
+            return ['unique_persons' => 0, 'by_cargo' => []];
+        }
+
+        $pdo = Connection::getPdo();
+        $placeholders = [];
+        $params = [];
+        foreach ($actividadIds as $i => $id) {
+            $ph = ':aid_' . $i;
+            $placeholders[] = $ph;
+            $params[$ph] = $id;
+        }
+
+        $sql = 'SELECT document_number, cargo
+                FROM asistencia_asistentes
+                WHERE actividad_id IN (' . implode(', ', $placeholders) . ')
+                ORDER BY registered_at DESC, id DESC';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $uniqueDocs = [];
+        $byCargo = [];
+        foreach ($rows as $row) {
+            $doc = trim((string) ($row['document_number'] ?? ''));
+            if ($doc !== '') {
+                $uniqueDocs[$doc] = true;
+            }
+            $cargo = trim((string) ($row['cargo'] ?? ''));
+            if ($cargo === '') {
+                $cargo = 'Sin cargo';
+            }
+            $byCargo[$cargo] = ($byCargo[$cargo] ?? 0) + 1;
+        }
+
+        arsort($byCargo);
+
+        return [
+            'unique_persons' => count($uniqueDocs),
+            'by_cargo' => $byCargo,
+        ];
     }
 
     public function countAsistentesByActividad(int $actividadId): int

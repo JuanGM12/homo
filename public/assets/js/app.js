@@ -619,6 +619,92 @@
         });
     });
 
+    const asiInformeForm = document.getElementById('asi-filter-form');
+    const asiInformeModo = document.querySelector('[data-asi-informe-modo]');
+    const asiInformeRolWrap = document.querySelector('[data-asi-informe-rol-wrap]');
+    const asiInformeAsesorWrap = document.querySelector('[data-asi-informe-asesor-wrap]');
+
+    const syncAsiInformeAdminFields = () => {
+        if (!asiInformeModo) {
+            return;
+        }
+        const modo = asiInformeModo.value;
+        if (asiInformeRolWrap) {
+            asiInformeRolWrap.classList.toggle('d-none', modo !== 'rol');
+        }
+        if (asiInformeAsesorWrap) {
+            asiInformeAsesorWrap.classList.toggle('d-none', modo !== 'asesor');
+        }
+    };
+
+    if (asiInformeModo) {
+        asiInformeModo.addEventListener('change', syncAsiInformeAdminFields);
+        syncAsiInformeAdminFields();
+    }
+
+    document.querySelectorAll('[data-asi-export-informe]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            if (!asiInformeForm) {
+                return;
+            }
+            const subregion = (asiInformeForm.querySelector('[name="subregion"]')?.value || '').trim();
+            const municipalitySelect = asiInformeForm.querySelector('[name="municipality[]"]');
+            const selectedMunicipalities = municipalitySelect
+                ? Array.from(municipalitySelect.selectedOptions).map((o) => o.value.trim()).filter(Boolean)
+                : [];
+            const fromDate = (asiInformeForm.querySelector('[name="from_date"]')?.value || '').trim();
+            const toDate = (asiInformeForm.querySelector('[name="to_date"]')?.value || '').trim();
+
+            if (!subregion || selectedMunicipalities.length !== 1 || !fromDate || !toDate) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Filtros requeridos',
+                    text: 'Selecciona subregión, un solo municipio y el rango de fechas (desde y hasta) para generar el informe.',
+                });
+                return;
+            }
+
+            const params = new URLSearchParams();
+            params.set('subregion', subregion);
+            params.set('municipality[]', selectedMunicipalities[0]);
+            params.set('from_date', fromDate);
+            params.set('to_date', toDate);
+
+            if (asiInformeModo) {
+                params.set('informe_modo', asiInformeModo.value);
+                if (asiInformeModo.value === 'rol') {
+                    const rol = (asiInformeForm.querySelector('[name="informe_rol"]')?.value || '').trim();
+                    if (!rol) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Rol requerido',
+                            text: 'Selecciona el rol profesional para el informe.',
+                        });
+                        return;
+                    }
+                    params.set('informe_rol', rol);
+                }
+                if (asiInformeModo.value === 'asesor') {
+                    const advisorId = (asiInformeForm.querySelector('[name="informe_advisor_user_id"]')?.value || '').trim();
+                    if (!advisorId) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Asesor requerido',
+                            text: 'Selecciona el asesor para el informe.',
+                        });
+                        return;
+                    }
+                    params.set('informe_advisor_user_id', advisorId);
+                }
+            } else {
+                params.set('informe_modo', 'propio');
+            }
+
+            const base = btn.getAttribute('data-export-base') || '/asistencia/exportar-informe';
+            window.location.href = `${base}?${params.toString()}`;
+        });
+    });
+
     // Validación en POST: exigir PRE existente por documento
     const postForms = document.querySelectorAll('form[data-phase="post"][data-test-key]');
 
