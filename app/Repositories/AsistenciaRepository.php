@@ -98,7 +98,7 @@ final class AsistenciaRepository
                 $placeholders[] = $ph;
                 $params[$ph] = $mun;
             }
-            $where[] = 'municipality IN (' . implode(', ', $placeholders) . ')';
+            $where[] = 'TRIM(municipality) IN (' . implode(', ', $placeholders) . ')';
         }
         if (!empty($filters['advisor_user_id'])) {
             $where[] = 'advisor_user_id = :advisor_user_id';
@@ -154,23 +154,39 @@ final class AsistenciaRepository
     }
 
     /**
-     * Actividades para informe de gestión (excluye listados Pendiente).
+     * Actividades para informe: Activo/Cerrado; Pendiente solo si tiene asistentes.
      *
      * @param array<string, mixed> $filters
      * @return list<array<string, mixed>>
      */
     public function findActivitiesForInforme(array $filters): array
     {
-        $filters['exclude_status'] = 'Pendiente';
+        unset($filters['exclude_status']);
+        $explicitStatus = trim((string) ($filters['status'] ?? ''));
 
-        return $this->findWithFilters($filters);
+        $rows = $this->findWithFilters($filters);
+        if ($explicitStatus !== '') {
+            return $rows;
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $status = (string) ($row['status'] ?? '');
+            if ($status !== 'Pendiente') {
+                $result[] = $row;
+                continue;
+            }
+            if ($this->countAsistentesByActividad((int) ($row['id'] ?? 0)) > 0) {
+                $result[] = $row;
+            }
+        }
+
+        return $result;
     }
 
     /**
-     * Agrega asistentes de varias actividades: personas únicas y conteo por cargo.
-     *
      * @param list<int> $actividadIds
-     * @return array{unique_persons: int, by_cargo: array<string, int>}
+     * @return array{unique_persons: int, total_registros: int, by_cargo: array<string, int>}
      */
     public function aggregateAsistentesForActivities(array $actividadIds): array
     {
@@ -180,7 +196,7 @@ final class AsistenciaRepository
         ));
 
         if ($actividadIds === []) {
-            return ['unique_persons' => 0, 'by_cargo' => []];
+            return ['unique_persons' => 0, 'total_registros' => 0, 'by_cargo' => []];
         }
 
         $pdo = Connection::getPdo();
@@ -219,6 +235,7 @@ final class AsistenciaRepository
 
         return [
             'unique_persons' => count($uniqueDocs),
+            'total_registros' => count($rows),
             'by_cargo' => $byCargo,
         ];
     }

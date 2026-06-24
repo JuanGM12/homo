@@ -642,66 +642,207 @@
         syncAsiInformeAdminFields();
     }
 
+    const buildAsiInformeParams = () => {
+        if (!asiInformeForm) {
+            return null;
+        }
+        const subregion = (asiInformeForm.querySelector('[name="subregion"]')?.value || '').trim();
+        const municipalitySelect = asiInformeForm.querySelector('[name="municipality[]"]');
+        const selectedMunicipalities = municipalitySelect
+            ? Array.from(municipalitySelect.selectedOptions).map((o) => o.value.trim()).filter(Boolean)
+            : [];
+        const fromDate = (asiInformeForm.querySelector('[name="from_date"]')?.value || '').trim();
+        const toDate = (asiInformeForm.querySelector('[name="to_date"]')?.value || '').trim();
+        const status = (asiInformeForm.querySelector('[name="status"]')?.value || '').trim();
+        const advisorUserId = (asiInformeForm.querySelector('[name="advisor_user_id"]')?.value || '').trim();
+        const tab = (asiInformeForm.querySelector('[name="tab"]')?.value || 'aoat').trim();
+
+        if (!subregion || selectedMunicipalities.length !== 1 || !fromDate || !toDate) {
+            return { error: 'Selecciona subregión, un solo municipio y el rango de fechas (desde y hasta) para generar el informe.' };
+        }
+
+        const params = new URLSearchParams();
+        params.set('subregion', subregion);
+        params.set('municipality[]', selectedMunicipalities[0]);
+        params.set('from_date', fromDate);
+        params.set('to_date', toDate);
+        if (status) {
+            params.set('status', status);
+        }
+        if (advisorUserId) {
+            params.set('advisor_user_id', advisorUserId);
+        }
+        if (tab) {
+            params.set('tab', tab);
+        }
+
+        if (asiInformeModo) {
+            params.set('informe_modo', asiInformeModo.value);
+            if (asiInformeModo.value === 'rol') {
+                const rol = (asiInformeForm.querySelector('[name="informe_rol"]')?.value || '').trim();
+                if (!rol) {
+                    return { error: 'Selecciona el rol profesional para el informe.', errorTitle: 'Rol requerido' };
+                }
+                params.set('informe_rol', rol);
+            }
+            if (asiInformeModo.value === 'asesor') {
+                const advisorId = (asiInformeForm.querySelector('[name="informe_advisor_user_id"]')?.value || '').trim();
+                if (!advisorId) {
+                    return { error: 'Selecciona el asesor para el informe.', errorTitle: 'Asesor requerido' };
+                }
+                params.set('informe_advisor_user_id', advisorId);
+            }
+        } else {
+            params.set('informe_modo', 'propio');
+        }
+
+        return { params };
+    };
+
+    const asiEscapeHtml = (value) => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const formatAsiEstadoPill = (estado) => {
+        const e = String(estado || '');
+        const cls = e === 'Activo' ? 'is-active' : e === 'Cerrado' ? 'is-closed' : 'is-pending';
+        return `<span class="asi-status-pill ${cls}">${asiEscapeHtml(e || '—')}</span>`;
+    };
+
+    const formatAsiTipoPill = (tipo) => {
+        const t = String(tipo || '').toLowerCase();
+        const isActividad = t === 'actividad';
+        return `<span class="asi-informe-tipo ${isActividad ? 'is-actividad' : 'is-aoat'}">${asiEscapeHtml(isActividad ? 'Actividad' : 'AoAT')}</span>`;
+    };
+
+    const buildAsiInformePreviewHtml = (data) => {
+        const filtros = data.filtros_aplicados || {};
+        const totales = data.totales || {};
+        const tabActiva = data.tab_activa === 'actividad' ? 'Actividades' : 'AoAT';
+        const actividades = Array.isArray(data.actividades) ? data.actividades : [];
+        const maxRows = 20;
+
+        const filterChips = [
+            ['Municipio', filtros.municipio],
+            ['Período', `${filtros.desde || ''} — ${filtros.hasta || ''}`],
+            ['Estado', filtros.estado],
+            ['Asesor', filtros.asesor],
+        ].filter(([, value]) => String(value || '').trim() !== '');
+
+        const filtersHtml = filterChips.map(([label, value]) => (
+            `<span class="asi-informe-filter-chip"><strong>${asiEscapeHtml(label)}:</strong> ${asiEscapeHtml(value)}</span>`
+        )).join('');
+
+        const statsHtml = [
+            { label: 'Listados AoAT', value: totales.listados_aoat ?? 0 },
+            { label: 'Listados Actividades', value: totales.listados_actividad ?? 0 },
+            { label: `Pestaña activa (${tabActiva})`, value: totales.listados_tab_activa ?? 0, highlight: true },
+            { label: 'Registros de asistencia', value: totales.registros_asistencia ?? 0 },
+            { label: 'Personas únicas', value: totales.personas_unicas ?? 0 },
+        ].map((stat) => (
+            `<div class="asi-informe-stat${stat.highlight ? ' is-highlight' : ''}">
+                <span class="asi-informe-stat-label">${asiEscapeHtml(stat.label)}</span>
+                <span class="asi-informe-stat-value">${asiEscapeHtml(stat.value)}</span>
+            </div>`
+        )).join('');
+
+        const actividadesHtml = actividades.slice(0, maxRows).map((row) => {
+            const tematica = String(row.tematica || '').trim();
+            const asistentes = Number(row.asistentes ?? 0);
+            return `<article class="asi-informe-act-item">
+                <div class="asi-informe-act-head">
+                    <code class="asi-informe-code" title="${asiEscapeHtml(row.code || '')}">${asiEscapeHtml(row.code || '—')}</code>
+                    <span class="asi-informe-date">${asiEscapeHtml(row.fecha || '')}</span>
+                    ${formatAsiTipoPill(row.tipo)}
+                    <span class="asi-informe-count">${asiEscapeHtml(asistentes)} asist.</span>
+                    ${formatAsiEstadoPill(row.estado)}
+                </div>
+                ${tematica !== '' ? `<p class="asi-informe-tematica">${asiEscapeHtml(tematica)}</p>` : ''}
+            </article>`;
+        }).join('');
+
+        const moreNote = actividades.length > maxRows
+            ? `<p class="asi-informe-more">… y ${actividades.length - maxRows} listados más en el informe.</p>`
+            : '';
+
+        return `<div class="asi-informe-preview">
+            <div class="asi-informe-filters">${filtersHtml}</div>
+            <div class="asi-informe-stats">${statsHtml}</div>
+            <p class="asi-informe-section-title">Actividades incluidas (${actividades.length})</p>
+            <div class="asi-informe-act-list">
+                ${actividadesHtml || '<div class="asi-informe-empty">Sin actividades en el alcance.</div>'}
+            </div>
+            ${moreNote}
+        </div>`;
+    };
+
     document.querySelectorAll('[data-asi-export-informe]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            if (!asiInformeForm) {
+        btn.addEventListener('click', async () => {
+            const built = buildAsiInformeParams();
+            if (!built) {
                 return;
             }
-            const subregion = (asiInformeForm.querySelector('[name="subregion"]')?.value || '').trim();
-            const municipalitySelect = asiInformeForm.querySelector('[name="municipality[]"]');
-            const selectedMunicipalities = municipalitySelect
-                ? Array.from(municipalitySelect.selectedOptions).map((o) => o.value.trim()).filter(Boolean)
-                : [];
-            const fromDate = (asiInformeForm.querySelector('[name="from_date"]')?.value || '').trim();
-            const toDate = (asiInformeForm.querySelector('[name="to_date"]')?.value || '').trim();
-
-            if (!subregion || selectedMunicipalities.length !== 1 || !fromDate || !toDate) {
+            if (built.error) {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'Filtros requeridos',
-                    text: 'Selecciona subregión, un solo municipio y el rango de fechas (desde y hasta) para generar el informe.',
+                    title: built.errorTitle || 'Filtros requeridos',
+                    text: built.error,
                 });
                 return;
             }
 
-            const params = new URLSearchParams();
-            params.set('subregion', subregion);
-            params.set('municipality[]', selectedMunicipalities[0]);
-            params.set('from_date', fromDate);
-            params.set('to_date', toDate);
+            const previewBase = btn.getAttribute('data-preview-base') || '/asistencia/informe-preview';
+            const exportBase = btn.getAttribute('data-export-base') || '/asistencia/exportar-informe';
+            const query = built.params.toString();
 
-            if (asiInformeModo) {
-                params.set('informe_modo', asiInformeModo.value);
-                if (asiInformeModo.value === 'rol') {
-                    const rol = (asiInformeForm.querySelector('[name="informe_rol"]')?.value || '').trim();
-                    if (!rol) {
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Rol requerido',
-                            text: 'Selecciona el rol profesional para el informe.',
-                        });
-                        return;
-                    }
-                    params.set('informe_rol', rol);
+            Swal.fire({
+                title: 'Cargando previsualización…',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+            });
+
+            let previewData;
+            try {
+                const response = await fetch(`${previewBase}?${query}`, {
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                });
+                previewData = await response.json();
+                if (!response.ok) {
+                    throw new Error(previewData.error || 'No se pudo cargar la previsualización.');
                 }
-                if (asiInformeModo.value === 'asesor') {
-                    const advisorId = (asiInformeForm.querySelector('[name="informe_advisor_user_id"]')?.value || '').trim();
-                    if (!advisorId) {
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Asesor requerido',
-                            text: 'Selecciona el asesor para el informe.',
-                        });
-                        return;
-                    }
-                    params.set('informe_advisor_user_id', advisorId);
-                }
-            } else {
-                params.set('informe_modo', 'propio');
+            } catch (err) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: err instanceof Error ? err.message : 'No se pudo cargar la previsualización.',
+                });
+                return;
             }
 
-            const base = btn.getAttribute('data-export-base') || '/asistencia/exportar-informe';
-            window.location.href = `${base}?${params.toString()}`;
+            const result = await Swal.fire({
+                icon: 'info',
+                title: 'Previsualización del informe',
+                html: buildAsiInformePreviewHtml(previewData),
+                width: '52rem',
+                showCancelButton: true,
+                confirmButtonText: 'Confirmar descarga',
+                cancelButtonText: 'Cancelar',
+                focusConfirm: false,
+                customClass: {
+                    popup: 'asi-informe-swal',
+                    htmlContainer: 'asi-informe-swal-html',
+                },
+            });
+
+            if (result.isConfirmed) {
+                window.location.href = `${exportBase}?${query}`;
+            }
         });
     });
 

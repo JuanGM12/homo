@@ -118,7 +118,7 @@ $xml = replaceParagraphContent(
 if (!str_contains($xml, '${FECHA_GENERACION}')) {
     $xml = str_replace(
         '<w:t>Elaborado por:</w:t>',
-        '<w:t>${FECHA_GENERACION}</w:t></w:r></w:p><w:p><w:r><w:t>${NOTA_PLATAFORMA}</w:t></w:r></w:p><w:p><w:r><w:t>Elaborado por:</w:t>',
+        '<w:t>${FECHA_GENERACION}</w:t></w:r></w:p><w:p><w:r><w:t>${DESGLOSE_METRICAS}</w:t></w:r></w:p><w:p><w:r><w:t>${NOTA_PLATAFORMA}</w:t></w:r></w:p><w:p><w:r><w:t>Elaborado por:</w:t>',
         $xml
     );
 }

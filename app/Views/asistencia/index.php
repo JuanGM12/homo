@@ -197,11 +197,21 @@ $asiMunicipalitiesJson = htmlspecialchars(json_encode($asiMunicipalities, JSON_U
                         class="btn btn-outline-primary btn-sm"
                         data-asi-export-informe
                         data-export-base="/asistencia/exportar-informe"
+                        data-preview-base="/asistencia/informe-preview"
                     >
                         <i class="bi bi-file-earmark-word me-1"></i>Informe de gestión (Word)
                     </button>
+                    <p class="small text-muted mb-0 w-100">
+                        El informe usa subregión, municipio, fechas y los filtros activos del listado (asesor, estado).
+                    </p>
                 </div>
             </form>
+            <div class="alert alert-light border small mb-0 mt-3 py-2 px-3">
+                <strong>TOTAL ASESORÍAS</strong> = cantidad de listados AoAT ·
+                <strong>TOTAL ASISTENCIAS TÉCNICAS</strong> = listados pestaña Actividades ·
+                <strong>Número de personas</strong> = documentos distintos (no es la suma de la columna Asistentes).
+                La previsualización muestra también la <strong>suma de registros de asistencia</strong> para cruzar con la columna Asistentes.
+            </div>
         </div>
     </div>
 

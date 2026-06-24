@@ -4216,3 +4216,202 @@ select.homo-muni-native.visually-hidden {
         overflow: hidden;
     }
 }
+
+/* Modal previsualización informe de gestión (SweetAlert) */
+.asi-informe-swal.swal2-popup {
+    width: min(52rem, 96vw);
+    padding: 1.25rem 1.35rem 1.1rem;
+}
+
+.asi-informe-swal .swal2-html-container {
+    margin: 0.75rem 0 0;
+    padding: 0;
+    overflow: visible;
+    max-height: none;
+}
+
+.asi-informe-preview {
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--bs-body-color, #333);
+}
+
+.asi-informe-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.55rem;
+    margin-bottom: 0.85rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.65rem;
+    background: rgba(65, 96, 164, 0.06);
+    border: 1px solid rgba(65, 96, 164, 0.12);
+}
+
+.asi-informe-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+.asi-informe-filter-chip strong {
+    font-weight: 700;
+    color: var(--app-primary-deep, #2f4578);
+}
+
+.asi-informe-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+}
+
+.asi-informe-stat {
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: #fff;
+}
+
+.asi-informe-stat.is-highlight {
+    border-color: rgba(186, 136, 20, 0.35);
+    background: rgba(255, 243, 205, 0.45);
+}
+
+.asi-informe-stat-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #6c757d;
+    line-height: 1.25;
+    margin-bottom: 0.15rem;
+}
+
+.asi-informe-stat-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--app-primary-deep, #2f4578);
+}
+
+.asi-informe-stat.is-highlight .asi-informe-stat-value {
+    color: #7a4f00;
+}
+
+.asi-informe-section-title {
+    margin: 0 0 0.5rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #495057;
+}
+
+.asi-informe-act-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    max-height: 16.5rem;
+    overflow-y: auto;
+    padding-right: 0.15rem;
+}
+
+.asi-informe-act-item {
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: #fafbfc;
+}
+
+.asi-informe-act-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.55rem;
+    margin-bottom: 0.3rem;
+}
+
+.asi-informe-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--app-primary-deep, #2f4578);
+    background: rgba(65, 96, 164, 0.1);
+    padding: 0.12rem 0.4rem;
+    border-radius: 0.35rem;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+}
+
+.asi-informe-date {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #495057;
+    white-space: nowrap;
+}
+
+.asi-informe-tipo {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.asi-informe-tipo.is-aoat {
+    background: rgba(65, 96, 164, 0.12);
+    color: #2f4578;
+}
+
+.asi-informe-tipo.is-actividad {
+    background: rgba(28, 135, 92, 0.12);
+    color: #186d4c;
+}
+
+.asi-informe-act-head .asi-status-pill {
+    margin-left: auto;
+}
+
+.asi-informe-count {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #495057;
+    white-space: nowrap;
+}
+
+.asi-informe-tematica {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #343a40;
+}
+
+.asi-informe-more {
+    margin: 0.55rem 0 0;
+    font-size: 0.78rem;
+    color: #6c757d;
+}
+
+.asi-informe-empty {
+    padding: 1rem;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.85rem;
+    border: 1px dashed rgba(0, 0, 0, 0.12);
+    border-radius: 0.6rem;
+}
+
+@media (max-width: 575.98px) {
+    .asi-informe-act-head .asi-status-pill {
+        margin-left: 0;
+    }
+}

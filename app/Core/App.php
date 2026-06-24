@@ -116,6 +116,7 @@ final class App
         $this->router->get('/asistencia/exportar-excel', [\App\Controllers\AsistenciaController::class, 'exportExcel'])->middleware('auth');
         $this->router->get('/asistencia/exportar-pdf', [\App\Controllers\AsistenciaController::class, 'exportPdf'])->middleware('auth');
         $this->router->get('/asistencia/exportar-informe', [\App\Controllers\AsistenciaController::class, 'exportInformeGestion'])->middleware('auth');
+        $this->router->get('/asistencia/informe-preview', [\App\Controllers\AsistenciaController::class, 'informePreview'])->middleware('auth');
         $this->router->post('/asistencia/eliminar', [\App\Controllers\AsistenciaController::class, 'delete'])->middleware('auth');
         $this->router->post('/asistencia/cambiar-estado', [\App\Controllers\AsistenciaController::class, 'updateStatus'])->middleware('auth');
         // Registro público de asistencia (enlace automático por código)

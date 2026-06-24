@@ -1174,99 +1174,23 @@ final class AsistenciaController
 
     public function exportInformeGestion(Request $request): Response
     {
-        $user = Auth::user();
-        if (!$user) {
-            return Response::redirect('/login');
+        $resolved = $this->resolveInformeContext($request, false);
+        if ($resolved['error'] instanceof Response) {
+            return $resolved['error'];
         }
 
-        $subregion = trim((string) $request->input('subregion', ''));
-        $municipalities = MunicipalityListRequest::parse($request);
-        $fromDate = trim((string) $request->input('from_date', ''));
-        $toDate = trim((string) $request->input('to_date', ''));
-
-        if ($subregion === '' || count($municipalities) !== 1 || $fromDate === '' || $toDate === '') {
-            Flash::set([
-                'type' => 'error',
-                'title' => 'Datos incompletos',
-                'message' => 'Para el informe de gestión debes elegir subregión, un solo municipio y el rango de fechas (desde y hasta).',
-            ]);
-
-            return Response::redirect('/asistencia');
-        }
-
-        if ($fromDate > $toDate) {
-            Flash::set([
-                'type' => 'error',
-                'title' => 'Fechas no válidas',
-                'message' => 'La fecha inicial no puede ser posterior a la fecha final.',
-            ]);
-
-            return Response::redirect('/asistencia');
-        }
-
-        $municipality = $municipalities[0];
-        $informeModo = strtolower(trim((string) $request->input('informe_modo', 'propio')));
-        $isConsolidadoAdmin = false;
-
-        $filters = [
-            'subregion' => $subregion,
-            'municipality' => $municipality,
-            'from_date' => $fromDate,
-            'to_date' => $toDate,
-        ];
-
-        if ($this->userCanViewAllAsistencia($user)) {
-            if ($informeModo === 'consolidado') {
-                $isConsolidadoAdmin = true;
-            } elseif ($informeModo === 'rol') {
-                $rolFiltro = strtolower(trim((string) $request->input('informe_rol', '')));
-                $allowedRoles = array_keys(self::informeRoleOptions());
-                if (!in_array($rolFiltro, $allowedRoles, true)) {
-                    Flash::set([
-                        'type' => 'error',
-                        'title' => 'Rol no válido',
-                        'message' => 'Selecciona un rol profesional para el informe.',
-                    ]);
-
-                    return Response::redirect('/asistencia');
-                }
-                $advisorIds = $this->advisorIdsByRole($rolFiltro);
-                $filters['advisor_user_ids'] = $advisorIds === [] ? [0] : $advisorIds;
-            } elseif ($informeModo === 'asesor') {
-                $advisorId = (int) $request->input('informe_advisor_user_id', 0);
-                if ($advisorId <= 0 || !$this->advisorIsVisibleForUser($user, $advisorId)) {
-                    Flash::set([
-                        'type' => 'error',
-                        'title' => 'Asesor no válido',
-                        'message' => 'Selecciona un asesor válido para generar el informe.',
-                    ]);
-
-                    return Response::redirect('/asistencia');
-                }
-                $filters['advisor_user_id'] = $advisorId;
-            } else {
-                $isConsolidadoAdmin = true;
-            }
-        } elseif ($this->userIsEspecialista($user)) {
-            $advisors = $this->visibleAdvisorsForUser($user);
-            $allowedAdvisorIds = array_map(static fn (array $advisor): int => (int) ($advisor['id'] ?? 0), $advisors);
-            $filters['advisor_user_ids'] = $allowedAdvisorIds === [] ? [0] : $allowedAdvisorIds;
-        } else {
-            $filters['advisor_user_id'] = (int) $user['id'];
-        }
-
-        $activities = $this->repo->findActivitiesForInforme($filters);
+        $activities = $this->repo->findActivitiesForInforme($resolved['filters']);
         $service = new AsistenciaInformeService($this->repo);
 
         try {
             $content = $service->buildDocx(
                 $activities,
-                $user,
-                $subregion,
-                $municipality,
-                $fromDate,
-                $toDate,
-                $isConsolidadoAdmin
+                $resolved['user'],
+                $resolved['subregion'],
+                $resolved['municipality'],
+                $resolved['from_date'],
+                $resolved['to_date'],
+                $resolved['is_consolidado_admin']
             );
         } catch (\Throwable) {
             $content = '';
@@ -1282,7 +1206,7 @@ final class AsistenciaController
             return Response::redirect('/asistencia');
         }
 
-        $safeMun = preg_replace('/[^a-zA-Z0-9_-]+/', '_', $municipality) ?: 'municipio';
+        $safeMun = preg_replace('/[^a-zA-Z0-9_-]+/', '_', $resolved['municipality']) ?: 'municipio';
         $filename = 'informe_gestion_' . $safeMun . '_' . date('Ymd_His') . '.docx';
 
         return new Response($content, 200, [
@@ -1291,6 +1215,224 @@ final class AsistenciaController
             'Cache-Control' => 'no-store, no-cache, must-revalidate',
             'Pragma' => 'no-cache',
         ]);
+    }
+
+    public function informePreview(Request $request): Response
+    {
+        $resolved = $this->resolveInformeContext($request, true);
+        if ($resolved['error'] instanceof Response) {
+            return $resolved['error'];
+        }
+
+        $activities = $this->repo->findActivitiesForInforme($resolved['filters']);
+        $service = new AsistenciaInformeService($this->repo);
+
+        $payload = $service->buildPreviewPayload($activities, $resolved['filtros_aplicados']);
+
+        return Response::json($payload);
+    }
+
+    /**
+     * @return array{
+     *     error: Response|null,
+     *     user: array<string, mixed>,
+     *     subregion: string,
+     *     municipality: string,
+     *     from_date: string,
+     *     to_date: string,
+     *     is_consolidado_admin: bool,
+     *     filters: array<string, mixed>,
+     *     filtros_aplicados: array<string, mixed>
+     * }
+     */
+    private function resolveInformeContext(Request $request, bool $asJson = false): array
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return [
+                'error' => Response::redirect('/login'),
+                'user' => [],
+                'subregion' => '',
+                'municipality' => '',
+                'from_date' => '',
+                'to_date' => '',
+                'is_consolidado_admin' => false,
+                'filters' => [],
+                'filtros_aplicados' => [],
+            ];
+        }
+
+        $subregion = trim((string) $request->input('subregion', ''));
+        $municipalities = MunicipalityListRequest::parse($request);
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+        $activeTab = $this->normalizeActividadTipo((string) $request->input('tab', 'aoat'));
+        $statusFilter = trim((string) $request->input('status', ''));
+        if (!in_array($statusFilter, self::ASISTENCIA_STATUSES, true)) {
+            $statusFilter = '';
+        }
+        $listAdvisorId = (int) $request->input('advisor_user_id', 0);
+
+        if ($subregion === '' || count($municipalities) !== 1 || $fromDate === '' || $toDate === '') {
+            $message = 'Para el informe de gestión debes elegir subregión, un solo municipio y el rango de fechas (desde y hasta).';
+
+            return [
+                'error' => $asJson
+                    ? Response::json(['error' => $message], 422)
+                    : $this->informeFlashRedirect('Datos incompletos', $message),
+                'user' => $user,
+                'subregion' => '',
+                'municipality' => '',
+                'from_date' => '',
+                'to_date' => '',
+                'is_consolidado_admin' => false,
+                'filters' => [],
+                'filtros_aplicados' => [],
+            ];
+        }
+
+        if ($fromDate > $toDate) {
+            $message = 'La fecha inicial no puede ser posterior a la fecha final.';
+
+            return [
+                'error' => $asJson
+                    ? Response::json(['error' => $message], 422)
+                    : $this->informeFlashRedirect('Fechas no válidas', $message),
+                'user' => $user,
+                'subregion' => '',
+                'municipality' => '',
+                'from_date' => '',
+                'to_date' => '',
+                'is_consolidado_admin' => false,
+                'filters' => [],
+                'filtros_aplicados' => [],
+            ];
+        }
+
+        $municipality = $municipalities[0];
+        $informeModo = strtolower(trim((string) $request->input('informe_modo', 'propio')));
+        $isConsolidadoAdmin = false;
+
+        $filters = [
+            'subregion' => $subregion,
+            'municipality' => $municipality,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+        ];
+
+        if ($statusFilter !== '') {
+            $filters['status'] = $statusFilter;
+        }
+
+        $advisorLabel = 'Todos';
+
+        if ($this->userCanViewAllAsistencia($user)) {
+            if ($informeModo === 'consolidado') {
+                $isConsolidadoAdmin = true;
+            } elseif ($informeModo === 'rol') {
+                $rolFiltro = strtolower(trim((string) $request->input('informe_rol', '')));
+                $allowedRoles = array_keys(self::informeRoleOptions());
+                if (!in_array($rolFiltro, $allowedRoles, true)) {
+                    $message = 'Selecciona un rol profesional para el informe.';
+
+                    return [
+                        'error' => $asJson
+                            ? Response::json(['error' => $message], 422)
+                            : $this->informeFlashRedirect('Rol no válido', $message),
+                        'user' => $user,
+                        'subregion' => '',
+                        'municipality' => '',
+                        'from_date' => '',
+                        'to_date' => '',
+                        'is_consolidado_admin' => false,
+                        'filters' => [],
+                        'filtros_aplicados' => [],
+                    ];
+                }
+                $advisorIds = $this->advisorIdsByRole($rolFiltro);
+                $filters['advisor_user_ids'] = $advisorIds === [] ? [0] : $advisorIds;
+                $advisorLabel = self::informeRoleOptions()[$rolFiltro] ?? $rolFiltro;
+            } elseif ($informeModo === 'asesor') {
+                $advisorId = (int) $request->input('informe_advisor_user_id', 0);
+                if ($advisorId <= 0 || !$this->advisorIsVisibleForUser($user, $advisorId)) {
+                    $message = 'Selecciona un asesor válido para generar el informe.';
+
+                    return [
+                        'error' => $asJson
+                            ? Response::json(['error' => $message], 422)
+                            : $this->informeFlashRedirect('Asesor no válido', $message),
+                        'user' => $user,
+                        'subregion' => '',
+                        'municipality' => '',
+                        'from_date' => '',
+                        'to_date' => '',
+                        'is_consolidado_admin' => false,
+                        'filters' => [],
+                        'filtros_aplicados' => [],
+                    ];
+                }
+                $filters['advisor_user_id'] = $advisorId;
+                $advisorLabel = $this->resolveAdvisorName($advisorId);
+            } else {
+                $isConsolidadoAdmin = true;
+            }
+        } elseif ($this->userIsEspecialista($user)) {
+            $advisors = $this->visibleAdvisorsForUser($user);
+            $allowedAdvisorIds = array_map(static fn (array $advisor): int => (int) ($advisor['id'] ?? 0), $advisors);
+            $filters['advisor_user_ids'] = $allowedAdvisorIds === [] ? [0] : $allowedAdvisorIds;
+            $advisorLabel = 'Equipo ' . (AsistenciaInformeService::roleLabelFromUser($user));
+        } else {
+            $filters['advisor_user_id'] = (int) $user['id'];
+            $advisorLabel = (string) ($user['name'] ?? 'Mi listado');
+        }
+
+        if ($listAdvisorId > 0 && $this->advisorIsVisibleForUser($user, $listAdvisorId)) {
+            unset($filters['advisor_user_ids']);
+            $filters['advisor_user_id'] = $listAdvisorId;
+            $advisorLabel = $this->resolveAdvisorName($listAdvisorId);
+            $isConsolidadoAdmin = false;
+        }
+
+        $filtrosAplicados = [
+            'subregion' => $subregion,
+            'municipio' => $municipality,
+            'desde' => $fromDate,
+            'hasta' => $toDate,
+            'estado' => $statusFilter !== '' ? $statusFilter : 'Todos (Pendiente solo con asistentes)',
+            'asesor' => $advisorLabel,
+            'informe_modo' => $informeModo,
+            'tab' => $activeTab,
+        ];
+
+        return [
+            'error' => null,
+            'user' => $user,
+            'subregion' => $subregion,
+            'municipality' => $municipality,
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'is_consolidado_admin' => $isConsolidadoAdmin,
+            'filters' => $filters,
+            'filtros_aplicados' => $filtrosAplicados,
+        ];
+    }
+
+    private function informeFlashRedirect(string $title, string $message): Response
+    {
+        Flash::set([
+            'type' => 'error',
+            'title' => $title,
+            'message' => $message,
+        ]);
+
+        return Response::redirect('/asistencia');
+    }
+
+    private function resolveAdvisorName(int $advisorId): string
+    {
+        $advisor = $this->userRepo->find($advisorId);
+
+        return $advisor !== null ? (string) ($advisor['name'] ?? 'Asesor') : 'Asesor';
     }
 
     public function delete(Request $request): Response
