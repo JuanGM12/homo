@@ -154,7 +154,7 @@ final class AsistenciaRepository
     }
 
     /**
-     * Actividades para informe: Activo/Cerrado; Pendiente solo si tiene asistentes.
+     * Actividades para informe: solo listados con al menos un asistente registrado.
      *
      * @param array<string, mixed> $filters
      * @return list<array<string, mixed>>
@@ -162,23 +162,14 @@ final class AsistenciaRepository
     public function findActivitiesForInforme(array $filters): array
     {
         unset($filters['exclude_status']);
-        $explicitStatus = trim((string) ($filters['status'] ?? ''));
-
         $rows = $this->findWithFilters($filters);
-        if ($explicitStatus !== '') {
-            return $rows;
-        }
 
         $result = [];
         foreach ($rows as $row) {
-            $status = (string) ($row['status'] ?? '');
-            if ($status !== 'Pendiente') {
-                $result[] = $row;
+            if ($this->countAsistentesByActividad((int) ($row['id'] ?? 0)) < 1) {
                 continue;
             }
-            if ($this->countAsistentesByActividad((int) ($row['id'] ?? 0)) > 0) {
-                $result[] = $row;
-            }
+            $result[] = $row;
         }
 
         return $result;

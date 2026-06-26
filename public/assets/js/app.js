@@ -619,38 +619,71 @@
         });
     });
 
-    const asiInformeForm = document.getElementById('asi-filter-form');
-    const asiInformeModo = document.querySelector('[data-asi-informe-modo]');
-    const asiInformeRolWrap = document.querySelector('[data-asi-informe-rol-wrap]');
-    const asiInformeAsesorWrap = document.querySelector('[data-asi-informe-asesor-wrap]');
-
-    const syncAsiInformeAdminFields = () => {
-        if (!asiInformeModo) {
-            return;
+    const resolveAsiInformeForm = (triggerEl) => {
+        if (triggerEl instanceof HTMLElement) {
+            const modalId = triggerEl.getAttribute('data-informe-modal');
+            if (modalId) {
+                const modalForm = document.querySelector(`#${modalId} [data-asi-informe-form]`);
+                if (modalForm instanceof HTMLFormElement) {
+                    return modalForm;
+                }
+            }
+            const scopedForm = triggerEl.closest('[data-asi-informe-form]');
+            if (scopedForm instanceof HTMLFormElement) {
+                return scopedForm;
+            }
         }
-        const modo = asiInformeModo.value;
-        if (asiInformeRolWrap) {
-            asiInformeRolWrap.classList.toggle('d-none', modo !== 'rol');
+        const homeForm = document.getElementById('home-informe-form');
+        if (homeForm instanceof HTMLFormElement) {
+            return homeForm;
         }
-        if (asiInformeAsesorWrap) {
-            asiInformeAsesorWrap.classList.toggle('d-none', modo !== 'asesor');
-        }
+        const listForm = document.getElementById('asi-filter-form');
+        return listForm instanceof HTMLFormElement ? listForm : null;
     };
 
-    if (asiInformeModo) {
-        asiInformeModo.addEventListener('change', syncAsiInformeAdminFields);
-        syncAsiInformeAdminFields();
-    }
+    const syncAsiInformeAdminFields = (root = document) => {
+        root.querySelectorAll('[data-asi-informe-modo]').forEach((asiInformeModo) => {
+            const form = asiInformeModo.closest('[data-asi-informe-form]') || asiInformeModo.closest('form') || root;
+            const asiInformeRolWrap = form.querySelector('[data-asi-informe-rol-wrap]');
+            const asiInformeAsesorWrap = form.querySelector('[data-asi-informe-asesor-wrap]');
+            const modo = asiInformeModo.value;
+            if (asiInformeRolWrap) {
+                asiInformeRolWrap.classList.toggle('d-none', modo !== 'rol');
+            }
+            if (asiInformeAsesorWrap) {
+                asiInformeAsesorWrap.classList.toggle('d-none', modo !== 'asesor');
+            }
+        });
+    };
 
-    const buildAsiInformeParams = () => {
-        if (!asiInformeForm) {
+    document.querySelectorAll('[data-asi-informe-modo]').forEach((asiInformeModo) => {
+        asiInformeModo.addEventListener('change', () => {
+            const form = asiInformeModo.closest('[data-asi-informe-form]') || document;
+            syncAsiInformeAdminFields(form);
+        });
+    });
+    syncAsiInformeAdminFields();
+
+    const buildAsiInformeParams = (asiInformeForm) => {
+        if (!(asiInformeForm instanceof HTMLFormElement)) {
             return null;
         }
         const subregion = (asiInformeForm.querySelector('[name="subregion"]')?.value || '').trim();
-        const municipalitySelect = asiInformeForm.querySelector('[name="municipality[]"]');
-        const selectedMunicipalities = municipalitySelect
-            ? Array.from(municipalitySelect.selectedOptions).map((o) => o.value.trim()).filter(Boolean)
-            : [];
+        const municipalitySelect = asiInformeForm.querySelector('[name="municipality[]"]')
+            || asiInformeForm.querySelector('[name="municipality"]');
+        let selectedMunicipalities = [];
+        if (municipalitySelect instanceof HTMLSelectElement) {
+            if (municipalitySelect.multiple) {
+                selectedMunicipalities = Array.from(municipalitySelect.selectedOptions)
+                    .map((o) => o.value.trim())
+                    .filter(Boolean);
+            } else {
+                const one = (municipalitySelect.value || '').trim();
+                if (one) {
+                    selectedMunicipalities = [one];
+                }
+            }
+        }
         const fromDate = (asiInformeForm.querySelector('[name="from_date"]')?.value || '').trim();
         const toDate = (asiInformeForm.querySelector('[name="to_date"]')?.value || '').trim();
         const status = (asiInformeForm.querySelector('[name="status"]')?.value || '').trim();
@@ -676,6 +709,7 @@
             params.set('tab', tab);
         }
 
+        const asiInformeModo = asiInformeForm.querySelector('[data-asi-informe-modo]');
         if (asiInformeModo) {
             params.set('informe_modo', asiInformeModo.value);
             if (asiInformeModo.value === 'rol') {
@@ -779,70 +813,92 @@
         </div>`;
     };
 
-    document.querySelectorAll('[data-asi-export-informe]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-            const built = buildAsiInformeParams();
-            if (!built) {
-                return;
-            }
-            if (built.error) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: built.errorTitle || 'Filtros requeridos',
-                    text: built.error,
-                });
-                return;
-            }
-
-            const previewBase = btn.getAttribute('data-preview-base') || '/asistencia/informe-preview';
-            const exportBase = btn.getAttribute('data-export-base') || '/asistencia/exportar-informe';
-            const query = built.params.toString();
-
+    const runAsiInformeExport = async (btn) => {
+        const asiInformeForm = resolveAsiInformeForm(btn);
+        const built = buildAsiInformeParams(asiInformeForm);
+        if (!built) {
+            return;
+        }
+        if (built.error) {
             Swal.fire({
-                title: 'Cargando previsualización…',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                },
+                icon: 'warning',
+                title: built.errorTitle || 'Filtros requeridos',
+                text: built.error,
             });
+            return;
+        }
 
-            let previewData;
-            try {
-                const response = await fetch(`${previewBase}?${query}`, {
-                    headers: { Accept: 'application/json' },
-                    credentials: 'same-origin',
-                });
-                previewData = await response.json();
-                if (!response.ok) {
-                    throw new Error(previewData.error || 'No se pudo cargar la previsualización.');
+        const previewBase = btn.getAttribute('data-preview-base') || '/asistencia/informe-preview';
+        const exportBase = btn.getAttribute('data-export-base') || '/asistencia/exportar-informe';
+        const query = built.params.toString();
+        const modalId = btn.getAttribute('data-informe-modal');
+        const informeModalEl = modalId ? document.getElementById(modalId) : null;
+
+        Swal.fire({
+            title: 'Cargando previsualización…',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            },
+        });
+
+        let previewData;
+        try {
+            const response = await fetch(`${previewBase}?${query}`, {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+            previewData = await response.json();
+            if (!response.ok) {
+                throw new Error(previewData.error || 'No se pudo cargar la previsualización.');
+            }
+        } catch (err) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: err instanceof Error ? err.message : 'No se pudo cargar la previsualización.',
+            });
+            return;
+        }
+
+        const result = await Swal.fire({
+            icon: 'info',
+            title: 'Previsualización del informe',
+            html: buildAsiInformePreviewHtml(previewData),
+            width: '52rem',
+            showCancelButton: true,
+            confirmButtonText: 'Confirmar descarga',
+            cancelButtonText: 'Cancelar',
+            focusConfirm: false,
+            customClass: {
+                popup: 'asi-informe-swal',
+                htmlContainer: 'asi-informe-swal-html',
+            },
+        });
+
+        if (result.isConfirmed) {
+            if (informeModalEl && window.bootstrap) {
+                const instance = window.bootstrap.Modal.getInstance(informeModalEl);
+                if (instance) {
+                    instance.hide();
                 }
-            } catch (err) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: err instanceof Error ? err.message : 'No se pudo cargar la previsualización.',
-                });
-                return;
             }
+            window.location.href = `${exportBase}?${query}`;
+        }
+    };
 
-            const result = await Swal.fire({
-                icon: 'info',
-                title: 'Previsualización del informe',
-                html: buildAsiInformePreviewHtml(previewData),
-                width: '52rem',
-                showCancelButton: true,
-                confirmButtonText: 'Confirmar descarga',
-                cancelButtonText: 'Cancelar',
-                focusConfirm: false,
-                customClass: {
-                    popup: 'asi-informe-swal',
-                    htmlContainer: 'asi-informe-swal-html',
-                },
-            });
-
-            if (result.isConfirmed) {
-                window.location.href = `${exportBase}?${query}`;
+    document.querySelectorAll('[data-home-informe-open]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const modalEl = document.getElementById('homeInformeModal');
+            if (modalEl && window.bootstrap) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
             }
+        });
+    });
+
+    document.querySelectorAll('[data-asi-export-informe]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            runAsiInformeExport(btn);
         });
     });
 

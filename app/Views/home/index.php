@@ -14,6 +14,7 @@ $canFilterProfessional = (bool) ($dashboard['can_filter_professional'] ?? false)
 $filterProfessionalId = $dashboard['filter_professional_id'] ?? null;
 $filterProfessionalName = (string) ($dashboard['filter_professional_name'] ?? '');
 $professionalOptions = $dashboard['professional_options'] ?? [];
+$informeForm = is_array($informeForm ?? null) ? $informeForm : null;
 $isAuthenticated = Auth::check();
 $user = Auth::user();
 /** Perfiles de campo (no admin/coordinación/especialista): el panel es personal y estos desgloses suelen confundir en cero. */
@@ -54,6 +55,18 @@ $suppressOperationalScopeMetrics = $isAuthenticated && $user !== null && !Auth::
                         Vista de tu actividad y resultados.
                     <?php endif; ?>
                 </p>
+
+                <?php if ($informeForm !== null): ?>
+                <div class="mb-4">
+                    <button
+                        type="button"
+                        class="btn btn-outline-primary btn-sm rounded-pill px-3"
+                        data-home-informe-open
+                    >
+                        <i class="bi bi-file-earmark-word me-1"></i>Informe de gestión (Word)
+                    </button>
+                </div>
+                <?php endif; ?>
 
                 <div class="row g-3 dashboard-kpi-grid">
                     <div class="col-sm-6 col-xl-3"><div class="dashboard-kpi-card"><p class="dashboard-kpi-label">AoAT registradas</p><p class="dashboard-kpi-value"><?= (int) ($kpis['aoat_total'] ?? 0) ?></p></div></div>
@@ -177,6 +190,17 @@ $suppressOperationalScopeMetrics = $isAuthenticated && $user !== null && !Auth::
             </div>
         </div>
     </section>
+
+    <?php if ($informeForm !== null): ?>
+        <?php
+        $advisors = $informeForm['advisors'] ?? [];
+        $canFilterAdvisor = (bool) ($informeForm['canFilterAdvisor'] ?? false);
+        $canConfigureInformeScope = (bool) ($informeForm['canConfigureInformeScope'] ?? false);
+        $informeRoles = $informeForm['informeRoles'] ?? [];
+        $defaultAdvisorId = (int) ($informeForm['defaultAdvisorId'] ?? 0);
+        require __DIR__ . '/../asistencia/_informe_modal.php';
+        ?>
+    <?php endif; ?>
 
     <section class="mb-5">
         <div class="row g-4">

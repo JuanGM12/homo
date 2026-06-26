@@ -89,6 +89,35 @@ final class AsistenciaController
         $this->userRepo = new UserRepository();
     }
 
+    /**
+     * Datos para el formulario modal del informe de gestión (inicio u otras vistas).
+     *
+     * @param array<string, mixed>|null $user
+     * @return array<string, mixed>|null
+     */
+    public function informeFormViewData(?array $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $advisors = $this->visibleAdvisorsForUser($user);
+        $defaultAdvisorId = 0;
+        if (!$this->userCanViewAllAsistencia($user) && !$this->userIsEspecialista($user)) {
+            $defaultAdvisorId = (int) ($user['id'] ?? 0);
+        } elseif (count($advisors) === 1) {
+            $defaultAdvisorId = (int) ($advisors[0]['id'] ?? 0);
+        }
+
+        return [
+            'advisors' => $advisors,
+            'canFilterAdvisor' => count($advisors) > 1,
+            'canConfigureInformeScope' => $this->userCanViewAllAsistencia($user),
+            'informeRoles' => self::informeRoleOptions(),
+            'defaultAdvisorId' => $defaultAdvisorId,
+        ];
+    }
+
     /** Tipos de listado / Actividad (select2 múltiple) */
     /**
      * Tipos de listado / actividad por rol profesional.
@@ -219,7 +248,7 @@ final class AsistenciaController
             $filters['advisor_user_id'] = (int) $user['id'];
         }
 
-        $records = $this->repo->findWithFilters(array_filter($filters, static function (mixed $v): bool {
+        $records = $this->repo->findActivitiesForInforme(array_filter($filters, static function (mixed $v): bool {
             if (is_array($v)) {
                 return $v !== [];
             }
@@ -1398,7 +1427,7 @@ final class AsistenciaController
             'municipio' => $municipality,
             'desde' => $fromDate,
             'hasta' => $toDate,
-            'estado' => $statusFilter !== '' ? $statusFilter : 'Todos (Pendiente solo con asistentes)',
+            'estado' => $statusFilter !== '' ? $statusFilter : 'Todos (solo listados con asistentes)',
             'asesor' => $advisorLabel,
             'informe_modo' => $informeModo,
             'tab' => $activeTab,

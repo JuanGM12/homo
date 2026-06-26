@@ -158,59 +158,15 @@ $asiMunicipalitiesJson = htmlspecialchars(json_encode($asiMunicipalities, JSON_U
                     <label class="form-label small fw-semibold text-muted mb-1">Fecha hasta</label>
                     <input type="date" name="to_date" class="form-control" value="<?= htmlspecialchars((string) ($filters['to_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" data-asi-autosubmit>
                 </div>
-                <?php if ($canConfigureInformeScope): ?>
-                <div class="col-md-3 col-sm-6" data-asi-informe-admin>
-                    <label class="form-label small fw-semibold text-muted mb-1">Informe Word — alcance</label>
-                    <select name="informe_modo" class="form-select" data-asi-informe-modo>
-                        <option value="consolidado">Consolidado (todos los roles)</option>
-                        <option value="rol">Por rol profesional</option>
-                        <option value="asesor">Por asesor</option>
-                    </select>
-                </div>
-                <div class="col-md-3 col-sm-6 d-none" data-asi-informe-rol-wrap>
-                    <label class="form-label small fw-semibold text-muted mb-1">Rol del informe</label>
-                    <select name="informe_rol" class="form-select">
-                        <option value="">Seleccione rol</option>
-                        <?php foreach ($informeRoles as $roleKey => $roleLabel): ?>
-                            <option value="<?= htmlspecialchars((string) $roleKey, ENT_QUOTES, 'UTF-8') ?>">
-                                <?= htmlspecialchars((string) $roleLabel, ENT_QUOTES, 'UTF-8') ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-3 col-sm-6 d-none" data-asi-informe-asesor-wrap>
-                    <label class="form-label small fw-semibold text-muted mb-1">Asesor del informe</label>
-                    <select name="informe_advisor_user_id" class="form-select">
-                        <option value="">Seleccione asesor</option>
-                        <?php foreach ($advisors as $a): ?>
-                            <option value="<?= (int) $a['id'] ?>">
-                                <?= htmlspecialchars((string) $a['name'], ENT_QUOTES, 'UTF-8') ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php endif; ?>
                 <div class="col-md-6 d-flex align-items-end flex-wrap gap-3">
                     <a href="/asistencia?<?= http_build_query(['tab' => $activeTab]) ?>" class="asi-filter-clear-link" data-homo-filter-clear="/asistencia">Limpiar</a>
-                    <button
-                        type="button"
-                        class="btn btn-outline-primary btn-sm"
-                        data-asi-export-informe
-                        data-export-base="/asistencia/exportar-informe"
-                        data-preview-base="/asistencia/informe-preview"
-                    >
-                        <i class="bi bi-file-earmark-word me-1"></i>Informe de gestión (Word)
-                    </button>
-                    <p class="small text-muted mb-0 w-100">
-                        El informe usa subregión, municipio, fechas y los filtros activos del listado (asesor, estado).
-                    </p>
                 </div>
             </form>
             <div class="alert alert-light border small mb-0 mt-3 py-2 px-3">
                 <strong>TOTAL ASESORÍAS</strong> = cantidad de listados AoAT ·
                 <strong>TOTAL ASISTENCIAS TÉCNICAS</strong> = listados pestaña Actividades ·
                 <strong>Número de personas</strong> = documentos distintos (no es la suma de la columna Asistentes).
-                La previsualización muestra también la <strong>suma de registros de asistencia</strong> para cruzar con la columna Asistentes.
+                Los totales del informe Word cuentan solo listados con al menos un asistente (desde el inicio).
             </div>
         </div>
     </div>

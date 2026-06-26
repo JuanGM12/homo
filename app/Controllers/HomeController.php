@@ -145,6 +145,12 @@ final class HomeController
             $filterProfessionalName = (string) ($stmt->fetchColumn() ?: '');
         }
 
+        $informeForm = null;
+        if ($user !== null) {
+            $asistenciaController = new AsistenciaController();
+            $informeForm = $asistenciaController->informeFormViewData($user);
+        }
+
         return Response::view('home/index', [
             'pageTitle' => 'Equipo de Promoción y Prevención',
             'tests' => EvaluacionesController::getTestsListForUser($user),
@@ -163,6 +169,7 @@ final class HomeController
                 'module_mix' => $moduleMix,
                 'recent_activities' => $recentActivities,
             ],
+            'informeForm' => $informeForm,
         ]);
     }
 

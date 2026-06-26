@@ -62,6 +62,7 @@ final class AsistenciaInformeService
             $this->buildNotaPlataforma($fromDate, $toDate, $stats)
         );
         $processor->setValue('DESGLOSE_METRICAS', $this->buildDesgloseLine($stats));
+        $processor->setValue('MARCO_NORMATIVO', self::buildMarcoNormativoText());
 
         $tmpPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'informe_' . bin2hex(random_bytes(12)) . '.docx';
         try {
@@ -321,6 +322,26 @@ final class AsistenciaInformeService
             . 'Período de datos: ' . $fromDate . ' a ' . $toDate . '. '
             . $this->buildDesgloseLine($stats) . '. '
             . 'Los campos resaltados en color azul deben ser diligenciados por el profesional. '
-            . 'Nota: «Personas únicas» cuenta documentos distintos; «Registros de asistencia» es la suma de la columna Asistentes del listado.';
+            . 'Nota: «Personas únicas» cuenta documentos distintos; «Registros de asistencia» es la suma de la columna Asistentes del listado. '
+            . 'Los totales de asesorías y asistencias técnicas incluyen solo listados con al menos un asistente registrado.';
+    }
+
+    public static function buildMarcoNormativoText(): string
+    {
+        $items = [
+            'Ley 1616 de 2013 (Salud Mental).',
+            'Ley 1566 de 2012.',
+            'Ley 2460 Ley de Salud Mental.',
+            'Ley 729 de 2001.',
+            'Ley 2518 de 2025.',
+            'Resolución 518 de 2015.',
+            'Resolución 3280 de 2018.',
+            'Resolución 347 de 2026.',
+            'Resolución 2100 de 2025.',
+            'Plan Decenal de Salud Pública vigente.',
+            'Ordenanza 041 de 2022 (Política Pública Departamental de Salud Mental y Prevención de las Adicciones).',
+        ];
+
+        return implode("\n", $items);
     }
 }

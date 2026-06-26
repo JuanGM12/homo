@@ -114,6 +114,40 @@ $xml = replaceParagraphContent(
     . '$3'
 );
 
+/** Reemplaza texto dentro de un párrafo sin cruzar límites </w:p>. */
+function replaceParagraphText(string $xml, string $search, string $replace): string
+{
+    $pattern = '/(<w:p[^>]*>(?:(?!<\/w:p>).)*)'
+        . preg_quote($search, '/')
+        . '((?:(?!<\/w:p>).)*<\/w:p>)/';
+    $result = preg_replace($pattern, '$1' . $replace . '$2', $xml, 1);
+
+    return is_string($result) ? $result : $xml;
+}
+
+/** Elimina un párrafo completo que contiene un texto. */
+function removeParagraphContaining(string $xml, string $needle): string
+{
+    $pattern = '/<w:p[^>]*>(?:(?!<\/w:p>).)*'
+        . preg_quote($needle, '/')
+        . '(?:(?!<\/w:p>).)*<\/w:p>\s*/';
+    $result = preg_replace($pattern, '', $xml, 1);
+
+    return is_string($result) ? $result : $xml;
+}
+
+// Marco normativo — placeholder único con listado completo desde el servicio
+$xml = replaceParagraphText($xml, 'Ley 1616 de 2013 (Salud Mental).', '${MARCO_NORMATIVO}');
+foreach ([
+    'Ley 1566 de 2012.',
+    'Resolución 518 de 2015.',
+    'Resolución 3280 de 2018.',
+    'Plan Decenal de Salud Pública vigente.',
+    'Ordenanza 041 de 2022 (Política Pública Departamental de Salud Mental y Prevención de las Adicciones).',
+] as $legacyMarcoLine) {
+    $xml = removeParagraphContaining($xml, $legacyMarcoLine);
+}
+
 // Nota de generación antes de "Elaborado por"
 if (!str_contains($xml, '${FECHA_GENERACION}')) {
     $xml = str_replace(
