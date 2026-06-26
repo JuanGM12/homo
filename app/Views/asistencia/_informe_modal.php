@@ -85,7 +85,7 @@ $defaultAdvisorId = (int) ($defaultAdvisorId ?? 0);
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold text-muted mb-1">Estado</label>
                         <select name="status" class="form-select">
-                            <option value="">Todos (solo con asistentes)</option>
+                            <option value="">Todos (listados con asistentes)</option>
                             <option value="Pendiente">Pendiente</option>
                             <option value="Activo">Activo</option>
                             <option value="Cerrado">Cerrado</option>
@@ -125,7 +125,7 @@ $defaultAdvisorId = (int) ($defaultAdvisorId ?? 0);
                     <?php endif; ?>
                     <div class="col-12">
                         <div class="alert alert-light border small mb-0 py-2 px-3">
-                            Los totales incluyen solo listados con al menos un asistente. La previsualización permite validar cifras antes de descargar el Word.
+                            Las asesorías y asistencias técnicas se toman del <strong>Registro AoAT</strong>; personas, cargos y asistentes del <strong>Listado de asistencia</strong> en el mismo alcance. La previsualización permite validar cifras antes de descargar el Word.
                         </div>
                     </div>
                 </form>

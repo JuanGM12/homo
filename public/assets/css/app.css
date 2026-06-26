@@ -4367,6 +4367,16 @@ select.homo-muni-native.visually-hidden {
     white-space: nowrap;
 }
 
+.asi-informe-tipo.is-asesoria {
+    background: rgba(65, 96, 164, 0.12);
+    color: #2f4578;
+}
+
+.asi-informe-tipo.is-asistencia-tecnica {
+    background: rgba(111, 66, 193, 0.12);
+    color: #5a32a3;
+}
+
 .asi-informe-tipo.is-aoat {
     background: rgba(65, 96, 164, 0.12);
     color: #2f4578;
@@ -4408,6 +4418,55 @@ select.homo-muni-native.visually-hidden {
     font-size: 0.85rem;
     border: 1px dashed rgba(0, 0, 0, 0.12);
     border-radius: 0.6rem;
+}
+
+.asi-informe-empty.is-compact {
+    padding: 0.65rem 0.85rem;
+    font-size: 0.8rem;
+}
+
+.asi-informe-section {
+    margin-top: 1rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.asi-informe-section-hint {
+    margin: 0 0 0.55rem;
+    font-size: 0.76rem;
+    color: #6c757d;
+}
+
+.asi-informe-tematicas-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: #343a40;
+}
+
+.asi-informe-tematicas-list li + li {
+    margin-top: 0.35rem;
+}
+
+.asi-informe-meta {
+    margin: 0.2rem 0 0;
+    font-size: 0.76rem;
+    color: #6c757d;
+}
+
+.asi-informe-meta-label {
+    font-weight: 700;
+    color: #495057;
+}
+
+.asi-informe-code.is-inline {
+    font-size: 0.72rem;
+    padding: 0.05rem 0.35rem;
+}
+
+.asi-informe-stat.is-highlight .asi-informe-stat-value {
+    color: #5a32a3;
 }
 
 @media (max-width: 575.98px) {

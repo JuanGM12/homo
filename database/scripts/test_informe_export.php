@@ -16,6 +16,7 @@ $user = [
 
 $content = $service->buildDocx(
     [],
+    [],
     $user,
     'SUROESTE',
     'LA PINTADA',

@@ -166,7 +166,7 @@ $asiMunicipalitiesJson = htmlspecialchars(json_encode($asiMunicipalities, JSON_U
                 <strong>TOTAL ASESORÍAS</strong> = cantidad de listados AoAT ·
                 <strong>TOTAL ASISTENCIAS TÉCNICAS</strong> = listados pestaña Actividades ·
                 <strong>Número de personas</strong> = documentos distintos (no es la suma de la columna Asistentes).
-                Los totales del informe Word cuentan solo listados con al menos un asistente (desde el inicio).
+                El informe de gestión (Word) se genera desde el inicio. Combina <strong>Registro AoAT</strong> (asesorías y asistencias técnicas) con el <strong>Listado de asistencia</strong> (personas y asistentes).
             </div>
         </div>
     </div>

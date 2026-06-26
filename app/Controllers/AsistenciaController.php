@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatRepository;
 use App\Repositories\AsistenciaRepository;
 use App\Repositories\UserRepository;
 use App\Services\AsistenciaInformeService;
@@ -81,11 +82,13 @@ final class AsistenciaController
     private const ASISTENCIA_STATUSES = ['Pendiente', 'Activo', 'Cerrado'];
 
     private AsistenciaRepository $repo;
+    private AoatRepository $aoatRepo;
     private UserRepository $userRepo;
 
     public function __construct()
     {
         $this->repo = new AsistenciaRepository();
+        $this->aoatRepo = new AoatRepository();
         $this->userRepo = new UserRepository();
     }
 
@@ -1209,10 +1212,12 @@ final class AsistenciaController
         }
 
         $activities = $this->repo->findActivitiesForInforme($resolved['filters']);
+        $aoatRecords = $this->aoatRepo->findForInforme($this->buildAoatFiltersFromInforme($resolved['filters']));
         $service = new AsistenciaInformeService($this->repo);
 
         try {
             $content = $service->buildDocx(
+                $aoatRecords,
                 $activities,
                 $resolved['user'],
                 $resolved['subregion'],
@@ -1254,9 +1259,10 @@ final class AsistenciaController
         }
 
         $activities = $this->repo->findActivitiesForInforme($resolved['filters']);
+        $aoatRecords = $this->aoatRepo->findForInforme($this->buildAoatFiltersFromInforme($resolved['filters']));
         $service = new AsistenciaInformeService($this->repo);
 
-        $payload = $service->buildPreviewPayload($activities, $resolved['filtros_aplicados']);
+        $payload = $service->buildPreviewPayload($aoatRecords, $activities, $resolved['filtros_aplicados']);
 
         return Response::json($payload);
     }
@@ -1427,7 +1433,7 @@ final class AsistenciaController
             'municipio' => $municipality,
             'desde' => $fromDate,
             'hasta' => $toDate,
-            'estado' => $statusFilter !== '' ? $statusFilter : 'Todos (solo listados con asistentes)',
+            'estado' => $statusFilter !== '' ? $statusFilter : 'Todos (listados con asistentes)',
             'asesor' => $advisorLabel,
             'informe_modo' => $informeModo,
             'tab' => $activeTab,
@@ -1444,6 +1450,30 @@ final class AsistenciaController
             'filters' => $filters,
             'filtros_aplicados' => $filtrosAplicados,
         ];
+    }
+
+    /**
+     * Filtros del Registro AoAT alineados con el contexto del informe (user_id en lugar de advisor_user_id).
+     *
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    private function buildAoatFiltersFromInforme(array $filters): array
+    {
+        $aoatFilters = [
+            'subregion' => $filters['subregion'] ?? '',
+            'municipality' => $filters['municipality'] ?? '',
+            'from_date' => $filters['from_date'] ?? '',
+            'to_date' => $filters['to_date'] ?? '',
+        ];
+
+        if (!empty($filters['advisor_user_id'])) {
+            $aoatFilters['user_id'] = (int) $filters['advisor_user_id'];
+        } elseif (!empty($filters['advisor_user_ids']) && is_array($filters['advisor_user_ids'])) {
+            $aoatFilters['user_ids'] = $filters['advisor_user_ids'];
+        }
+
+        return $aoatFilters;
     }
 
     private function informeFlashRedirect(string $title, string $message): Response

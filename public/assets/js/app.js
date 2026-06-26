@@ -742,27 +742,72 @@
 
     const formatAsiEstadoPill = (estado) => {
         const e = String(estado || '');
-        const cls = e === 'Activo' ? 'is-active' : e === 'Cerrado' ? 'is-closed' : 'is-pending';
+        const lower = e.toLowerCase();
+        let cls = 'is-pending';
+        if (e === 'Activo' || lower === 'realizado' || lower === 'aprobada') {
+            cls = 'is-active';
+        } else if (e === 'Cerrado' || lower === 'asignada' || lower === 'devuelta') {
+            cls = 'is-closed';
+        }
         return `<span class="asi-status-pill ${cls}">${asiEscapeHtml(e || '—')}</span>`;
     };
 
     const formatAsiTipoPill = (tipo) => {
-        const t = String(tipo || '').toLowerCase();
-        const isActividad = t === 'actividad';
-        return `<span class="asi-informe-tipo ${isActividad ? 'is-actividad' : 'is-aoat'}">${asiEscapeHtml(isActividad ? 'Actividad' : 'AoAT')}</span>`;
+        const t = String(tipo || '').trim();
+        const lower = t.toLowerCase();
+        let cls = 'is-aoat';
+        let label = t || 'AoAT';
+        if (lower === 'asesoría' || lower === 'asesoria') {
+            cls = 'is-asesoria';
+            label = 'Asesoría';
+        } else if (lower === 'asistencia técnica' || lower === 'asistencia tecnica') {
+            cls = 'is-asistencia-tecnica';
+            label = 'Asist. técnica';
+        } else if (lower === 'actividad') {
+            cls = 'is-actividad';
+            label = 'Actividad';
+        } else if (lower === 'aoat') {
+            label = 'AoAT';
+        }
+        return `<span class="asi-informe-tipo ${cls}">${asiEscapeHtml(label)}</span>`;
+    };
+
+    const buildAsiInformeRowHtml = (row, options = {}) => {
+        const tematica = String(row.tematica || '').trim();
+        const asistentes = Number(row.asistentes ?? 0);
+        const lugar = String(row.lugar || '').trim();
+        const vinculo = String(row.listado_vinculado || row.aoat_vinculado || '').trim();
+        const vinculoLabel = row.listado_vinculado !== undefined ? 'Listado' : 'AoAT';
+        const showLugar = Boolean(options.showLugar) && lugar !== '';
+
+        return `<article class="asi-informe-act-item">
+            <div class="asi-informe-act-head">
+                <code class="asi-informe-code" title="${asiEscapeHtml(row.code || '')}">${asiEscapeHtml(row.code || '—')}</code>
+                <span class="asi-informe-date">${asiEscapeHtml(row.fecha || '')}</span>
+                ${formatAsiTipoPill(row.tipo)}
+                <span class="asi-informe-count">${asiEscapeHtml(asistentes)} asist.</span>
+                ${formatAsiEstadoPill(row.estado)}
+            </div>
+            ${showLugar ? `<p class="asi-informe-meta"><span class="asi-informe-meta-label">Lugar:</span> ${asiEscapeHtml(lugar)}</p>` : ''}
+            ${vinculo !== '' ? `<p class="asi-informe-meta"><span class="asi-informe-meta-label">${asiEscapeHtml(vinculoLabel)} vinculado:</span> <code class="asi-informe-code is-inline">${asiEscapeHtml(vinculo)}</code></p>` : ''}
+            ${tematica !== '' ? `<p class="asi-informe-tematica">${asiEscapeHtml(tematica)}</p>` : ''}
+        </article>`;
     };
 
     const buildAsiInformePreviewHtml = (data) => {
         const filtros = data.filtros_aplicados || {};
         const totales = data.totales || {};
-        const tabActiva = data.tab_activa === 'actividad' ? 'Actividades' : 'AoAT';
-        const actividades = Array.isArray(data.actividades) ? data.actividades : [];
-        const maxRows = 20;
+        const listados = Array.isArray(data.listados_asistencia) ? data.listados_asistencia : [];
+        const registrosAoat = Array.isArray(data.registros_aoat)
+            ? data.registros_aoat
+            : (Array.isArray(data.actividades) ? data.actividades : []);
+        const tematicasAoat = Array.isArray(data.tematicas_aoat) ? data.tematicas_aoat : [];
+        const maxRows = 12;
 
         const filterChips = [
             ['Municipio', filtros.municipio],
             ['Período', `${filtros.desde || ''} — ${filtros.hasta || ''}`],
-            ['Estado', filtros.estado],
+            ['Estado listados', filtros.estado],
             ['Asesor', filtros.asesor],
         ].filter(([, value]) => String(value || '').trim() !== '');
 
@@ -771,10 +816,11 @@
         )).join('');
 
         const statsHtml = [
-            { label: 'Listados AoAT', value: totales.listados_aoat ?? 0 },
-            { label: 'Listados Actividades', value: totales.listados_actividad ?? 0 },
-            { label: `Pestaña activa (${tabActiva})`, value: totales.listados_tab_activa ?? 0, highlight: true },
-            { label: 'Registros de asistencia', value: totales.registros_asistencia ?? 0 },
+            { label: 'Población impactada', value: totales.poblacion_impactada ?? totales.registros_asistencia ?? 0, highlight: true },
+            { label: 'Listados de asistencia', value: totales.listados_asistencia ?? listados.length },
+            { label: 'Registros AoAT', value: totales.registros_aoat ?? registrosAoat.length },
+            { label: 'Asesorías (AoAT)', value: totales.asesorias_aoat ?? 0 },
+            { label: 'Asist. técnicas (AoAT)', value: totales.asistencias_tecnicas_aoat ?? 0 },
             { label: 'Personas únicas', value: totales.personas_unicas ?? 0 },
         ].map((stat) => (
             `<div class="asi-informe-stat${stat.highlight ? ' is-highlight' : ''}">
@@ -783,33 +829,49 @@
             </div>`
         )).join('');
 
-        const actividadesHtml = actividades.slice(0, maxRows).map((row) => {
-            const tematica = String(row.tematica || '').trim();
-            const asistentes = Number(row.asistentes ?? 0);
-            return `<article class="asi-informe-act-item">
-                <div class="asi-informe-act-head">
-                    <code class="asi-informe-code" title="${asiEscapeHtml(row.code || '')}">${asiEscapeHtml(row.code || '—')}</code>
-                    <span class="asi-informe-date">${asiEscapeHtml(row.fecha || '')}</span>
-                    ${formatAsiTipoPill(row.tipo)}
-                    <span class="asi-informe-count">${asiEscapeHtml(asistentes)} asist.</span>
-                    ${formatAsiEstadoPill(row.estado)}
-                </div>
-                ${tematica !== '' ? `<p class="asi-informe-tematica">${asiEscapeHtml(tematica)}</p>` : ''}
-            </article>`;
-        }).join('');
+        const tematicasHtml = tematicasAoat.length > 0
+            ? `<ol class="asi-informe-tematicas-list">${tematicasAoat.map((tema) => (
+                `<li>${asiEscapeHtml(tema)}</li>`
+            )).join('')}</ol>`
+            : '<div class="asi-informe-empty is-compact">Sin temáticas en el alcance.</div>';
 
-        const moreNote = actividades.length > maxRows
-            ? `<p class="asi-informe-more">… y ${actividades.length - maxRows} listados más en el informe.</p>`
+        const listadosHtml = listados.slice(0, maxRows).map((row) => (
+            buildAsiInformeRowHtml(row, { showLugar: true })
+        )).join('');
+
+        const aoatHtml = registrosAoat.slice(0, maxRows).map((row) => (
+            buildAsiInformeRowHtml(row, { showLugar: false })
+        )).join('');
+
+        const moreListados = listados.length > maxRows
+            ? `<p class="asi-informe-more">… y ${listados.length - maxRows} listados más.</p>`
+            : '';
+        const moreAoat = registrosAoat.length > maxRows
+            ? `<p class="asi-informe-more">… y ${registrosAoat.length - maxRows} registros AoAT más.</p>`
             : '';
 
         return `<div class="asi-informe-preview">
             <div class="asi-informe-filters">${filtersHtml}</div>
             <div class="asi-informe-stats">${statsHtml}</div>
-            <p class="asi-informe-section-title">Actividades incluidas (${actividades.length})</p>
-            <div class="asi-informe-act-list">
-                ${actividadesHtml || '<div class="asi-informe-empty">Sin actividades en el alcance.</div>'}
-            </div>
-            ${moreNote}
+            <section class="asi-informe-section">
+                <p class="asi-informe-section-title">Temáticas generales abordadas (${tematicasAoat.length})</p>
+                <p class="asi-informe-section-hint">Orden cronológico del listado de asistencia; prioriza cualificaciones del Registro AoAT vinculado.</p>
+                ${tematicasHtml}
+            </section>
+            <section class="asi-informe-section">
+                <p class="asi-informe-section-title">Listados de asistencia incluidos (${listados.length})</p>
+                <div class="asi-informe-act-list">
+                    ${listadosHtml || '<div class="asi-informe-empty">Sin listados en el alcance.</div>'}
+                </div>
+                ${moreListados}
+            </section>
+            <section class="asi-informe-section">
+                <p class="asi-informe-section-title">Registros AoAT incluidos (${registrosAoat.length})</p>
+                <div class="asi-informe-act-list">
+                    ${aoatHtml || '<div class="asi-informe-empty">Sin registros AoAT en el alcance.</div>'}
+                </div>
+                ${moreAoat}
+            </section>
         </div>`;
     };
 
@@ -865,7 +927,7 @@
             icon: 'info',
             title: 'Previsualización del informe',
             html: buildAsiInformePreviewHtml(previewData),
-            width: '52rem',
+            width: '58rem',
             showCancelButton: true,
             confirmButtonText: 'Confirmar descarga',
             cancelButtonText: 'Cancelar',
