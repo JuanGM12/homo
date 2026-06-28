@@ -83,10 +83,20 @@ $asiMunicipalitiesJson = htmlspecialchars(json_encode($asiMunicipalities, JSON_U
             <h1 class="section-title mb-1">Listados de Asistencia</h1>
             <p class="section-subtitle mb-0">Gestión de actividades y registro de asistentes.</p>
         </div>
-        <a href="/asistencia/nueva" class="btn btn-primary">
-            <i class="bi bi-plus-circle me-1"></i>
-            Nueva Actividad
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <button
+                type="button"
+                class="btn btn-outline-danger"
+                data-asi-export-listados-open
+            >
+                <i class="bi bi-file-earmark-pdf me-1"></i>
+                Unir listados (PDF)
+            </button>
+            <a href="/asistencia/nueva" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i>
+                Nueva Actividad
+            </a>
+        </div>
     </div>
 
     <div class="mb-4">
@@ -302,3 +312,7 @@ $asiMunicipalitiesJson = htmlspecialchars(json_encode($asiMunicipalities, JSON_U
         </div>
     <?php endif; ?>
 </section>
+
+<?php
+require __DIR__ . '/_export_listados_modal.php';
+?>

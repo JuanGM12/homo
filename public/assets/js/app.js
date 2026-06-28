@@ -964,6 +964,243 @@
         });
     });
 
+    const asiExportListadosModal = document.getElementById('asiExportListadosModal');
+    const asiExportListadosForm = document.querySelector('[data-asi-export-listados-form]');
+    const asiExportPicker = document.querySelector('[data-asi-export-picker]');
+    const asiExportListEl = document.querySelector('[data-asi-export-list]');
+    const asiExportCountEl = document.querySelector('[data-asi-export-count]');
+    const asiExportSelectAll = document.querySelector('[data-asi-export-select-all]');
+    const asiExportPdfBtn = document.querySelector('[data-asi-export-pdf-unidos]');
+    const asiExportMaxListados = asiExportPicker
+        ? parseInt(asiExportPicker.getAttribute('data-max-listados') || '40', 10)
+        : 40;
+
+    const asiExportSelected = new Map();
+
+    const syncAsiExportModalFromIndex = () => {
+        const indexForm = document.getElementById('asi-filter-form');
+        if (!indexForm || !asiExportListadosForm) {
+            return;
+        }
+
+        ['subregion', 'from_date', 'to_date', 'status', 'advisor_user_id', 'tab'].forEach((name) => {
+            const src = indexForm.querySelector(`[name="${name}"]`);
+            const dst = asiExportListadosForm.querySelector(`[name="${name}"]`);
+            if (src && dst && !src.disabled) {
+                dst.value = src.value;
+            }
+        });
+
+        const srcMun = indexForm.querySelector('[name="municipality[]"]');
+        const dstMun = asiExportListadosForm.querySelector('[name="municipality[]"]');
+        if (srcMun && dstMun) {
+            const values = Array.from(srcMun.selectedOptions).map((opt) => opt.value);
+            dstMun.setAttribute('data-current-values', JSON.stringify(values));
+        }
+
+        const srcSub = indexForm.querySelector('[name="subregion"]');
+        const dstSub = asiExportListadosForm.querySelector('[name="subregion"]');
+        if (srcSub && dstSub && !srcSub.disabled && srcSub.value) {
+            dstSub.value = srcSub.value;
+            dstSub.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    };
+
+    const buildAsiExportSearchParams = () => {
+        if (!asiExportListadosForm) {
+            return new URLSearchParams();
+        }
+        const params = new URLSearchParams();
+        const q = (asiExportListadosForm.querySelector('[name="q"]')?.value || '').trim();
+        if (q) {
+            params.set('q', q);
+        }
+        ['tab', 'status', 'subregion', 'from_date', 'to_date', 'advisor_user_id'].forEach((name) => {
+            const value = (asiExportListadosForm.querySelector(`[name="${name}"]`)?.value || '').trim();
+            if (value) {
+                params.set(name, value);
+            }
+        });
+        const munSelect = asiExportListadosForm.querySelector('[name="municipality[]"]');
+        if (munSelect) {
+            Array.from(munSelect.selectedOptions).forEach((opt) => {
+                if (opt.value) {
+                    params.append('municipality[]', opt.value);
+                }
+            });
+        }
+        return params;
+    };
+
+    const updateAsiExportSelectionUi = () => {
+        let totalAsistentes = 0;
+        asiExportSelected.forEach((row) => {
+            totalAsistentes += Number(row.asistentes_count ?? 0);
+        });
+        const count = asiExportSelected.size;
+        if (asiExportCountEl) {
+            asiExportCountEl.textContent = `${count} seleccionado${count === 1 ? '' : 's'} · ${totalAsistentes} asistente${totalAsistentes === 1 ? '' : 's'}`;
+        }
+        if (asiExportPdfBtn) {
+            asiExportPdfBtn.disabled = count === 0;
+        }
+        if (asiExportSelectAll && asiExportListEl) {
+            const visibleChecks = asiExportListEl.querySelectorAll('[data-asi-export-item-check]');
+            const checkedVisible = asiExportListEl.querySelectorAll('[data-asi-export-item-check]:checked');
+            asiExportSelectAll.checked = visibleChecks.length > 0 && checkedVisible.length === visibleChecks.length;
+            asiExportSelectAll.indeterminate = checkedVisible.length > 0 && checkedVisible.length < visibleChecks.length;
+        }
+    };
+
+    const renderAsiExportList = (items) => {
+        if (!asiExportListEl) {
+            return;
+        }
+        if (!Array.isArray(items) || items.length === 0) {
+            asiExportListEl.innerHTML = '<div class="asi-export-picker-empty text-muted small">No hay listados con esos filtros.</div>';
+            updateAsiExportSelectionUi();
+            return;
+        }
+
+        asiExportListEl.innerHTML = items.map((row) => {
+            const id = Number(row.id ?? 0);
+            const checked = asiExportSelected.has(id) ? ' checked' : '';
+            const tematica = String(row.tematica || '').trim();
+            const statusClass = row.status === 'Activo' ? 'is-active' : row.status === 'Cerrado' ? 'is-closed' : 'is-pending';
+            return `<label class="asi-export-picker-item${checked ? ' is-selected' : ''}">
+                <input type="checkbox" class="form-check-input" data-asi-export-item-check value="${id}"${checked}>
+                <span class="asi-export-picker-body">
+                    <span class="asi-export-picker-head">
+                        <code class="asi-informe-code">${asiEscapeHtml(row.code || '—')}</code>
+                        <span class="asi-export-picker-date">${asiEscapeHtml(row.activity_date || '')}</span>
+                        <span class="asi-status-pill ${statusClass}">${asiEscapeHtml(row.status || '')}</span>
+                        <span class="asi-export-picker-asist">${asiEscapeHtml(String(row.asistentes_count ?? 0))} asist.</span>
+                    </span>
+                    <span class="asi-export-picker-meta">
+                        ${asiEscapeHtml(row.municipality || '')} · ${asiEscapeHtml(row.lugar || '')}
+                    </span>
+                    ${tematica !== '' ? `<span class="asi-export-picker-tema">${asiEscapeHtml(tematica)}</span>` : ''}
+                    <span class="asi-export-picker-advisor">${asiEscapeHtml(row.advisor_name || '')}</span>
+                </span>
+            </label>`;
+        }).join('');
+
+        asiExportListEl.querySelectorAll('[data-asi-export-item-check]').forEach((check) => {
+            check.addEventListener('change', () => {
+                const id = Number(check.value);
+                const item = items.find((row) => Number(row.id) === id);
+                const label = check.closest('.asi-export-picker-item');
+                if (check.checked) {
+                    if (asiExportSelected.size >= asiExportMaxListados) {
+                        check.checked = false;
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Límite alcanzado',
+                            text: `Puedes seleccionar hasta ${asiExportMaxListados} listados por PDF.`,
+                        });
+                        return;
+                    }
+                    if (item) {
+                        asiExportSelected.set(id, item);
+                    }
+                    label?.classList.add('is-selected');
+                } else {
+                    asiExportSelected.delete(id);
+                    label?.classList.remove('is-selected');
+                }
+                updateAsiExportSelectionUi();
+            });
+        });
+
+        updateAsiExportSelectionUi();
+    };
+
+    const loadAsiExportListados = async () => {
+        if (!asiExportListadosForm || !asiExportListEl) {
+            return;
+        }
+        asiExportListEl.innerHTML = '<div class="asi-export-picker-empty text-muted small">Buscando listados…</div>';
+        const params = buildAsiExportSearchParams();
+        try {
+            const response = await fetch(`/asistencia/listados-exportables?${params.toString()}`, {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'No se pudieron cargar los listados.');
+            }
+            renderAsiExportList(data.items || []);
+        } catch (err) {
+            asiExportListEl.innerHTML = `<div class="asi-export-picker-empty text-danger small">${asiEscapeHtml(err instanceof Error ? err.message : 'Error al buscar.')}</div>`;
+        }
+    };
+
+    document.querySelectorAll('[data-asi-export-listados-open]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            syncAsiExportModalFromIndex();
+            if (asiExportListadosModal && window.bootstrap) {
+                window.bootstrap.Modal.getOrCreateInstance(asiExportListadosModal).show();
+            }
+            loadAsiExportListados();
+        });
+    });
+
+    if (asiExportListadosForm) {
+        asiExportListadosForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            loadAsiExportListados();
+        });
+        const qInput = asiExportListadosForm.querySelector('[name="q"]');
+        if (qInput) {
+            let qTimer;
+            qInput.addEventListener('input', () => {
+                clearTimeout(qTimer);
+                qTimer = setTimeout(loadAsiExportListados, 350);
+            });
+        }
+    }
+
+    if (asiExportSelectAll) {
+        asiExportSelectAll.addEventListener('change', () => {
+            if (!asiExportListEl) {
+                return;
+            }
+            const checks = asiExportListEl.querySelectorAll('[data-asi-export-item-check]');
+            checks.forEach((check) => {
+                if (check.checked !== asiExportSelectAll.checked) {
+                    check.checked = asiExportSelectAll.checked;
+                    check.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    }
+
+    if (asiExportPdfBtn) {
+        asiExportPdfBtn.addEventListener('click', () => {
+            if (asiExportSelected.size === 0) {
+                return;
+            }
+            const params = new URLSearchParams();
+            asiExportSelected.forEach((_, id) => {
+                params.append('ids[]', String(id));
+            });
+            const base = asiExportPdfBtn.getAttribute('data-export-base') || '/asistencia/exportar-pdf-unidos';
+            window.location.href = `${base}?${params.toString()}`;
+        });
+    }
+
+    if (asiExportListadosModal) {
+        asiExportListadosModal.addEventListener('hidden.bs.modal', () => {
+            asiExportSelected.clear();
+            if (asiExportSelectAll) {
+                asiExportSelectAll.checked = false;
+                asiExportSelectAll.indeterminate = false;
+            }
+            updateAsiExportSelectionUi();
+        });
+    }
+
     // Validación en POST: exigir PRE existente por documento
     const postForms = document.querySelectorAll('form[data-phase="post"][data-test-key]');
 

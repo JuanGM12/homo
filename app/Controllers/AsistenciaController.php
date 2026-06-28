@@ -216,40 +216,9 @@ final class AsistenciaController
         $dir         = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
 
-        $statusFilter = trim((string) $request->input('status', ''));
-        if (!in_array($statusFilter, self::ASISTENCIA_STATUSES, true)) {
-            $statusFilter = '';
-        }
-
-        $municipalities = MunicipalityListRequest::parse($request);
-        $filters = [
-            'subregion'       => trim((string) $request->input('subregion', '')),
-            'advisor_user_id' => $request->input('advisor_user_id') !== '' ? (int) $request->input('advisor_user_id') : null,
-            'status'          => $statusFilter,
-            'from_date'       => trim((string) $request->input('from_date', '')),
-            'to_date'         => trim((string) $request->input('to_date', '')),
-            'tipo'            => $activeTab,
-            'municipalities'  => $municipalities,
-        ];
-
-        $advisors = $this->visibleAdvisorsForUser($user);
-        if ($this->userCanViewAllAsistencia($user)) {
-            // sin restricción adicional
-        } elseif ($this->userIsEspecialista($user)) {
-            $allowedAdvisorIds = array_map(static fn (array $advisor): int => (int) ($advisor['id'] ?? 0), $advisors);
-            $requestedAdvisorId = (int) ($filters['advisor_user_id'] ?? 0);
-
-            if ($requestedAdvisorId > 0) {
-                if (!in_array($requestedAdvisorId, $allowedAdvisorIds, true)) {
-                    $filters['advisor_user_id'] = null;
-                    $filters['advisor_user_ids'] = [0];
-                }
-            } else {
-                $filters['advisor_user_ids'] = $allowedAdvisorIds === [] ? [0] : $allowedAdvisorIds;
-            }
-        } else {
-            $filters['advisor_user_id'] = (int) $user['id'];
-        }
+        $context = $this->buildAsistenciaListFilters($request, $user);
+        $filters = $context['filters'];
+        $advisors = $context['advisors'];
 
         $records = $this->repo->findActivitiesForInforme(array_filter($filters, static function (mixed $v): bool {
             if (is_array($v)) {
@@ -277,7 +246,126 @@ final class AsistenciaController
             'canFilterAdvisor' => count($advisors) > 1,
             'canConfigureInformeScope' => $this->userCanViewAllAsistencia($user),
             'informeRoles' => self::informeRoleOptions(),
+            'mergedPdfMaxListados' => self::MERGED_PDF_MAX_LISTADOS,
         ]);
+    }
+
+    /**
+     * Filtros del listado de asistencia compartidos entre index y exportación múltiple.
+     *
+     * @return array{
+     *     filters: array<string, mixed>,
+     *     advisors: list<array<string, mixed>>,
+     *     active_tab: string
+     * }
+     */
+    private function buildAsistenciaListFilters(Request $request, array $user): array
+    {
+        $activeTab = $this->normalizeActividadTipo((string) $request->input('tab', 'aoat'));
+        $statusFilter = trim((string) $request->input('status', ''));
+        if (!in_array($statusFilter, self::ASISTENCIA_STATUSES, true)) {
+            $statusFilter = '';
+        }
+
+        $municipalities = MunicipalityListRequest::parse($request);
+        $filters = [
+            'subregion' => trim((string) $request->input('subregion', '')),
+            'advisor_user_id' => $request->input('advisor_user_id') !== '' && $request->input('advisor_user_id') !== null
+                ? (int) $request->input('advisor_user_id')
+                : null,
+            'status' => $statusFilter,
+            'from_date' => trim((string) $request->input('from_date', '')),
+            'to_date' => trim((string) $request->input('to_date', '')),
+            'tipo' => $activeTab,
+            'municipalities' => $municipalities,
+        ];
+
+        $advisors = $this->visibleAdvisorsForUser($user);
+        if ($this->userCanViewAllAsistencia($user)) {
+            // sin restricción adicional
+        } elseif ($this->userIsEspecialista($user)) {
+            $allowedAdvisorIds = array_map(static fn (array $advisor): int => (int) ($advisor['id'] ?? 0), $advisors);
+            $requestedAdvisorId = (int) ($filters['advisor_user_id'] ?? 0);
+
+            if ($requestedAdvisorId > 0) {
+                if (!in_array($requestedAdvisorId, $allowedAdvisorIds, true)) {
+                    $filters['advisor_user_id'] = null;
+                    $filters['advisor_user_ids'] = [0];
+                }
+            } else {
+                $filters['advisor_user_ids'] = $allowedAdvisorIds === [] ? [0] : $allowedAdvisorIds;
+            }
+        } else {
+            $filters['advisor_user_id'] = (int) $user['id'];
+        }
+
+        return [
+            'filters' => $filters,
+            'advisors' => $advisors,
+            'active_tab' => $activeTab,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $records
+     * @return list<array<string, mixed>>
+     */
+    private function filterRecordsBySearch(array $records, string $q): array
+    {
+        $q = mb_strtolower(trim($q));
+        if ($q === '') {
+            return $records;
+        }
+
+        return array_values(array_filter($records, static function (array $row) use ($q): bool {
+            $parts = [
+                (string) ($row['code'] ?? ''),
+                (string) ($row['municipality'] ?? ''),
+                (string) ($row['lugar'] ?? ''),
+                (string) ($row['advisor_name'] ?? ''),
+                (string) ($row['subregion'] ?? ''),
+                (string) ($row['status'] ?? ''),
+            ];
+            $tipos = $row['actividad_tipos'] ?? [];
+            if (is_array($tipos)) {
+                foreach ($tipos as $tipo) {
+                    $parts[] = (string) $tipo;
+                }
+            }
+
+            foreach ($parts as $part) {
+                if ($part !== '' && str_contains(mb_strtolower($part), $q)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function parseIdListFromRequest(Request $request): array
+    {
+        $raw = $request->input('ids');
+        if (is_string($raw)) {
+            $parts = preg_split('/[\s,]+/', trim($raw)) ?: [];
+
+            return array_values(array_unique(array_filter(
+                array_map(static fn (string $id): int => (int) $id, $parts),
+                static fn (int $id): bool => $id > 0
+            )));
+        }
+
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): int => (int) $id, $raw),
+            static fn (int $id): bool => $id > 0
+        )));
     }
 
     public function create(Request $request): Response
@@ -1195,6 +1283,139 @@ final class AsistenciaController
 
         $safeCode = preg_replace('/[^a-zA-Z0-9_-]+/', '_', (string) ($actividad['code'] ?? '')) ?: 'export';
         $filename = 'asistencia_' . $safeCode . '_' . date('Ymd') . '.pdf';
+
+        return new Response($pdfBinary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
+    /** Máximo de listados por PDF unido. */
+    private const MERGED_PDF_MAX_LISTADOS = 40;
+
+    public function listadosExportables(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::json(['error' => 'No autenticado.'], 401);
+        }
+
+        $context = $this->buildAsistenciaListFilters($request, $user);
+        $records = $this->repo->findWithFilters($context['filters']);
+
+        foreach ($records as &$row) {
+            $row['asistentes_count'] = $this->repo->countAsistentesByActividad((int) ($row['id'] ?? 0));
+        }
+        unset($row);
+
+        $records = $this->filterRecordsBySearch($records, trim((string) $request->input('q', '')));
+        $records = $this->sortRecords($records, 'activity_date', 'desc');
+
+        $items = [];
+        foreach ($records as $row) {
+            if (!$this->userCanAccessActividad($user, $row)) {
+                continue;
+            }
+            $tipos = $row['actividad_tipos'] ?? [];
+            if (!is_array($tipos)) {
+                $tipos = [];
+            }
+            $items[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'code' => (string) ($row['code'] ?? ''),
+                'activity_date' => (string) ($row['activity_date'] ?? ''),
+                'subregion' => (string) ($row['subregion'] ?? ''),
+                'municipality' => (string) ($row['municipality'] ?? ''),
+                'lugar' => (string) ($row['lugar'] ?? ''),
+                'advisor_name' => (string) ($row['advisor_name'] ?? ''),
+                'asistentes_count' => (int) ($row['asistentes_count'] ?? 0),
+                'status' => (string) ($row['status'] ?? ''),
+                'tipo' => (string) ($row['tipo'] ?? 'aoat'),
+                'tematica' => implode('; ', array_map(static fn (mixed $t): string => trim((string) $t), $tipos)),
+            ];
+        }
+
+        return Response::json([
+            'items' => $items,
+            'total' => count($items),
+        ]);
+    }
+
+    public function exportPdfUnidos(Request $request): Response
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+
+        $ids = $this->parseIdListFromRequest($request);
+        if ($ids === []) {
+            Flash::set([
+                'type' => 'warning',
+                'title' => 'Sin selección',
+                'message' => 'Selecciona al menos un listado de asistencia para exportar.',
+            ]);
+
+            return Response::redirect('/asistencia');
+        }
+
+        if (count($ids) > self::MERGED_PDF_MAX_LISTADOS) {
+            Flash::set([
+                'type' => 'warning',
+                'title' => 'Demasiados listados',
+                'message' => 'Puedes unir hasta ' . self::MERGED_PDF_MAX_LISTADOS . ' listados por PDF.',
+            ]);
+
+            return Response::redirect('/asistencia');
+        }
+
+        $sections = [];
+        foreach ($ids as $id) {
+            $actividad = $this->repo->findById($id);
+            if ($actividad === null || !$this->userCanAccessActividad($user, $actividad)) {
+                continue;
+            }
+            $sections[] = [
+                'actividad' => $actividad,
+                'asistentes' => $this->repo->findAsistentesByActividad($id),
+            ];
+        }
+
+        if ($sections === []) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Sin acceso',
+                'message' => 'No tienes permiso para exportar los listados seleccionados.',
+            ]);
+
+            return Response::redirect('/asistencia');
+        }
+
+        usort($sections, static function (array $a, array $b): int {
+            $da = (string) ($a['actividad']['activity_date'] ?? '');
+            $db = (string) ($b['actividad']['activity_date'] ?? '');
+            if ($da === $db) {
+                return ((int) ($b['actividad']['id'] ?? 0)) <=> ((int) ($a['actividad']['id'] ?? 0));
+            }
+
+            return strcmp($db, $da);
+        });
+
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(180);
+
+        $html = $this->buildMergedPdfHtml($sections);
+        $title = count($sections) === 1
+            ? self::FIPC_LISTADO_TITULO . ' ' . (string) ($sections[0]['actividad']['code'] ?? '')
+            : self::FIPC_LISTADO_TITULO . ' unidos (' . count($sections) . ')';
+
+        $pdfBinary = PdfService::renderHtml($html, 'L', $title, true);
+
+        $filename = count($sections) === 1
+            ? 'asistencia_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', (string) ($sections[0]['actividad']['code'] ?? 'export')) . '_' . date('Ymd') . '.pdf'
+            : 'asistencia_unidos_' . count($sections) . '_' . date('Ymd_His') . '.pdf';
 
         return new Response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
@@ -2339,6 +2560,83 @@ final class AsistenciaController
             return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
         };
 
+        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
+            . '<title>' . $esc(self::FIPC_LISTADO_TITULO . ' ' . (string) ($actividad['code'] ?? '')) . '</title>'
+            . '<style>' . $this->buildPdfHtmlStyles() . '</style>'
+            . '</head><body>'
+            . $this->buildPdfHtmlSection($actividad, $asistentes)
+            . '</body></html>';
+    }
+
+    /**
+     * @param list<array{actividad: array<string, mixed>, asistentes: list<array<string, mixed>>}> $sections
+     */
+    private function buildMergedPdfHtml(array $sections): string
+    {
+        $esc = static function (string $s): string {
+            return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        };
+
+        $body = '';
+        foreach ($sections as $index => $section) {
+            if ($index > 0) {
+                $body .= '<pagebreak />';
+            }
+            $body .= $this->buildPdfHtmlSection($section['actividad'], $section['asistentes']);
+        }
+
+        $count = count($sections);
+        $title = $count === 1
+            ? self::FIPC_LISTADO_TITULO . ' ' . (string) ($sections[0]['actividad']['code'] ?? '')
+            : self::FIPC_LISTADO_TITULO . ' unidos (' . $count . ')';
+
+        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
+            . '<title>' . $esc($title) . '</title>'
+            . '<style>' . $this->buildPdfHtmlStyles() . '</style>'
+            . '</head><body>'
+            . $body
+            . '</body></html>';
+    }
+
+    private function buildPdfHtmlStyles(): string
+    {
+        return '@page{margin:16px;} body{font-family:DejaVu Sans,system-ui,sans-serif;margin:8px;color:#212529;} '
+            . '.pdf-listado-section{margin-bottom:6px;}'
+            . '.pdf-table-wrap{border:1px solid #000;}'
+            . '.pdf-x-strip{margin:4px 0 0;text-align:center;font-size:9px;font-weight:700;background:#e8e8e8;color:#253649;padding:3px 4px;line-height:1.15;border-bottom:1px solid #000;}'
+            . '.wrap{overflow:auto;}'
+            . 'table.t-as{width:100%;border-collapse:collapse;font-size:6.75px;table-layout:fixed;border:none;margin:0;}'
+            . 'table.t-as th,table.t-as td{border:1px solid #000;padding:1px 1px;} '
+            . 'table.t-as thead th[rowspan]{vertical-align:top;padding-top:1px;} '
+            . 'table.t-as thead tr:first-child th:not([rowspan]){vertical-align:top;padding-top:2px;padding-bottom:1px;line-height:1.1;} '
+            . 'table.t-as thead th{font-weight:bold;font-size:7px;}'
+            . 'table.t-as thead .pdf-h-base{background:#eaf0f7;color:#253649;} '
+            . 'table.t-as thead .pdf-h-zona-head,table.t-as thead .pdf-h-zona-sub{background:#eaf0f7;color:#253649;} '
+            . 'table.t-as thead .pdf-h-sexo-head,table.t-as thead .pdf-h-sexo-sub{background:#ddebd7;color:#253649;} '
+            . 'table.t-as thead .pdf-h-gen-head,table.t-as thead .pdf-h-gen-sub{background:#ddd6e9;color:#253649;} '
+            . 'table.t-as thead .pdf-h-ori-head,table.t-as thead .pdf-h-ori-sub{background:#fff3a8;color:#253649;} '
+            . 'table.t-as thead .pdf-h-etn-head,table.t-as thead .pdf-h-etn-sub{background:#eaf0f7;color:#253649;} '
+            . 'table.t-as thead .pdf-h-grp-head,table.t-as thead .pdf-h-grp-sub,table.t-as thead .pdf-h-grp-wide-wrap{background:#eaf0f7;color:#253649;} '
+            . 'table.t-as thead th.pdf-h-sexo-sub,table.t-as thead th.pdf-h-gen-sub,table.t-as thead th.pdf-h-ori-sub,table.t-as thead th.pdf-h-etn-sub{padding:10px 8px;line-height:.86;width:27px;} '
+            . 'table.t-as thead th.pdf-h-zona-sub{padding:10px 8px;line-height:.86;width:29px;} '
+            . 'table.t-as thead th.pdf-h-grp-sub{padding:10px 8px;line-height:.95;width:21px;} '
+            . 'table.t-as thead tr:nth-child(2) th.pdf-h-rot90{padding:8px 5px;line-height:1;vertical-align:middle;text-align:center;font-size:6.2px;font-weight:800;letter-spacing:0.38em;} '
+            . 'table.t-as thead tr:nth-child(2) th.pdf-h-grp-sub.pdf-h-rot90{font-size:5.5px;letter-spacing:0.22em;} '
+            . 'table.t-as thead tr:nth-child(2) th.pdf-h-base.pdf-h-rot90{width:24px;} '
+            . 'table.t-as tbody tr.pdf-totales td.pdf-td-tot{background:#d9d9d9;font-weight:800;font-size:7.5px;vertical-align:middle;} '
+            . 'table.t-as tbody tr.pdf-totales td.pdf-td-tot-lbl{background:#fff;font-weight:800;vertical-align:middle;} '
+            . 'table.t-as tbody td{vertical-align:top;background:#fff;font-size:6.6px;padding:4px 5px;} ';
+    }
+
+    /**
+     * @param list<array<string, mixed>> $asistentes
+     */
+    private function buildPdfHtmlSection(array $actividad, array $asistentes): string
+    {
+        $esc = static function (string $s): string {
+            return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        };
+
         $base = dirname(__DIR__, 2) . '/public/assets/img';
         $logoAntSrc = PdfImageHelper::imageDataUri($base . '/logoAntioquia.png');
         $logoAntHtml = $logoAntSrc !== ''
@@ -2518,44 +2816,13 @@ final class AsistenciaController
             . $this->pdfTotalsDataCells($esc, $totAgg)
             . '</tr>';
 
-        $css =
-            '@page{margin:16px;} body{font-family:DejaVu Sans,system-ui,sans-serif;margin:8px;color:#212529;} '
-            . '.pdf-table-wrap{border:1px solid #000;}'
-            . '.pdf-x-strip{margin:4px 0 0;text-align:center;font-size:9px;font-weight:700;background:#e8e8e8;color:#253649;padding:3px 4px;line-height:1.15;border-bottom:1px solid #000;}'
-            . '.wrap{overflow:auto;}'
-            . 'table.t-as{width:100%;border-collapse:collapse;font-size:6.75px;table-layout:fixed;border:none;margin:0;}'
-            . 'table.t-as th,table.t-as td{border:1px solid #000;padding:1px 1px;} '
-            . 'table.t-as thead th[rowspan]{vertical-align:top;padding-top:1px;} '
-            . 'table.t-as thead tr:first-child th:not([rowspan]){vertical-align:top;padding-top:2px;padding-bottom:1px;line-height:1.1;} '
-            . 'table.t-as thead th{font-weight:bold;font-size:7px;}'
-            . 'table.t-as thead .pdf-h-base{background:#eaf0f7;color:#253649;} '
-            . 'table.t-as thead .pdf-h-zona-head,table.t-as thead .pdf-h-zona-sub{background:#eaf0f7;color:#253649;} '
-            . 'table.t-as thead .pdf-h-sexo-head,table.t-as thead .pdf-h-sexo-sub{background:#ddebd7;color:#253649;} '
-            . 'table.t-as thead .pdf-h-gen-head,table.t-as thead .pdf-h-gen-sub{background:#ddd6e9;color:#253649;} '
-            . 'table.t-as thead .pdf-h-ori-head,table.t-as thead .pdf-h-ori-sub{background:#fff3a8;color:#253649;} '
-            . 'table.t-as thead .pdf-h-etn-head,table.t-as thead .pdf-h-etn-sub{background:#eaf0f7;color:#253649;} '
-            . 'table.t-as thead .pdf-h-grp-head,table.t-as thead .pdf-h-grp-sub,table.t-as thead .pdf-h-grp-wide-wrap{background:#eaf0f7;color:#253649;} '
-            . 'table.t-as thead th.pdf-h-sexo-sub,table.t-as thead th.pdf-h-gen-sub,table.t-as thead th.pdf-h-ori-sub,table.t-as thead th.pdf-h-etn-sub{padding:10px 8px;line-height:.86;width:27px;} '
-            . 'table.t-as thead th.pdf-h-zona-sub{padding:10px 8px;line-height:.86;width:29px;} '
-            . 'table.t-as thead th.pdf-h-grp-sub{padding:10px 8px;line-height:.95;width:21px;} '
-            . 'table.t-as thead tr:nth-child(2) th.pdf-h-rot90{padding:8px 5px;line-height:1;vertical-align:middle;text-align:center;font-size:6.2px;font-weight:800;letter-spacing:0.38em;} '
-            . 'table.t-as thead tr:nth-child(2) th.pdf-h-grp-sub.pdf-h-rot90{font-size:5.5px;letter-spacing:0.22em;} '
-            . 'table.t-as thead tr:nth-child(2) th.pdf-h-base.pdf-h-rot90{width:24px;} '
-            . 'table.t-as tbody tr.pdf-totales td.pdf-td-tot{background:#d9d9d9;font-weight:800;font-size:7.5px;vertical-align:middle;} '
-            . 'table.t-as tbody tr.pdf-totales td.pdf-td-tot-lbl{background:#fff;font-weight:800;vertical-align:middle;} '
-            . 'table.t-as tbody td{vertical-align:top;background:#fff;font-size:6.6px;padding:4px 5px;} '
-            ;
-
-        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
-            . '<title>' . $esc(self::FIPC_LISTADO_TITULO . ' ' . (string) ($actividad['code'] ?? '')) . '</title>'
-            . '<style>' . $css . '</style>'
-            . '</head><body>'
+        return '<div class="pdf-listado-section">'
             . $banner
             . $metaBloc
             . '<div class="wrap"><div class="pdf-table-wrap">'
             . '<div class="pdf-x-strip">Señale con una X la condición que cumpla</div>'
             . '<table class="t-as">' . $thead . '<tbody>' . $tbody . '</tbody></table></div></div>'
-            . '</body></html>';
+            . '</div>';
     }
 
     /**
