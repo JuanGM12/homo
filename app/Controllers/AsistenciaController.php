@@ -1293,7 +1293,7 @@ final class AsistenciaController
     }
 
     /** Máximo de listados por PDF unido. */
-    private const MERGED_PDF_MAX_LISTADOS = 40;
+    private const MERGED_PDF_MAX_LISTADOS = 300;
 
     public function listadosExportables(Request $request): Response
     {
@@ -1403,15 +1403,24 @@ final class AsistenciaController
             return strcmp($db, $da);
         });
 
-        @ini_set('memory_limit', '512M');
-        @set_time_limit(180);
+        @ini_set('memory_limit', '1024M');
+        @set_time_limit(600);
 
-        $html = $this->buildMergedPdfHtml($sections);
+        $chunks = [];
+        foreach ($sections as $section) {
+            $chunks[] = $this->buildPdfHtmlSection($section['actividad'], $section['asistentes']);
+        }
         $title = count($sections) === 1
             ? self::FIPC_LISTADO_TITULO . ' ' . (string) ($sections[0]['actividad']['code'] ?? '')
             : self::FIPC_LISTADO_TITULO . ' unidos (' . count($sections) . ')';
 
-        $pdfBinary = PdfService::renderHtml($html, 'L', $title, true);
+        $pdfBinary = PdfService::renderHtmlSections(
+            $chunks,
+            $this->buildPdfHtmlStyles(),
+            'L',
+            $title,
+            true,
+        );
 
         $filename = count($sections) === 1
             ? 'asistencia_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', (string) ($sections[0]['actividad']['code'] ?? 'export')) . '_' . date('Ymd') . '.pdf'
@@ -2565,36 +2574,6 @@ final class AsistenciaController
             . '<style>' . $this->buildPdfHtmlStyles() . '</style>'
             . '</head><body>'
             . $this->buildPdfHtmlSection($actividad, $asistentes)
-            . '</body></html>';
-    }
-
-    /**
-     * @param list<array{actividad: array<string, mixed>, asistentes: list<array<string, mixed>>}> $sections
-     */
-    private function buildMergedPdfHtml(array $sections): string
-    {
-        $esc = static function (string $s): string {
-            return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
-        };
-
-        $body = '';
-        foreach ($sections as $index => $section) {
-            if ($index > 0) {
-                $body .= '<pagebreak />';
-            }
-            $body .= $this->buildPdfHtmlSection($section['actividad'], $section['asistentes']);
-        }
-
-        $count = count($sections);
-        $title = $count === 1
-            ? self::FIPC_LISTADO_TITULO . ' ' . (string) ($sections[0]['actividad']['code'] ?? '')
-            : self::FIPC_LISTADO_TITULO . ' unidos (' . $count . ')';
-
-        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
-            . '<title>' . $esc($title) . '</title>'
-            . '<style>' . $this->buildPdfHtmlStyles() . '</style>'
-            . '</head><body>'
-            . $body
             . '</body></html>';
     }
 
