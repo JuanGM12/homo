@@ -8,7 +8,7 @@ declare(strict_types=1);
  */
 
 $root = dirname(__DIR__, 2);
-$source = $root . '/INFORME FINAL DE GESTIÓN_v2.docx';
+$source = $root . '/INFORME FINAL DE GESTIÓN_v2 (5).docx';
 $destDir = $root . '/storage/templates';
 $dest = $destDir . '/informe_final_gestion.docx';
 
@@ -44,24 +44,24 @@ function replaceParagraphContent(string $xml, string $pattern, string $replaceme
     return is_string($result) ? $result : $xml;
 }
 
-// Subregión: celda con "La " + "seleccionada"
+// Subregión: celda vacía a la derecha del rótulo.
 $xml = replaceParagraphContent(
     $xml,
     '/(<w:tc>.*?<w:t>SUBREGION<\/w:t>.*?<\/w:tc>\s*<w:tc>.*?<w:p[^>]*>)(.*?)(<\/w:p><\/w:tc>)/su',
     '$1<w:r><w:rPr><w:rFonts w:ascii="Arial Rounded MT Bold" w:hAnsi="Arial Rounded MT Bold"/><w:highlight w:val="yellow"/></w:rPr><w:t>${SUBREGION}</w:t></w:r>$3'
 );
 
-// Municipio: celda con "El " + "seleccionado"
+// Municipio: celda vacía a la derecha del rótulo.
 $xml = replaceParagraphContent(
     $xml,
     '/(<w:tc>.*?<w:t>MUNICIPIO<\/w:t>.*?<\/w:tc>\s*<w:tc>.*?<w:p[^>]*>)(.*?)(<\/w:p><\/w:tc>)/su',
     '$1<w:r><w:rPr><w:rFonts w:ascii="Arial Rounded MT Bold" w:hAnsi="Arial Rounded MT Bold"/><w:highlight w:val="yellow"/></w:rPr><w:t>${MUNICIPIO}</w:t></w:r>$3'
 );
 
-// Fila de valores bajo TOTAL ASESORIAS | TOTAL ASISTENCIAS | TEMATICAS AOAT
+// Fila de valores bajo TOTAL ASESORIAS | TOTAL ASISTENCIAS | TEMATICAS AOAT.
 $xml = replaceParagraphContent(
     $xml,
-    '/(<w:t xml:space="preserve"> ASESORIAS REALIZADAS<\/w:t>.*?<\/w:tr>\s*<w:tr[^>]*>)(.*?)(<\/w:tr>\s*<\/w:tbl>)/su',
+    '/(<w:t>TOTAL ASESORIAS REALIZADAS<\/w:t>.*?<w:t>TOTAL ASISTENCIAS TECNICAS REALIZADAS<\/w:t>.*?<w:t>TEMATICAS GENERALES ABORDADAS EN LAS AOAT<\/w:t>.*?<\/w:tr>\s*<w:tr[^>]*>)(.*?)(<\/w:tr>\s*<\/w:tbl>)/su',
     '$1'
     . '<w:tc><w:tcPr><w:tcW w:w="3116" w:type="dxa"/></w:tcPr>'
     . '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:highlight w:val="yellow"/></w:rPr><w:t>${TOTAL_ASESORIAS}</w:t></w:r></w:p></w:tc>'
@@ -72,7 +72,7 @@ $xml = replaceParagraphContent(
     . '$3'
 );
 
-// Población impactada — fila de datos (NUMERO DE PERSONAS | CARGO | TEMATICA GENERAL)
+// Población impactada: fila de datos.
 $xml = replaceParagraphContent(
     $xml,
     '/(<w:t>NUMERO DE PERSONAS<\/w:t>.*?<w:t>CARGO<\/w:t>.*?<w:t>TEMATICA GENERAL<\/w:t>.*?<\/w:tr>\s*<w:tr[^>]*>)(.*?)(<\/w:tr>\s*<\/w:tbl>)/su',
@@ -86,22 +86,10 @@ $xml = replaceParagraphContent(
     . '$3'
 );
 
-// Resumen ejecutivo hint (amarillo)
-$xml = str_replace(
-    '>Del municipio acompañado<',
-    '>${RESUMEN_EJECUTIVO_HINT}<',
-    $xml
-);
-$xml = str_replace(
-    '>Del municipio acompa' . "\xC3\xB1" . 'ado<',
-    '>${RESUMEN_EJECUTIVO_HINT}<',
-    $xml
-);
-
-// Elaborado por — fila de valores (debajo de NOMBRE | CARGO/ROL | DOCUMENTO | FIRMA)
+// Elaborado por: fila de valores debajo de NOMBRE | CARGO | DOCUMENTO DE IDENTIDAD | FIRMA.
 $xml = replaceParagraphContent(
     $xml,
-    '/(<w:t xml:space="preserve"> PROFESIONAL<\/w:t>.*?<w:t>FIRMA<\/w:t>.*?<\/w:tr>\s*<w:tr[^>]*>)(.*?)(<\/w:tr>\s*<\/w:tbl>)/su',
+    '/(<w:t>NOMBRE<\/w:t>.*?<w:t>CARGO<\/w:t>.*?<w:t>DOCUMENTO DE IDENTIDAD<\/w:t>.*?<w:t>FIRMA<\/w:t>.*?<\/w:tr>\s*<w:tr[^>]*>)(.*?)(<\/w:tr>\s*<\/w:tbl>)/su',
     '$1'
     . '<w:tc><w:tcPr><w:tcW w:w="2337" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>'
     . '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:highlight w:val="yellow"/></w:rPr><w:t>${ELABORADO_NOMBRE}</w:t></w:r></w:p></w:tc>'
@@ -136,7 +124,7 @@ function removeParagraphContaining(string $xml, string $needle): string
     return is_string($result) ? $result : $xml;
 }
 
-// Marco normativo — placeholder único con listado completo desde el servicio
+// Marco normativo: placeholder único con listado completo desde el servicio.
 $xml = replaceParagraphText($xml, 'Ley 1616 de 2013 (Salud Mental).', '${MARCO_NORMATIVO}');
 foreach ([
     'Ley 1566 de 2012.',
@@ -148,7 +136,7 @@ foreach ([
     $xml = removeParagraphContaining($xml, $legacyMarcoLine);
 }
 
-// Nota de generación antes de "Elaborado por"
+// Nota de generación antes de "Elaborado por".
 if (!str_contains($xml, '${FECHA_GENERACION}')) {
     $xml = str_replace(
         '<w:t>Elaborado por:</w:t>',

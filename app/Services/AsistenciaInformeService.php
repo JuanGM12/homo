@@ -81,7 +81,6 @@ final class AsistenciaInformeService
         $processor->setValue('TOTAL_REGISTROS_ASISTENCIA', (string) $stats['total_registros_asistencia']);
         $processor->setValue('CARGOS_IMPACTO', $this->formatCargoList($stats['by_cargo']));
         $processor->setValue('TEMATICAS_IMPACTO', $this->formatBulletList($stats['tematicas_impacto']));
-        $processor->setValue('RESUMEN_EJECUTIVO_HINT', $this->buildResumenHint($municipality, $fromDate, $toDate));
         $processor->setValue('ELABORADO_NOMBRE', $elaborado['nombre']);
         $processor->setValue('ELABORADO_CARGO', $elaborado['cargo']);
         $processor->setValue('ELABORADO_DOCUMENTO', $elaborado['documento']);
