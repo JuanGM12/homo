@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Support\Diagnostics;
+use Throwable;
+
 final class App
 {
     private Router $router;
@@ -152,9 +155,23 @@ final class App
 
     public function run(): void
     {
-        $request = Request::fromGlobals();
-        $response = $this->router->dispatch($request);
-        $response->send();
+        try {
+            $request = Request::fromGlobals();
+            $response = $this->router->dispatch($request);
+            $response->send();
+            Diagnostics::finish($response->getStatus());
+        } catch (Throwable $exception) {
+            Diagnostics::exception($exception);
+
+            if (!headers_sent()) {
+                $response = Response::view('errors/500', [
+                    'pageTitle' => 'Error interno',
+                ], 500);
+                $response->send();
+            }
+
+            Diagnostics::finish(500, 'exception_response');
+        }
     }
 }
 

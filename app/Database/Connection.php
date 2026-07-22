@@ -38,6 +38,7 @@ final class Connection
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_TIMEOUT => (int) Config::env('DB_TIMEOUT', 5),
                 // Primera operación al conectar: misma referencia horaria que PHP (Bogotá por defecto).
                 PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '" . $tz . "'",
             ];

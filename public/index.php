@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Config\Config;
 use App\Core\App;
+use App\Support\Diagnostics;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -12,6 +13,8 @@ $dotenvPath = dirname(__DIR__);
 if (file_exists($dotenvPath . '/.env')) {
     (Dotenv\Dotenv::createImmutable($dotenvPath))->safeLoad();
 }
+
+Diagnostics::bootstrap(microtime(true));
 
 // Zona horaria
 date_default_timezone_set(Config::timezone());

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Support\Diagnostics;
+
 final class Response
 {
     public function __construct(
@@ -37,9 +39,18 @@ final class Response
         return new self($payload === false ? '{}' : $payload, $status, $headers);
     }
 
+    public function getStatus(): int
+    {
+        return $this->status;
+    }
+
     public function send(): void
     {
         http_response_code($this->status);
+        $requestId = Diagnostics::requestId();
+        if ($requestId !== '') {
+            header('X-Request-ID: ' . $requestId);
+        }
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }

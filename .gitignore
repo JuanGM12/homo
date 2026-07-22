@@ -1,1 +1,3 @@
 /.env
+/storage/logs/app-requests.log
+/storage/logs/php-error.log
