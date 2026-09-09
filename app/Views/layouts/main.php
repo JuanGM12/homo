@@ -101,7 +101,7 @@ if ($currentUser) {
                                 <?php if ($currentUser):
                                     $primaryRole = !empty($currentUserRoles[0]) ? (string) $currentUserRoles[0] : '';
                                     $hasEspecialista = in_array('especialista', $currentUserRoles, true);
-                                    $specializableRoles = ['medico', 'psicologo', 'abogado', 'profesional social', 'profesional_social'];
+                                    $specializableRoles = ['medico', 'psicologo', 'politologo', 'abogado', 'profesional social', 'profesional_social'];
                                     $displayRole = $primaryRole;
                                     if ($primaryRole !== '' && $hasEspecialista && in_array($primaryRole, $specializableRoles, true)) {
                                         $displayRole .= ' (Especializado)';
@@ -144,7 +144,7 @@ if ($currentUser) {
                                     <span>Inicio</span>
                                 </a>
                                 <?php if ($currentUser):
-                                    $aoatRoles = ['abogado', 'medico', 'psicologo', 'profesional social', 'profesional_social', 'especialista', 'coordinadora', 'coordinador'];
+                                    $aoatRoles = ['abogado', 'medico', 'psicologo', 'politologo', 'profesional social', 'profesional_social', 'especialista', 'coordinadora', 'coordinador'];
                                     $canAccessAoat = !empty(array_intersect($aoatRoles, $currentUserRoles)) || in_array('admin', $currentUserRoles, true);
                                     if ($canAccessAoat): ?>
                                         <a href="/aoat" class="app-sidebar-link <?= ($currentPath === '/aoat' || (str_starts_with($currentPath, '/aoat/') && !str_starts_with($currentPath, '/aoat/seguimiento'))) ? 'active' : '' ?>">
@@ -197,7 +197,7 @@ if ($currentUser) {
                                     <span>Encuesta de Opinión AoAT</span>
                                 </a>
                                 <?php
-                                $encuestaConsultaRoles = ['admin', 'coordinadora', 'coordinador', 'especialista', 'medico', 'psicologo', 'abogado', 'profesional social', 'profesional_social'];
+                                $encuestaConsultaRoles = ['admin', 'coordinadora', 'coordinador', 'especialista', 'medico', 'psicologo', 'politologo', 'abogado', 'profesional social', 'profesional_social'];
                                 $canConsultarEncuesta = $currentUser && (bool) array_intersect($encuestaConsultaRoles, $currentUserRoles);
                                 if ($canConsultarEncuesta): ?>
                                     <a href="/encuesta-opinion-aoat/listar" class="app-sidebar-link <?= str_starts_with($currentPath, '/encuesta-opinion-aoat/listar') ? 'active' : '' ?>">

@@ -10,9 +10,14 @@ use PDOException;
 
 final class AoatRepository
 {
+    private ?bool $supportsPeriodColumn = null;
+
     public function create(array $data): int
     {
         $pdo = Connection::getPdo();
+        if (!$this->supportsPeriodColumn($pdo)) {
+            unset($data['period_id']);
+        }
         $pdo->beginTransaction();
 
         try {
@@ -68,7 +73,7 @@ final class AoatRepository
     {
         $pdo = Connection::getPdo();
 
-        $stmt = $pdo->prepare('SELECT * FROM aoat_records WHERE id = :id LIMIT 1');
+        $stmt = $pdo->prepare($this->selectSql('WHERE r.id = :id') . ' LIMIT 1');
         $stmt->execute([':id' => $id]);
 
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -81,7 +86,7 @@ final class AoatRepository
         $pdo = Connection::getPdo();
 
         $stmt = $pdo->prepare(
-            'SELECT * FROM aoat_records WHERE user_id = :user_id ORDER BY created_at DESC, id DESC'
+            $this->selectSql('WHERE r.user_id = :user_id') . ' ORDER BY r.created_at DESC, r.id DESC'
         );
         $stmt->execute([':user_id' => $userId]);
 
@@ -101,15 +106,12 @@ final class AoatRepository
         $pdo = Connection::getPdo();
 
         if ($professionalRoles === []) {
-            $stmt = $pdo->query('SELECT * FROM aoat_records ORDER BY created_at DESC, id DESC');
+            $stmt = $pdo->query($this->selectSql() . ' ORDER BY r.created_at DESC, r.id DESC');
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         }
 
         $placeholders = implode(', ', array_fill(0, count($professionalRoles), '?'));
-        $sql = sprintf(
-            'SELECT * FROM aoat_records WHERE professional_role IN (%s) ORDER BY created_at DESC, id DESC',
-            $placeholders
-        );
+        $sql = $this->selectSql(sprintf('WHERE r.professional_role IN (%s)', $placeholders)) . ' ORDER BY r.created_at DESC, r.id DESC';
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($professionalRoles);
@@ -269,6 +271,35 @@ final class AoatRepository
         } catch (\Exception) {
             return substr($rawDate, 0, 10);
         }
+    }
+
+    private function selectSql(string $where = ''): string
+    {
+        if (!$this->supportsPeriodColumn()) {
+            return 'SELECT r.*, NULL AS period_name, 0 AS period_active FROM aoat_records r ' . $where;
+        }
+
+        return "SELECT r.*, p.name AS period_name, COALESCE(p.active, 0) AS period_active
+                FROM aoat_records r
+                LEFT JOIN aoat_periods p ON p.id = r.period_id
+                {$where}";
+    }
+
+    private function supportsPeriodColumn(?PDO $pdo = null): bool
+    {
+        if ($this->supportsPeriodColumn !== null) {
+            return $this->supportsPeriodColumn;
+        }
+
+        try {
+            $pdo = $pdo ?? Connection::getPdo();
+            $stmt = $pdo->query("SHOW COLUMNS FROM aoat_records LIKE 'period_id'");
+            $this->supportsPeriodColumn = (bool) ($stmt && $stmt->fetch(PDO::FETCH_ASSOC));
+        } catch (PDOException) {
+            $this->supportsPeriodColumn = false;
+        }
+
+        return $this->supportsPeriodColumn;
     }
 }
 

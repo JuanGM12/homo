@@ -2,6 +2,8 @@
 /** @var array<int, array<string, mixed>> $records */
 /** @var bool|null $isAuditView */
 /** @var array<string, mixed> $pagination */
+/** @var array<int, array<string, mixed>> $periodOptions */
+/** @var string $filterPeriod */
 
 use App\Services\Auth;
 
@@ -15,7 +17,6 @@ $canUseWeeklyReport = $isAdmin || $isCoordinator;
 
 $exportParams = $_GET;
 unset($exportParams['partial']);
-$exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
 
 $filterSubregion = (string) ($filterSubregion ?? ($_GET['subregion'] ?? ''));
 $filterMunicipalities = $filterMunicipalities ?? [];
@@ -23,6 +24,12 @@ if (!is_array($filterMunicipalities)) {
     $filterMunicipalities = [];
 }
 $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$periodOptions = is_array($periodOptions ?? null) ? $periodOptions : [];
+$filterPeriod = (string) ($filterPeriod ?? ($_GET['period_id'] ?? 'all'));
+if (!isset($exportParams['period_id'])) {
+    $exportParams['period_id'] = $filterPeriod;
+}
+$exportQuery = $exportParams ? ('?' . http_build_query($exportParams)) : '';
 ?>
 
 <section class="mt-5 mb-4">
@@ -87,6 +94,23 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
                 placeholder="Profesional, ID..."
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Periodo</label>
+            <select name="period_id" class="form-select form-select-sm">
+                <option value="all" <?= $filterPeriod === 'all' ? 'selected' : '' ?>>Todos</option>
+                <?php foreach ($periodOptions as $period): ?>
+                    <?php
+                    $periodId = (string) (int) ($period['id'] ?? 0);
+                    if ($periodId === '0') {
+                        continue;
+                    }
+                    ?>
+                    <option value="<?= htmlspecialchars($periodId, ENT_QUOTES, 'UTF-8') ?>" <?= $filterPeriod === $periodId ? 'selected' : '' ?>>
+                        <?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= !empty($period['active']) ? ' (activo)' : '' ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div class="col-md-2">
             <label class="form-label small text-muted">Subregión</label>

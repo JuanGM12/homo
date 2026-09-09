@@ -594,6 +594,9 @@ final class AsistenciaInformeService
         if (in_array('medico', $roles, true) || $primary === 'medico') {
             return 'Médico';
         }
+        if (in_array('politologo', $roles, true) || $primary === 'politologo') {
+            return 'Politólogo';
+        }
         if (in_array('abogado', $roles, true) || $primary === 'abogado') {
             return 'Abogado';
         }

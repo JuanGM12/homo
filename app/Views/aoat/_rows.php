@@ -75,6 +75,7 @@ $formatActivityDate = static function (?string $value): array {
 
     $details = [
         'id' => (int) $record['id'],
+        'period' => (string) ($record['period_name'] ?? 'Sin periodo'),
         'activity_date' => (string) ($record['activity_date'] ?? ''),
         'created_at' => (string) ($record['created_at'] ?? ''),
         'professional' => trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? ''))),
@@ -131,6 +132,11 @@ $formatActivityDate = static function (?string $value): array {
                     <span class="aoat-date-sub"><?= htmlspecialchars($dateParts['time'], ENT_QUOTES, 'UTF-8') ?></span>
                 <?php endif; ?>
             </div>
+        </td>
+        <td>
+            <span class="aoat-period-pill <?= !empty($record['period_active']) ? 'is-active' : '' ?>">
+                <?= htmlspecialchars((string) ($record['period_name'] ?? 'Sin periodo'), ENT_QUOTES, 'UTF-8') ?>
+            </span>
         </td>
         <td>
             <div class="aoat-professional">

@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\AoatMetaRuleRepository;
+use App\Repositories\AoatPeriodRepository;
 use App\Services\Flash;
 
 final class AoatMetaRulesController
@@ -20,7 +21,60 @@ final class AoatMetaRulesController
             'rules' => $repo->allForAdmin(),
             'roleOptions' => $this->roleOptions(),
             'scopeOptions' => $this->scopeOptions(),
+            'periods' => (new AoatPeriodRepository())->all(),
         ]);
+    }
+
+    public function createPeriod(Request $request): Response
+    {
+        $name = trim((string) $request->input('name', ''));
+        $active = (string) $request->input('active', '') === '1';
+        $repo = new AoatPeriodRepository();
+
+        try {
+            $repo->create($name, $active);
+        } catch (\Throwable) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No fue posible crear el periodo',
+                'message' => 'Verifica el nombre e intenta nuevamente.',
+            ]);
+
+            return Response::redirect('/admin/aoat-metas');
+        }
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Periodo creado',
+            'message' => $active ? 'El periodo quedo creado y activo para nuevos registros AoAT.' : 'El periodo quedo disponible en la configuracion.',
+        ]);
+
+        return Response::redirect('/admin/aoat-metas');
+    }
+
+    public function activatePeriod(Request $request): Response
+    {
+        $id = (int) $request->input('id', 0);
+
+        try {
+            (new AoatPeriodRepository())->activate($id);
+        } catch (\Throwable) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No fue posible activar',
+                'message' => 'El periodo seleccionado no esta disponible.',
+            ]);
+
+            return Response::redirect('/admin/aoat-metas');
+        }
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Periodo activo actualizado',
+            'message' => 'Los nuevos registros AoAT se guardaran en el periodo activo.',
+        ]);
+
+        return Response::redirect('/admin/aoat-metas');
     }
 
     public function update(Request $request): Response

@@ -117,6 +117,9 @@ final class Auth
         if ($primaryRole === 'medico' || in_array('medico', $roles, true)) {
             return ['medico'];
         }
+        if ($primaryRole === 'politologo' || in_array('politologo', $roles, true)) {
+            return ['politologo'];
+        }
         if ($primaryRole === 'abogado' || in_array('abogado', $roles, true)) {
             return ['abogado'];
         }

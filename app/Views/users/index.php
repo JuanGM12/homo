@@ -96,6 +96,7 @@
                     <th scope="col">Documento de identidad</th>
                     <th scope="col">Correo</th>
                     <th scope="col">Roles</th>
+                    <th scope="col">Municipios</th>
                     <th scope="col">Estado</th>
                     <th scope="col" class="text-end">Acciones</th>
                 </tr>
@@ -114,6 +115,41 @@
                         </td>
                         <td><?= htmlspecialchars((string) $user['email'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string) ($user['roles_list'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <?php
+                            $municipalityRows = [];
+                            $rawMunicipalities = trim((string) ($user['municipalities_list'] ?? ''));
+                            if ($rawMunicipalities !== '') {
+                                foreach (explode('||', $rawMunicipalities) as $rawMunicipality) {
+                                    [$subregion, $municipality] = array_pad(explode('|', $rawMunicipality, 2), 2, '');
+                                    $municipality = trim((string) $municipality);
+                                    $subregion = trim((string) $subregion);
+                                    if ($municipality !== '') {
+                                        $municipalityRows[] = ['subregion' => $subregion, 'municipality' => $municipality];
+                                    }
+                                }
+                            }
+                            ?>
+                            <?php if ($municipalityRows === []): ?>
+                                <span class="badge rounded-pill text-bg-light text-muted border">Todos</span>
+                            <?php else: ?>
+                                <div class="user-municipality-summary">
+                                    <?php foreach (array_slice($municipalityRows, 0, 3) as $municipalityRow): ?>
+                                        <span
+                                            class="user-municipality-chip"
+                                            title="<?= htmlspecialchars((string) $municipalityRow['subregion'], ENT_QUOTES, 'UTF-8') ?>"
+                                        >
+                                            <?= htmlspecialchars((string) $municipalityRow['municipality'], ENT_QUOTES, 'UTF-8') ?>
+                                        </span>
+                                    <?php endforeach; ?>
+                                    <?php if (count($municipalityRows) > 3): ?>
+                                        <span class="user-municipality-chip user-municipality-chip--more">
+                                            +<?= count($municipalityRows) - 3 ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ((int) $user['active'] === 1): ?>
                                 <span class="badge rounded-pill text-bg-success">Activo</span>

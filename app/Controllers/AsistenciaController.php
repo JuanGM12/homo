@@ -183,6 +183,9 @@ final class AsistenciaController
                 'SAFER - Módulo 4: Legislación actual con énfasis en consumo de menores y mujeres.',
                 'SAFER - Módulo 5: Socialización de la problemática pública del alcohol.',
             ],
+            'politologo' => [
+                'Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)',
+            ],
             'trabajador_social' => [
                 'Actividad de apoyo',
                 'Espacio de articulación',
@@ -1907,6 +1910,9 @@ final class AsistenciaController
         if (in_array('medico', $roles, true) || $primaryRole === 'medico') {
             return 'medico';
         }
+        if (in_array('politologo', $roles, true) || $primaryRole === 'politologo') {
+            return 'politologo';
+        }
         if (in_array('abogado', $roles, true) || $primaryRole === 'abogado') {
             return 'abogado';
         }
@@ -1944,6 +1950,9 @@ final class AsistenciaController
         }
         if (in_array('medico', $roles, true) || $primaryRole === 'medico') {
             return 'medico';
+        }
+        if (in_array('politologo', $roles, true) || $primaryRole === 'politologo') {
+            return 'politologo';
         }
         if (in_array('abogado', $roles, true) || $primaryRole === 'abogado') {
             return 'abogado';
@@ -2812,6 +2821,7 @@ final class AsistenciaController
         return [
             'psicologo' => 'Psicólogo',
             'medico' => 'Médico',
+            'politologo' => 'Politólogo',
             'abogado' => 'Abogado',
             'trabajador_social' => 'Profesional social',
         ];

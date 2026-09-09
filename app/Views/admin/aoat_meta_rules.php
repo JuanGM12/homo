@@ -2,10 +2,12 @@
 /** @var array $rules */
 /** @var array $roleOptions */
 /** @var array $scopeOptions */
+/** @var array $periods */
 
 $rules = is_array($rules ?? null) ? $rules : [];
 $roleOptions = is_array($roleOptions ?? null) ? $roleOptions : [];
 $scopeOptions = is_array($scopeOptions ?? null) ? $scopeOptions : [];
+$periods = is_array($periods ?? null) ? $periods : [];
 $months = [
     1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr', 5 => 'May', 6 => 'Jun',
     7 => 'Jul', 8 => 'Ago', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
@@ -23,6 +25,81 @@ $months = [
             </nav>
             <h1 class="section-title mb-1">Configuracion de metas AoAT</h1>
             <p class="section-subtitle mb-0">Define metas por rol, tramo de meses y tipo de medicion para el cuadro territorial.</p>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+                <div>
+                    <h2 class="h5 fw-semibold mb-1">Periodos</h2>
+                    <p class="small text-muted mb-0">El periodo activo se asigna automaticamente a cada nuevo registro AoAT.</p>
+                </div>
+                <?php
+                $activePeriodName = '';
+                foreach ($periods as $period) {
+                    if (!empty($period['active'])) {
+                        $activePeriodName = (string) ($period['name'] ?? '');
+                        break;
+                    }
+                }
+                ?>
+                <span class="aoat-period-pill is-active">Activo: <?= htmlspecialchars($activePeriodName !== '' ? $activePeriodName : 'Sin periodo', ENT_QUOTES, 'UTF-8') ?></span>
+            </div>
+
+            <div class="table-responsive mb-3">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Periodo</th>
+                            <th>Estado</th>
+                            <th class="text-end">Accion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($periods as $period): ?>
+                            <tr>
+                                <td class="fw-semibold"><?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td>
+                                    <span class="aoat-period-pill <?= !empty($period['active']) ? 'is-active' : '' ?>">
+                                        <?= !empty($period['active']) ? 'Activo' : 'Inactivo' ?>
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <?php if (empty($period['active']) && (int) ($period['id'] ?? 0) > 0): ?>
+                                        <form method="post" action="/admin/aoat-periodos/activar" class="d-inline">
+                                            <input type="hidden" name="id" value="<?= (int) ($period['id'] ?? 0) ?>">
+                                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                                <i class="bi bi-check2-circle me-1"></i>Activar
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="small text-muted">Sin accion</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <form method="post" action="/admin/aoat-periodos" class="row g-2 align-items-end">
+                <div class="col-12 col-md-5">
+                    <label class="form-label small text-muted">Nuevo periodo</label>
+                    <input type="text" name="name" class="form-control form-control-sm" placeholder="Ej. 2027-1" maxlength="40" required>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="form-check mt-md-4">
+                        <input class="form-check-input" type="checkbox" name="active" value="1" id="aoat-period-active-new">
+                        <label class="form-check-label small" for="aoat-period-active-new">Crear como activo</label>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4 text-md-end">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-plus-circle me-1"></i>Crear periodo
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 

@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatPeriodRepository;
 use App\Repositories\AoatRepository;
 use App\Support\MunicipalityListRequest;
 use App\Services\Auth;
@@ -34,7 +35,12 @@ final class AoatSeguimientoController
 
         $repo = new AoatRepository();
         $records = $this->fetchScopedRecords($user, $repo);
+        $periodRepo = new AoatPeriodRepository();
+        $periods = $periodRepo->all();
+        $defaultAoatPeriod = $this->resolveAoatPeriodFilter($periodRepo->active());
+        $recordsForMatrix = $this->filterRecordsByAoatPeriod($records, $defaultAoatPeriod);
         $defaultFilters = [
+            'aoat_period_id' => $defaultAoatPeriod,
             'year' => (int) date('Y'),
             'period' => (int) date('n') <= 6 ? 'ene_jun' : 'jul_dic',
             'professional_user_id' => 0,
@@ -47,13 +53,15 @@ final class AoatSeguimientoController
             'total_periodo' => '',
         ];
         $defaultFilters = $this->withSeguimientoViewerFlags($user, $defaultFilters);
-        $initialMeta = $this->service->buildMatrix($records, $defaultFilters);
+        $initialMeta = $this->service->buildMatrix($recordsForMatrix, $defaultFilters);
         $filterOptions = $this->buildFilterOptions($records);
 
         return Response::view('aoat/seguimiento', [
             'pageTitle' => 'Seguimiento territorial AoAT · Metas',
             'filterOptions' => $filterOptions,
             'initialMeta' => $initialMeta,
+            'periods' => $periods,
+            'filterAoatPeriod' => $defaultAoatPeriod,
         ]);
     }
 
@@ -69,8 +77,14 @@ final class AoatSeguimientoController
 
         $repo = new AoatRepository();
         $records = $this->fetchScopedRecords($user, $repo);
+        $aoatPeriodFilter = $this->resolveAoatPeriodFilter(
+            (new AoatPeriodRepository())->active(),
+            (string) $request->input('aoat_period_id', '')
+        );
+        $recordsForMatrix = $this->filterRecordsByAoatPeriod($records, $aoatPeriodFilter);
 
         $filters = [
+            'aoat_period_id' => $aoatPeriodFilter,
             'year' => max(2020, (int) $request->input('year', (int) date('Y'))),
             'period' => trim((string) $request->input('period', 'ene_jun')) === 'jul_dic' ? 'jul_dic' : 'ene_jun',
             'professional_user_id' => max(0, (int) $request->input('professional_user_id', 0)),
@@ -84,7 +98,7 @@ final class AoatSeguimientoController
         ];
         $filters = $this->withSeguimientoViewerFlags($user, $filters);
 
-        $matrix = $this->service->buildMatrix($records, $filters);
+        $matrix = $this->service->buildMatrix($recordsForMatrix, $filters);
         $filterOptions = $this->buildFilterOptions($records);
 
         return Response::json([
@@ -108,7 +122,8 @@ final class AoatSeguimientoController
         $repo = new AoatRepository();
         $records = $this->fetchScopedRecords($user, $repo);
         $filters = $this->withSeguimientoViewerFlags($user, $this->parseFiltersFromRequest($request));
-        $matrix = $this->service->buildMatrix($records, $filters);
+        $recordsForMatrix = $this->filterRecordsByAoatPeriod($records, (string) ($filters['aoat_period_id'] ?? 'all'));
+        $matrix = $this->service->buildMatrix($recordsForMatrix, $filters);
         $vista = ($filters['vista'] ?? 'meta') === 'actividad' ? 'actividad' : 'meta';
 
         $esc = static function (string $v): string {
@@ -259,7 +274,8 @@ final class AoatSeguimientoController
         $repo = new AoatRepository();
         $records = $this->fetchScopedRecords($user, $repo);
         $filters = $this->withSeguimientoViewerFlags($user, $this->parseFiltersFromRequest($request));
-        $matrix = $this->service->buildMatrix($records, $filters);
+        $recordsForMatrix = $this->filterRecordsByAoatPeriod($records, (string) ($filters['aoat_period_id'] ?? 'all'));
+        $matrix = $this->service->buildMatrix($recordsForMatrix, $filters);
 
         $html = $this->buildSeguimientoPdfHtml($matrix, $filters, $records);
 
@@ -292,6 +308,10 @@ final class AoatSeguimientoController
     private function parseFiltersFromRequest(Request $request): array
     {
         return [
+            'aoat_period_id' => $this->resolveAoatPeriodFilter(
+                (new AoatPeriodRepository())->active(),
+                (string) $request->input('aoat_period_id', '')
+            ),
             'year' => max(2020, (int) $request->input('year', (int) date('Y'))),
             'period' => trim((string) $request->input('period', 'ene_jun')) === 'jul_dic' ? 'jul_dic' : 'ene_jun',
             'professional_user_id' => max(0, (int) $request->input('professional_user_id', 0)),
@@ -310,6 +330,53 @@ final class AoatSeguimientoController
         $state = trim($raw);
 
         return in_array($state, ['Asignada', 'Devuelta', 'Realizado', 'Aprobada'], true) ? $state : '';
+    }
+
+    /**
+     * @param array<string, mixed>|null $activePeriod
+     */
+    private function resolveAoatPeriodFilter(?array $activePeriod, string $raw = ''): string
+    {
+        $raw = trim($raw);
+        if ($raw === 'all') {
+            return 'all';
+        }
+        if ($raw !== '' && ctype_digit($raw) && (int) $raw > 0) {
+            return (string) (int) $raw;
+        }
+
+        $activeId = (int) ($activePeriod['id'] ?? 0);
+
+        return $activeId > 0 ? (string) $activeId : 'all';
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterRecordsByAoatPeriod(array $records, string $periodFilter): array
+    {
+        if ($periodFilter === 'all') {
+            return $records;
+        }
+
+        return array_values(array_filter($records, static function (array $row) use ($periodFilter): bool {
+            return (int) ($row['period_id'] ?? 0) === (int) $periodFilter;
+        }));
+    }
+
+    private function aoatPeriodFilterLabel(string $periodFilter): string
+    {
+        if ($periodFilter === 'all') {
+            return 'Todos';
+        }
+        foreach ((new AoatPeriodRepository())->all() as $period) {
+            if ((int) ($period['id'] ?? 0) === (int) $periodFilter) {
+                return (string) ($period['name'] ?? ('Periodo #' . $periodFilter));
+            }
+        }
+
+        return 'Periodo #' . $periodFilter;
     }
 
     private function normalizeTotalPeriodoFilter(string $raw): string
@@ -380,6 +447,7 @@ final class AoatSeguimientoController
         $roles = [
             ['value' => 'psicologo', 'label' => 'Psicólogo'],
             ['value' => 'profesional social', 'label' => 'Profesional social'],
+            ['value' => 'politologo', 'label' => 'Politólogo'],
             ['value' => 'abogado', 'label' => 'Abogado'],
             ['value' => 'medico', 'label' => 'Médico'],
         ];
@@ -411,6 +479,8 @@ final class AoatSeguimientoController
                 $primaryRole = strtolower(trim((string) ($user['role'] ?? (($roles[0] ?? '') ?: ''))));
                 if ($primaryRole === 'medico') {
                     $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'politologo') {
+                    $auditRoles = ['politologo'];
                 } elseif ($primaryRole === 'abogado') {
                     $auditRoles = ['abogado'];
                 } elseif ($primaryRole === 'psicologo') {
@@ -488,6 +558,9 @@ final class AoatSeguimientoController
         $vista = ($filters['vista'] ?? 'meta') === 'actividad' ? 'actividad' : 'meta';
         array_unshift($parts, $vista === 'actividad' ? 'Vista: Actividades (tipo Actividad)' : 'Vista: Asistencias técnicas y asesorías (metas)');
 
+        $aoatPeriod = $this->resolveAoatPeriodFilter(null, (string) ($filters['aoat_period_id'] ?? 'all'));
+        $parts[] = 'Periodo AoAT: ' . $this->aoatPeriodFilterLabel($aoatPeriod);
+
         $tp = $this->normalizeTotalPeriodoFilter((string) ($filters['total_periodo'] ?? ''));
         if ($tp !== '') {
             $parts[] = $this->totalPeriodoFilterLabel($tp);
@@ -523,6 +596,7 @@ final class AoatSeguimientoController
 
         return match ($r) {
             'psicologo' => 'Psicólogo',
+            'politologo' => 'Politólogo',
             'abogado' => 'Abogado',
             'medico' => 'Médico',
             'profesional social' => 'Profesional social',
@@ -822,7 +896,7 @@ final class AoatSeguimientoController
     private function userCanAccessAoat(array $user): bool
     {
         $roles = $user['roles'] ?? [];
-        $allowed = ['abogado', 'medico', 'psicologo', 'profesional social', 'profesional_social', 'admin', 'especialista', 'coordinadora', 'coordinador'];
+        $allowed = ['abogado', 'medico', 'psicologo', 'politologo', 'profesional social', 'profesional_social', 'admin', 'especialista', 'coordinadora', 'coordinador'];
 
         return (bool) array_intersect($allowed, $roles);
     }

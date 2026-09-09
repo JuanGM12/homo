@@ -367,11 +367,25 @@
         panel.setAttribute('role', 'listbox');
         panel.hidden = true;
 
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'homo-muni-multiselect__search';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'search';
+        searchInput.className = 'form-control form-control-sm';
+        searchInput.placeholder = 'Buscar...';
+        searchInput.setAttribute('aria-label', 'Buscar opciones');
+        searchWrap.appendChild(searchInput);
+        const selectedWrap = document.createElement('div');
+        selectedWrap.className = 'homo-muni-multiselect__selected';
+
         const parent = sel.parentNode;
         parent.insertBefore(root, sel);
         root.appendChild(btn);
+        root.appendChild(selectedWrap);
+        root.appendChild(searchWrap);
         root.appendChild(panel);
         root.appendChild(sel);
+        searchWrap.hidden = true;
 
         sel.classList.add('homo-muni-native', 'visually-hidden');
         sel.setAttribute('tabindex', '-1');
@@ -385,21 +399,35 @@
         };
 
         const updateButton = () => {
-            const values = Array.from(sel.selectedOptions)
-                .map((o) => o.value)
+            const labels = Array.from(sel.selectedOptions)
+                .map((o) => (o.textContent || o.value).trim())
                 .filter(Boolean);
             const labelEl = document.createElement('span');
             labelEl.className = 'text-truncate flex-grow-1 text-start';
-            if (values.length === 0) {
+            if (labels.length === 0) {
                 labelEl.textContent = emptyLabel;
                 labelEl.classList.add('text-muted');
-            } else if (values.length === 1) {
-                labelEl.textContent = values[0];
+            } else if (labels.length === 1) {
+                labelEl.textContent = labels[0];
             } else {
-                labelEl.textContent = `${values.length} ${multiCountWord}`;
+                labelEl.textContent = `${labels.length} ${multiCountWord}`;
             }
             btn.replaceChildren(labelEl, chevronIcon());
             btn.disabled = sel.disabled;
+            selectedWrap.innerHTML = '';
+            labels.slice(0, 6).forEach((label) => {
+                const chip = document.createElement('span');
+                chip.className = 'homo-muni-multiselect__chip';
+                chip.textContent = label;
+                selectedWrap.appendChild(chip);
+            });
+            if (labels.length > 6) {
+                const more = document.createElement('span');
+                more.className = 'homo-muni-multiselect__chip homo-muni-multiselect__chip--more';
+                more.textContent = `+${labels.length - 6} más`;
+                selectedWrap.appendChild(more);
+            }
+            selectedWrap.hidden = labels.length === 0;
         };
 
         const syncPanelFromSelect = () => {
@@ -410,11 +438,23 @@
                 }
                 const row = document.createElement('label');
                 row.className = 'homo-muni-multiselect__option';
+                const groupLabel = opt.parentElement instanceof HTMLOptGroupElement
+                    ? opt.parentElement.label
+                    : '';
+                row.dataset.searchText = `${opt.textContent || ''} ${groupLabel} ${opt.value || ''}`.toLowerCase();
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.checked = opt.selected;
                 const text = document.createElement('span');
-                text.textContent = opt.textContent || opt.value;
+                text.className = 'homo-muni-multiselect__option-text';
+                const mainText = document.createElement('span');
+                mainText.textContent = opt.textContent || opt.value;
+                text.appendChild(mainText);
+                if (groupLabel) {
+                    const metaText = document.createElement('small');
+                    metaText.textContent = groupLabel;
+                    text.appendChild(metaText);
+                }
                 row.appendChild(cb);
                 row.appendChild(text);
                 cb.addEventListener('change', () => {
@@ -424,10 +464,22 @@
                 });
                 panel.appendChild(row);
             });
+            filterPanelOptions();
+        };
+
+        const filterPanelOptions = () => {
+            const term = searchInput.value.trim().toLowerCase();
+            panel.querySelectorAll('.homo-muni-multiselect__option').forEach((row) => {
+                if (!(row instanceof HTMLElement)) {
+                    return;
+                }
+                row.hidden = term !== '' && !(row.dataset.searchText || '').includes(term);
+            });
         };
 
         const close = () => {
             root.classList.remove('is-open');
+            searchWrap.hidden = true;
             panel.hidden = true;
             btn.setAttribute('aria-expanded', 'false');
         };
@@ -435,8 +487,10 @@
         const open = () => {
             syncPanelFromSelect();
             root.classList.add('is-open');
+            searchWrap.hidden = false;
             panel.hidden = false;
             btn.setAttribute('aria-expanded', 'true');
+            searchInput.focus();
         };
 
         btn.addEventListener('click', (e) => {
@@ -469,6 +523,7 @@
 
         document.addEventListener('click', onDocClick);
         document.addEventListener('keydown', onKey);
+        searchInput.addEventListener('input', filterPanelOptions);
         homoMuniWidgetCleanup.set(root, { onDocClick, onKey });
 
         updateButton();
@@ -516,6 +571,16 @@
                     const isMulti =
                         municipalitySelect.multiple === true ||
                         municipalitySelect.getAttribute('data-municipality-multi') === '1';
+                    let territoryData = data;
+                    try {
+                        const allowedRaw = subregionSelect.dataset.allowedTerritories || '';
+                        const allowedParsed = allowedRaw ? JSON.parse(allowedRaw) : {};
+                        if (allowedParsed && typeof allowedParsed === 'object' && Object.keys(allowedParsed).length > 0) {
+                            territoryData = allowedParsed;
+                        }
+                    } catch {
+                        territoryData = data;
+                    }
 
                     const parseSelectedMulti = () => {
                         try {
@@ -529,7 +594,7 @@
 
                     // Llenar opciones de subregión
                     if (subregionSelect.options.length <= 1) {
-                        Object.keys(data).forEach((subregion) => {
+                        Object.keys(territoryData).forEach((subregion) => {
                             const option = document.createElement('option');
                             option.value = subregion;
                             option.textContent = subregion;
@@ -553,8 +618,8 @@
                         }
                         municipalitySelect.disabled = isNumberOnlyEdit || !subregionValue;
 
-                        if (subregionValue && data[subregionValue]) {
-                            data[subregionValue].forEach((municipio) => {
+                        if (subregionValue && territoryData[subregionValue]) {
+                            territoryData[subregionValue].forEach((municipio) => {
                                 const option = document.createElement('option');
                                 option.value = municipio;
                                 option.textContent = municipio;
@@ -1779,6 +1844,7 @@
                 const rol = data.professional_role || '';
                 const subregion = data.subregion || '';
                 const municipio = data.municipality || '';
+                const periodo = data.period || 'Sin periodo';
                 const estado = data.state || '';
                 const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
                 const auditMotive = data.audit_motive || '';
@@ -1791,6 +1857,7 @@
 <strong>Fecha registro:</strong> ${escapeHtml(fechaRegistro)}<br>
 <strong>Profesional:</strong> ${escapeHtml(profesional)}<br>
 <strong>Rol:</strong> ${escapeHtml(rol)}<br>
+<strong>Periodo:</strong> ${escapeHtml(periodo)}<br>
 <strong>Subregion:</strong> ${escapeHtml(subregion)}<br>
 <strong>Municipio:</strong> ${escapeHtml(municipio)}<br>
 <strong>Estado:</strong> ${escapeHtml(estado)}</p>`;
@@ -1818,10 +1885,12 @@
                     prev_violencias: 'Cualificacion temas en prevencion de violencias',
                     prev_adicciones: 'Cualificacion temas en prevencion de adicciones',
                     salud_mental: 'Cualificacion temas de salud mental',
+                    politica_publica_psicologo: 'Actualizacion de la Politica Publica Municipal de Salud y Prevencion de las Adicciones (PPMSMYPA)',
                     mesa_salud_mental: 'Mesa Municipal de Salud Mental y Prevencion de las Adicciones',
                     ppmsmypa: 'Politica Publica Municipal de Salud y Prevencion de las Adicciones (PPMSMYPA)',
                     safer: 'SAFER',
                     temas_hospital: 'Temas dictados en el hospital',
+                    espacios_participacion_medico: 'Espacios de participacion',
                     actividad_social: 'Actividades realizadas (Profesional social)',
                     'Motivo de devolución': 'Motivo de devolución',
                     'Comentarios de devolución': 'Comentarios de devolución',
@@ -1914,6 +1983,7 @@
                 const rol = data.professional_role || '';
                 const subregion = data.subregion || '';
                 const municipio = data.municipality || '';
+                const periodo = data.period || 'Sin periodo';
                 const estado = data.state || '';
                 const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
                 const auditMotive = data.audit_motive || '';
@@ -1926,6 +1996,7 @@
 <strong>Fecha registro:</strong> ${escapeHtml(fechaRegistro)}<br>
 <strong>Profesional:</strong> ${escapeHtml(profesional)}<br>
 <strong>Rol:</strong> ${escapeHtml(rol)}<br>
+<strong>Periodo:</strong> ${escapeHtml(periodo)}<br>
 <strong>Subregion:</strong> ${escapeHtml(subregion)}<br>
 <strong>Municipio:</strong> ${escapeHtml(municipio)}<br>
 <strong>Estado:</strong> ${escapeHtml(estado)}</p>`;
@@ -1953,10 +2024,12 @@
                     prev_violencias: 'Cualificacion temas en prevencion de violencias',
                     prev_adicciones: 'Cualificacion temas en prevencion de adicciones',
                     salud_mental: 'Cualificacion temas de salud mental',
+                    politica_publica_psicologo: 'Actualizacion de la Politica Publica Municipal de Salud y Prevencion de las Adicciones (PPMSMYPA)',
                     mesa_salud_mental: 'Mesa Municipal de Salud Mental y Prevencion de las Adicciones',
                     ppmsmypa: 'Politica Publica Municipal de Salud y Prevencion de las Adicciones (PPMSMYPA)',
                     safer: 'SAFER',
                     temas_hospital: 'Temas dictados en el hospital',
+                    espacios_participacion_medico: 'Espacios de participacion',
                     actividad_social: 'Actividades realizadas (Profesional social)',
                     'Motivo de devolución': 'Motivo de devolución',
                     'Comentarios de devolución': 'Comentarios de devolución',
@@ -3263,6 +3336,7 @@
         });
 
         const searchInput = aoatFilterForm.querySelector('input[name="q"]');
+        const periodSelect = aoatFilterForm.querySelector('select[name="period_id"]');
         const stateSelect = aoatFilterForm.querySelector('select[name="state"]');
         const fromDateInput = aoatFilterForm.querySelector('input[name="from_date"]');
         const toDateInput = aoatFilterForm.querySelector('input[name="to_date"]');
@@ -3271,6 +3345,10 @@
 
         if (searchInput) {
             searchInput.addEventListener('input', scheduleApplyAoatFilters);
+        }
+
+        if (periodSelect) {
+            periodSelect.addEventListener('change', () => applyAoatFilters(1));
         }
 
         if (stateSelect) {

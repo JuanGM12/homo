@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\TrainingPlanRepository;
+use App\Repositories\UserRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
@@ -17,6 +18,7 @@ final class PlaneacionController
 {
     private const INDEX_PAGE_SIZE = 20;
     private const FORM_OLD_INPUT_KEY = 'planeacion.form_old_input';
+    private const READ_ONLY_MONTH_KEYS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto'];
 
     private TrainingPlanRepository $repository;
 
@@ -128,6 +130,8 @@ final class PlaneacionController
             'role' => $primaryRole,
             'planYear' => (int) date('Y'),
             'oldInput' => $oldInput,
+            'allowedMunicipalities' => $this->municipalitiesAssignedToUser((int) $user['id']),
+            'readOnlyMonthKeys' => self::READ_ONLY_MONTH_KEYS,
         ]);
     }
 
@@ -154,6 +158,9 @@ final class PlaneacionController
 
         if ($municipality === '') {
             $errors[] = 'Debes seleccionar el municipio.';
+        }
+        if (!$this->userCanUseMunicipality((int) $user['id'], $subregion, $municipality)) {
+            $errors[] = 'Debes seleccionar uno de los municipios asignados a tu usuario.';
         }
 
         [$payload, $monthErrors] = $this->buildPlanPayloadFromRequest($request);
@@ -748,11 +755,11 @@ final class PlaneacionController
             return Response::redirect('/planeacion');
         }
 
-        if (empty($plan['editable'])) {
+        if (empty($plan['editable']) || !$this->planAllowsEditingByCreatedMonth($plan)) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Edición no permitida',
-                'message' => 'Esta planeación ya fue aprobada por el especialista y no puede modificarse.',
+                'message' => 'Esta planeación está en modo lectura y no puede modificarse.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -773,6 +780,8 @@ final class PlaneacionController
             'role' => (string) ($user['role'] ?? (($user['roles'] ?? [])[0] ?? '')),
             'planYear' => (int) ($plan['plan_year'] ?? date('Y')),
             'oldInput' => $oldInput,
+            'allowedMunicipalities' => $this->municipalitiesAssignedToUser((int) $user['id']),
+            'readOnlyMonthKeys' => self::READ_ONLY_MONTH_KEYS,
         ]);
     }
 
@@ -803,11 +812,11 @@ final class PlaneacionController
             return Response::redirect('/planeacion');
         }
 
-        if (empty($plan['editable'])) {
+        if (empty($plan['editable']) || !$this->planAllowsEditingByCreatedMonth($plan)) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Edición no permitida',
-                'message' => 'Esta planeación ya fue aprobada por el especialista y no puede modificarse.',
+                'message' => 'Esta planeación está en modo lectura y no puede modificarse.',
             ]);
 
             return Response::redirect('/planeacion');
@@ -826,8 +835,12 @@ final class PlaneacionController
         if ($municipality === '') {
             $errors[] = 'Debes seleccionar el municipio.';
         }
+        if (!$this->userCanUseMunicipality((int) $user['id'], $subregion, $municipality)) {
+            $errors[] = 'Debes seleccionar uno de los municipios asignados a tu usuario.';
+        }
 
-        [$payload, $monthErrors] = $this->buildPlanPayloadFromRequest($request);
+        $existingPayload = $this->decodePlanPayload($plan);
+        [$payload, $monthErrors] = $this->buildPlanPayloadFromRequest($request, $existingPayload);
         $errors = array_merge($errors, $monthErrors);
 
         if (!empty($errors)) {
@@ -1064,7 +1077,7 @@ final class PlaneacionController
      *
      * @return array{0: array<string, array<string, mixed>>, 1: string[]}
      */
-    private function buildPlanPayloadFromRequest(Request $request): array
+    private function buildPlanPayloadFromRequest(Request $request, array $existingPayload = []): array
     {
         $months = [
             'enero' => 'Enero',
@@ -1086,6 +1099,13 @@ final class PlaneacionController
         $filledMonths = 0;
 
         foreach ($months as $key => $label) {
+            if (in_array($key, self::READ_ONLY_MONTH_KEYS, true)) {
+                if (isset($existingPayload[$key]) && is_array($existingPayload[$key])) {
+                    $payload[$key] = $existingPayload[$key];
+                }
+                continue;
+            }
+
             /** @var array<int, string>|string $rawTopics */
             $rawTopics = $request->input($key . '_temas', []);
             $topics = is_array($rawTopics) ? array_values(array_filter(array_map('strval', $rawTopics))) : [];
@@ -1109,11 +1129,74 @@ final class PlaneacionController
             }
         }
 
-        if ($filledMonths === 0) {
+        if ($filledMonths === 0 && $payload === []) {
             $errors[] = 'Debes diligenciar al menos un mes con temas y población objetivo para guardar la planeación.';
         }
 
         return [$payload, $errors];
+    }
+
+    /**
+     * @return array<int, array{subregion:string, municipality:string}>
+     */
+    private function municipalitiesAssignedToUser(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        $repo = new UserRepository();
+        $rows = $repo->findMunicipalitiesForUser($userId);
+
+        return array_values(array_filter(array_map(static function (array $row): array {
+            return [
+                'subregion' => trim((string) ($row['subregion'] ?? '')),
+                'municipality' => trim((string) ($row['municipality'] ?? '')),
+            ];
+        }, $rows), static function (array $row): bool {
+            return $row['subregion'] !== '' && $row['municipality'] !== '';
+        }));
+    }
+
+    private function userCanUseMunicipality(int $userId, string $subregion, string $municipality): bool
+    {
+        $assigned = $this->municipalitiesAssignedToUser($userId);
+        if ($assigned === []) {
+            return true;
+        }
+
+        foreach ($assigned as $row) {
+            if ($row['subregion'] === $subregion && $row['municipality'] === $municipality) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function planAllowsEditingByCreatedMonth(array $plan): bool
+    {
+        $createdAt = trim((string) ($plan['created_at'] ?? ''));
+        if ($createdAt === '') {
+            return true;
+        }
+
+        $timestamp = strtotime($createdAt);
+        if (!$timestamp) {
+            return true;
+        }
+
+        return (int) date('n', $timestamp) >= 9;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decodePlanPayload(array $plan): array
+    {
+        $decoded = json_decode((string) ($plan['payload'] ?? ''), true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 }
 

@@ -1,6 +1,8 @@
 <?php
 /** @var array $filterOptions */
 /** @var array $initialMeta */
+/** @var array $periods */
+/** @var string $filterAoatPeriod */
 use App\Services\Auth;
 
 $user = Auth::user();
@@ -8,7 +10,10 @@ $canViewAll = Auth::canViewAllModuleRecords($user);
 $y0 = (int) date('Y');
 $period0 = (int) date('n') <= 6 ? 'ene_jun' : 'jul_dic';
 $fo = $filterOptions ?? ['subregions' => [], 'municipalities' => [], 'roles' => [], 'professionals' => []];
+$periods = is_array($periods ?? null) ? $periods : [];
+$filterAoatPeriod = (string) ($filterAoatPeriod ?? 'all');
 $filterDefaultsJs = [
+    'aoat_period_id' => $filterAoatPeriod,
     'year' => $y0,
     'period' => $period0,
     'professional_user_id' => '0',
@@ -58,6 +63,23 @@ $filterDefaultsJs = [
                         <select name="vista" class="form-select form-select-sm" id="aoat-seg-vista">
                             <option value="meta">Asistencias técnicas y asesorías</option>
                             <option value="actividad">Actividades</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label small text-muted mb-1">Periodo AoAT</label>
+                        <select name="aoat_period_id" class="form-select form-select-sm">
+                            <option value="all" <?= $filterAoatPeriod === 'all' ? 'selected' : '' ?>>Todos</option>
+                            <?php foreach ($periods as $period): ?>
+                                <?php
+                                $periodId = (string) (int) ($period['id'] ?? 0);
+                                if ($periodId === '0') {
+                                    continue;
+                                }
+                                ?>
+                                <option value="<?= htmlspecialchars($periodId, ENT_QUOTES, 'UTF-8') ?>" <?= $filterAoatPeriod === $periodId ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= !empty($period['active']) ? ' (activo)' : '' ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-6 col-lg-2">

@@ -115,6 +115,7 @@ if ($totalPages <= 7) {
                     <?php
                     $headers = [
                         'activity_date' => 'Fecha',
+                        'period' => 'Periodo',
                         'professional' => 'Profesional',
                         'subregion' => 'Subregión',
                         'municipality' => 'Municipio',

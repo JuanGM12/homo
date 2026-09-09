@@ -42,6 +42,7 @@ final class UsersController
             'mode' => 'create',
             'user' => null,
             'roles' => $repo->getAllRoles(),
+            'municipalityOptions' => $this->municipalityOptions(),
         ]);
     }
 
@@ -53,6 +54,7 @@ final class UsersController
         $password = (string) $request->input('password', '');
         $active = (string) $request->input('active', '1') === '1' ? 1 : 0;
         $roles = (array) $request->input('roles', []);
+        $municipalities = $this->parseMunicipalityAssignments((array) $request->input('municipalities', []));
 
         if ($name === '' || $email === '' || $documentNumber === '' || $password === '') {
             Flash::set([
@@ -75,7 +77,7 @@ final class UsersController
                 'document_number' => $documentNumber,
                 'password' => $passwordHash,
                 'active' => $active,
-            ], $roles);
+            ], $roles, $municipalities);
         } catch (\PDOException $e) {
             Flash::set([
                 'type' => 'error',
@@ -120,6 +122,7 @@ final class UsersController
             'mode' => 'edit',
             'user' => $user,
             'roles' => $repo->getAllRoles(),
+            'municipalityOptions' => $this->municipalityOptions(),
         ]);
     }
 
@@ -132,6 +135,7 @@ final class UsersController
         $password = (string) $request->input('password', '');
         $active = (string) $request->input('active', '1') === '1' ? 1 : 0;
         $roles = (array) $request->input('roles', []);
+        $municipalities = $this->parseMunicipalityAssignments((array) $request->input('municipalities', []));
 
         if ($id <= 0 || $name === '' || $email === '' || $documentNumber === '') {
             Flash::set([
@@ -157,7 +161,7 @@ final class UsersController
         $repo = new UserRepository();
 
         try {
-            $repo->update($id, $data, $roles);
+            $repo->update($id, $data, $roles, $municipalities);
         } catch (\PDOException $e) {
             Flash::set([
                 'type' => 'error',
@@ -194,6 +198,63 @@ final class UsersController
         ]);
 
         return Response::redirect('/admin/usuarios');
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function municipalityOptions(): array
+    {
+        $path = dirname(__DIR__, 2) . '/public/assets/js/municipios.json';
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $options = [];
+        foreach ($decoded as $subregion => $municipalities) {
+            if (!is_array($municipalities)) {
+                continue;
+            }
+            $options[(string) $subregion] = array_values(array_filter(
+                array_map('strval', $municipalities),
+                static fn (string $municipality): bool => trim($municipality) !== ''
+            ));
+        }
+
+        return $options;
+    }
+
+    /**
+     * @param array<int, mixed> $rawValues
+     * @return array<int, array{subregion:string, municipality:string}>
+     */
+    private function parseMunicipalityAssignments(array $rawValues): array
+    {
+        $catalog = $this->municipalityOptions();
+        $allowed = [];
+        foreach ($catalog as $subregion => $municipalities) {
+            foreach ($municipalities as $municipality) {
+                $allowed[$subregion . '|' . $municipality] = [
+                    'subregion' => $subregion,
+                    'municipality' => $municipality,
+                ];
+            }
+        }
+
+        $parsed = [];
+        foreach ($rawValues as $raw) {
+            $value = trim((string) $raw);
+            if (isset($allowed[$value])) {
+                $parsed[] = $allowed[$value];
+            }
+        }
+
+        return $parsed;
     }
 }
 

@@ -30,11 +30,13 @@ $prevSuicidio = isset($formData['prev_suicidio']) && is_array($formData['prev_su
 $prevViolencias = isset($formData['prev_violencias']) && is_array($formData['prev_violencias']) ? $formData['prev_violencias'] : [];
 $prevAdicciones = isset($formData['prev_adicciones']) && is_array($formData['prev_adicciones']) ? $formData['prev_adicciones'] : [];
 $saludMental = isset($formData['salud_mental']) && is_array($formData['salud_mental']) ? $formData['salud_mental'] : [];
+$politicaPublicaPsicologo = isset($formData['politica_publica_psicologo']) && is_array($formData['politica_publica_psicologo']) ? $formData['politica_publica_psicologo'] : [];
 $proyectoSeleccionado = isset($formData['proyecto']) ? (string) $formData['proyecto'] : '';
 $mesaSaludMental = isset($formData['mesa_salud_mental']) && is_array($formData['mesa_salud_mental']) ? $formData['mesa_salud_mental'] : [];
 $ppmsmypaSel = isset($formData['ppmsmypa']) && is_array($formData['ppmsmypa']) ? $formData['ppmsmypa'] : [];
 $saferSel = isset($formData['safer']) && is_array($formData['safer']) ? $formData['safer'] : [];
 $temasHospital = isset($formData['temas_hospital']) && is_array($formData['temas_hospital']) ? $formData['temas_hospital'] : [];
+$espacioParticipacionMedico = isset($formData['espacios_participacion_medico']) ? (string) $formData['espacios_participacion_medico'] : '';
 $actividadSocial = isset($formData['actividad_social']) && is_array($formData['actividad_social']) ? $formData['actividad_social'] : [];
 ?>
 
@@ -372,8 +374,42 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                 </div>
                             </div>
                             </div>
-
                             <!-- Pregunta al final de la cualificación -->
+                            <div class="mb-4">
+                                <label class="form-label">
+                                    ¿Identifica otro caso diferente? Describa cuál
+                                </label>
+                                <textarea name="otro_caso" class="form-control" rows="3" placeholder="Describa aquí otro caso diferente, si aplica."><?= htmlspecialchars((string) ($formData['otro_caso'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                            </div>
+
+                        <?php elseif ($role === 'politologo'): ?>
+                            <div class="mb-3 app-form-section-title">
+                                <h2 class="h6 fw-semibold mb-1">Cualificación de temas (Politólogo)</h2>
+                                <p class="text-muted small mb-0">
+                                    Esta cualificación queda seleccionada automáticamente para los registros de este rol.
+                                </p>
+                            </div>
+
+                            <div class="app-form-questions">
+                                <div class="mb-4 app-form-question">
+                                    <div class="aoat-qual-section-header mb-3">
+                                        <h3 class="aoat-qual-section-title mb-1">Cualificación de temas</h3>
+                                        <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección automática</span></p>
+                                    </div>
+                                    <input type="hidden" name="ppmsmypa[]" value="Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)">
+                                    <div class="row g-2">
+                                        <div class="col-12">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" checked disabled>
+                                                <label class="form-check-label small">
+                                                    Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="mb-4">
                                 <label class="form-label">
                                     ¿Identifica otro caso diferente? Describa cuál
@@ -555,6 +591,39 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                 </div>
                             </div>
 
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Espacios de participación <span class="text-danger">*</span></h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección única</span></p>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="espacios_participacion_medico" value="COVE" required <?= $espacioParticipacionMedico === 'COVE' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                COVE
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="espacios_participacion_medico" value="Mesa de salud Mental" <?= $espacioParticipacionMedico === 'Mesa de salud Mental' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                Mesa de salud Mental
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="espacios_participacion_medico" value="Eventos" <?= $espacioParticipacionMedico === 'Eventos' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                Eventos
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Pregunta al final de la cualificación -->
                             <div class="mb-4">
                                 <label class="form-label">
@@ -600,6 +669,14 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                             <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Módulo 3" <?= in_array('Módulo 3', $prevSuicidio, true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small">
                                                 Módulo 3: Concepto y alcances de la posvención, posvención como estrategia de prevención y salud pública, impacto psicosocial del suicidio, duelo por suicidio y sus particularidades, duelo y tamizajes para suicidio (RQC, SRQ, Whooley, GAD-2, Zarit, Plutchick, PHQ-9, C-SSRS), estigma y silencios, principios orientadores de la posvención, acciones de posvención en el territorio, acompañamiento a familias e instituciones, comunicación posterior a una muerte por suicidio, identificación y seguimiento de personas en riesgo, articulación con servicios de salud mental, autocuidado del profesional psicosocial.
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="prev_suicidio[]" value="Resolución 347 - Código Dorado" <?= in_array('Resolución 347 - Código Dorado', $prevSuicidio, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                Resolución 347 - Código Dorado
                                             </label>
                                         </div>
                                     </div>
@@ -766,6 +843,40 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                 </div>
                             </div>
 
+                            <!-- Actualización de Política Pública Municipal -->
+                            <div class="mb-4 app-form-question">
+                                <div class="aoat-qual-section-header mb-3">
+                                    <h3 class="aoat-qual-section-title mb-1">Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA) <span class="text-danger">*</span></h3>
+                                    <p class="text-muted small mb-0"><span class="aoat-qual-hint">Selección múltiple</span></p>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="politica_publica_psicologo[]" value="Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)" <?= in_array('Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)', $politicaPublicaPsicologo, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="politica_publica_psicologo[]" value="Mesa de Salud Mental" <?= in_array('Mesa de Salud Mental', $politicaPublicaPsicologo, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                Mesa de Salud Mental
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="politica_publica_psicologo[]" value="COVE" <?= in_array('COVE', $politicaPublicaPsicologo, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                COVE
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Proyectos (selección única) -->
                             <div class="mb-4 app-form-question">
                                 <div class="aoat-qual-section-header mb-3">
@@ -823,6 +934,14 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                         </div>
                                     </div>
 
+                                    <div class="col-md-6 col-lg-4 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="proyecto" value="SAFER" <?= $proyectoSeleccionado === 'SAFER' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                SAFER
+                                            </label>
+                                        </div>
+                                    </div>
                                     <div class="col-md-6 col-lg-4 mt-2">
                                         <div class="form-check">
                                             <input class="form-check-input" type="radio" name="proyecto" value="No aplica" <?= $proyectoSeleccionado === 'No aplica' ? 'checked' : '' ?>>

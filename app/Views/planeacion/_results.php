@@ -188,6 +188,8 @@ if ($totalPages <= 7) {
                     $timestamp = $createdAt !== '' ? strtotime($createdAt) : false;
                     $createdDate = $timestamp ? date('d/m/Y', $timestamp) : ($createdAt !== '' ? $createdAt : 'Sin fecha');
                     $createdTime = $timestamp ? date('H:i', $timestamp) : '';
+                    $createdMonth = $timestamp ? (int) date('n', $timestamp) : 0;
+                    $isReadOnlyByCreatedMonth = $createdMonth >= 1 && $createdMonth <= 8;
                     ?>
                     <tr class="planeacion-row">
                         <td class="planeacion-cell-strong">
@@ -236,7 +238,7 @@ if ($totalPages <= 7) {
                                     Ver detalles
                                 </button>
                                 <?php
-                                $canEditPlan = !empty($plan['editable']) && $isOwner;
+                                $canEditPlan = !empty($plan['editable']) && $isOwner && !$isReadOnlyByCreatedMonth;
                                 ?>
                                 <?php if ($canEditPlan): ?>
                                     <a href="/planeacion/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-primary">

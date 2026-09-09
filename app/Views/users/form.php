@@ -2,9 +2,24 @@
 /** @var string $mode */
 /** @var array|null $user */
 /** @var array $roles */
+/** @var array<string, list<string>> $municipalityOptions */
 
 $isEdit = $mode === 'edit' && $user !== null;
 $selectedRoles = $isEdit ? (array) ($user['roles'] ?? []) : [];
+$hasHistoricalAbogado = in_array('abogado', $selectedRoles, true);
+$assignedMunicipalityKeys = [];
+if ($isEdit) {
+    foreach ((array) ($user['municipalities'] ?? []) as $assignedMunicipality) {
+        if (!is_array($assignedMunicipality)) {
+            continue;
+        }
+        $subregion = trim((string) ($assignedMunicipality['subregion'] ?? ''));
+        $municipality = trim((string) ($assignedMunicipality['municipality'] ?? ''));
+        if ($subregion !== '' && $municipality !== '') {
+            $assignedMunicipalityKeys[] = $subregion . '|' . $municipality;
+        }
+    }
+}
 ?>
 
 <section class="mt-4 mb-4">
@@ -115,6 +130,9 @@ $selectedRoles = $isEdit ? (array) ($user['roles'] ?? []) : [];
                                 <?php foreach ($roles as $role): ?>
                                     <?php
                                     $roleName = (string) $role['name'];
+                                    if ($roleName === 'abogado') {
+                                        continue;
+                                    }
                                     $roleLabel = (string) ($role['description'] ?? $roleName);
                                     ?>
                                     <div class="col-md-4 mb-2">
@@ -134,6 +152,42 @@ $selectedRoles = $isEdit ? (array) ($user['roles'] ?? []) : [];
                                     </div>
                                 <?php endforeach; ?>
                             </div>
+                            <?php if ($hasHistoricalAbogado): ?>
+                                <div class="alert alert-secondary small mb-0 mt-2">
+                                    <strong>Rol histórico:</strong> Abogado se conserva para este usuario, pero ya no se puede asignar ni modificar desde este formulario.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label d-block">Municipios asignados</label>
+                            <p class="text-muted small mb-2">
+                                Selecciona uno o más municipios para limitar la planeación anual de este usuario. Si queda vacío, podrá usar todos los municipios.
+                            </p>
+                            <select
+                                name="municipalities[]"
+                                class="form-select"
+                                multiple
+                                size="8"
+                                data-homo-static-multiselect="1"
+                                data-homo-multi-empty-label="Seleccione municipios"
+                                data-homo-multi-word="municipios"
+                                data-homo-multi-title="Elija uno o varios municipios"
+                            >
+                                <?php foreach (($municipalityOptions ?? []) as $subregion => $municipalities): ?>
+                                    <optgroup label="<?= htmlspecialchars((string) $subregion, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?php foreach ($municipalities as $municipality): ?>
+                                            <?php $value = (string) $subregion . '|' . (string) $municipality; ?>
+                                            <option
+                                                value="<?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>"
+                                                <?= in_array($value, $assignedMunicipalityKeys, true) ? 'selected' : '' ?>
+                                            >
+                                                <?= htmlspecialchars((string) $municipality, ENT_QUOTES, 'UTF-8') ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </optgroup>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="d-flex justify-content-end">

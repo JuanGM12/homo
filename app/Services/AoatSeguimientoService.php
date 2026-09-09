@@ -738,6 +738,7 @@ final class AoatSeguimientoService
             'profesional social' => 'Profesional social',
             'psicologo' => 'Psicólogo',
             'medico' => 'Médico',
+            'politologo' => 'Politólogo',
             'abogado' => 'Abogado',
             default => $role,
         };

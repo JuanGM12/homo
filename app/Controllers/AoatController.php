@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatPeriodRepository;
 use App\Repositories\AoatRepository;
 use App\Services\Auth;
 use App\Services\Flash;
@@ -18,6 +19,7 @@ final class AoatController
 {
     private const INDEX_PAGE_SIZE = 20;
     private const FORM_OLD_INPUT_KEY = 'aoat_old_input';
+    private const POLITOLOGO_PPMSMYPA_OPTION = 'Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)';
 
     /** Texto libre del profesional al pasar de Devuelta → Realizado (visible para el especialista). */
     public const PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE = 'professional_compliance_note';
@@ -45,6 +47,10 @@ final class AoatController
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
         $activityTypeFilters = $this->parseAoatListActivityTypeFilter($request);
+        $periodRepo = new AoatPeriodRepository();
+        $periodOptions = $periodRepo->all();
+        $activePeriod = $periodRepo->active();
+        $periodFilter = $this->resolveAoatPeriodFilter($request, $activePeriod);
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
@@ -65,6 +71,8 @@ final class AoatController
             } elseif ($isSpecialist) {
                 if ($primaryRole === 'medico') {
                     $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'politologo') {
+                    $auditRoles = ['politologo'];
                 } elseif ($primaryRole === 'abogado') {
                     $auditRoles = ['abogado'];
                 } elseif ($primaryRole === 'psicologo') {
@@ -87,8 +95,12 @@ final class AoatController
         $records = $this->attachActivityTypeToRecords($records);
 
         // Filtros en memoria (suficiente para el volumen esperado)
-        if ($search !== '' || $stateFilter !== '' || $activityTypeFilters !== [] || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilters, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilters !== [] || $periodFilter !== 'all' || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilters, $periodFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+                if ($periodFilter !== 'all' && (int) ($row['period_id'] ?? 0) !== (int) $periodFilter) {
+                    return false;
+                }
+
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
@@ -151,6 +163,9 @@ final class AoatController
             'isAuditView' => $isAuditView,
             'filterSubregion' => $subregionFilter,
             'filterMunicipalities' => $municipalityFilters,
+            'periodOptions' => $periodOptions,
+            'activePeriod' => $activePeriod,
+            'filterPeriod' => $periodFilter,
         ]);
     }
 
@@ -254,12 +269,15 @@ final class AoatController
         }
 
         // Por ahora capturamos todo el resto de campos del formulario en una estructura flexible (payload)
-        $payload = $this->buildPayload($request);
+        $payload = $this->buildPayload($request, $user);
 
         $repo = new AoatRepository();
+        $periodRepo = new AoatPeriodRepository();
+        $activePeriod = $periodRepo->active();
 
         $data = [
             'user_id' => (int) $user['id'],
+            'period_id' => $activePeriod !== null ? (int) ($activePeriod['id'] ?? 0) : null,
             'professional_name' => $professionalName,
             'professional_last_name' => $professionalLastName,
             'professional_email' => $professionalEmail,
@@ -460,6 +478,9 @@ final class AoatController
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
         $activityTypeFilters = $this->parseAoatListActivityTypeFilter($request);
+        $periodRepo = new AoatPeriodRepository();
+        $activePeriod = $periodRepo->active();
+        $periodFilter = $this->resolveAoatPeriodFilter($request, $activePeriod);
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
@@ -474,6 +495,8 @@ final class AoatController
             } elseif ($isSpecialist) {
                 if ($primaryRole === 'medico') {
                     $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'politologo') {
+                    $auditRoles = ['politologo'];
                 } elseif ($primaryRole === 'abogado') {
                     $auditRoles = ['abogado'];
                 } elseif ($primaryRole === 'psicologo') {
@@ -493,8 +516,12 @@ final class AoatController
         $records = $this->attachActivityDateToRecords($records);
         $records = $this->attachActivityTypeToRecords($records);
 
-        if ($search !== '' || $stateFilter !== '' || $activityTypeFilters !== [] || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
-            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilters, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+        if ($search !== '' || $stateFilter !== '' || $activityTypeFilters !== [] || $periodFilter !== 'all' || $fromDate !== '' || $toDate !== '' || $subregionFilter !== '' || $municipalityFilters !== []) {
+            $records = array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $activityTypeFilters, $periodFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+                if ($periodFilter !== 'all' && (int) ($row['period_id'] ?? 0) !== (int) $periodFilter) {
+                    return false;
+                }
+
                 if ($stateFilter !== '' && (string) ($row['state'] ?? '') !== $stateFilter) {
                     return false;
                 }
@@ -549,6 +576,8 @@ final class AoatController
 
         $exportFilters = [
             'q' => $search,
+            'period_id' => $periodFilter,
+            'period_label' => $this->resolvePeriodFilterLabel($periodFilter, $periodRepo->all()),
             'state' => $stateFilter,
             'activity_type' => $activityTypeFilters,
             'from_date' => $fromDate,
@@ -568,6 +597,7 @@ final class AoatController
         $lines = [];
         $lines[] = implode(';', [
             'ID',
+            'Periodo',
             'Fecha actividad',
             'Profesional',
             'Subregión',
@@ -582,6 +612,7 @@ final class AoatController
             $professionalFullName = trim(((string) ($row['professional_name'] ?? '')) . ' ' . ((string) ($row['professional_last_name'] ?? '')));
             $line = [
                 (string) ($row['id'] ?? ''),
+                (string) ($row['period_name'] ?? ''),
                 (string) ($row['activity_date'] ?? ''),
                 $professionalFullName,
                 (string) ($row['subregion'] ?? ''),
@@ -831,7 +862,7 @@ final class AoatController
             }
         }
 
-        $payload = $this->buildPayload($request);
+        $payload = $this->buildPayload($request, $user);
 
         try {
             $updateData = [
@@ -1339,7 +1370,7 @@ final class AoatController
     private function userCanAccessAoat(array $user): bool
     {
         $roles = $user['roles'] ?? [];
-        $allowed = ['abogado', 'medico', 'psicologo', 'profesional social', 'profesional_social', 'admin', 'especialista', 'coordinadora', 'coordinador'];
+        $allowed = ['abogado', 'medico', 'psicologo', 'politologo', 'profesional social', 'profesional_social', 'admin', 'especialista', 'coordinadora', 'coordinador'];
         return (bool) array_intersect($allowed, $roles);
     }
 
@@ -1423,7 +1454,7 @@ final class AoatController
      */
     private function sortRecords(array $records, string $sort, string $dir): array
     {
-        $allowedSorts = ['activity_date', 'professional', 'subregion', 'municipality', 'activity_type', 'state'];
+        $allowedSorts = ['activity_date', 'period', 'professional', 'subregion', 'municipality', 'activity_type', 'state'];
         if (!in_array($sort, $allowedSorts, true)) {
             $sort = 'activity_date';
         }
@@ -1462,6 +1493,7 @@ final class AoatController
 
         return match ($sort) {
             'activity_date' => (string) ($row['activity_date'] ?? ''),
+            'period' => $this->normalizeSortText((string) ($row['period_name'] ?? '')),
             'subregion' => $this->normalizeSortText((string) ($row['subregion'] ?? '')),
             'municipality' => $this->normalizeSortText((string) ($row['municipality'] ?? '')),
             'activity_type' => $this->normalizeSortText((string) ($row['activity_type'] ?? '')),
@@ -1595,7 +1627,16 @@ final class AoatController
             if ($this->inputStringArray($request, 'temas_hospital') === []) {
                 return 'Debes seleccionar al menos un tema dictado en el Hospital del municipio visitado.';
             }
+            $allowedEspacios = ['COVE', 'Mesa de salud Mental', 'Eventos'];
+            $espacio = trim((string) $request->input('espacios_participacion_medico', ''));
+            if ($espacio === '' || !in_array($espacio, $allowedEspacios, true)) {
+                return 'Debes seleccionar una opción en «Espacios de participación».';
+            }
 
+            return null;
+        }
+
+        if ($role === 'politologo') {
             return null;
         }
 
@@ -1612,6 +1653,9 @@ final class AoatController
             if ($this->inputStringArray($request, 'salud_mental') === []) {
                 return 'Debes marcar al menos una opción en «Cualificación temas de Salud Mental».';
             }
+            if ($this->inputStringArray($request, 'politica_publica_psicologo') === []) {
+                return 'Debes marcar al menos una opción en «Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)».';
+            }
 
             $allowedProyectos = [
                 'Competencias Parentales',
@@ -1620,6 +1664,7 @@ final class AoatController
                 'Veredas que se Cuidan',
                 'Dispositivos comunitarios',
                 'Presentación del programa salud para el alma',
+                'SAFER',
                 'No aplica',
             ];
             $proyecto = trim((string) $request->input('proyecto', ''));
@@ -1642,7 +1687,7 @@ final class AoatController
         return null;
     }
 
-    private function buildPayload(Request $request): array
+    private function buildPayload(Request $request, array $user): array
     {
         // Estructura base para luego incluir las preguntas específicas por rol
         $payload = $_POST;
@@ -1655,6 +1700,10 @@ final class AoatController
             $payload['municipality'],
             $payload['id']
         );
+
+        if ($this->primaryProfessionalRole($user) === 'politologo') {
+            $payload['ppmsmypa'] = [self::POLITOLOGO_PPMSMYPA_OPTION];
+        }
 
         return $payload;
     }
@@ -1773,6 +1822,10 @@ final class AoatController
                 'rows' => $repo->findByRoleAndDateRange('medico', $fromDate, $toDate),
             ],
             [
+                'title' => 'Politólogos',
+                'rows' => $repo->findByRoleAndDateRange('politologo', $fromDate, $toDate),
+            ],
+            [
                 'title' => 'Abogados',
                 'rows' => $repo->findByRoleAndDateRange('abogado', $fromDate, $toDate),
             ],
@@ -1877,7 +1930,7 @@ final class AoatController
                 $activityType = (string) ($row['activity_type_json'] ?? '');
                 $activityWith = trim((string) ($payload['activity_with'] ?? ''));
                 $role = (string) ($row['professional_role'] ?? '');
-                $roleLabel = ucwords(str_replace('_', ' ', $role));
+                $roleLabel = $this->aoatProfessionalRoleLabel($role);
                 $subregion = (string) ($row['subregion'] ?? '');
                 $municipality = (string) ($row['municipality'] ?? '');
 
@@ -1938,12 +1991,18 @@ final class AoatController
             if (!empty($payload['salud_mental']) && is_array($payload['salud_mental'])) {
                 $parts[] = 'Salud mental: ' . implode(', ', $payload['salud_mental']);
             }
+            if (!empty($payload['politica_publica_psicologo']) && is_array($payload['politica_publica_psicologo'])) {
+                $parts[] = 'Política pública: ' . implode(', ', $payload['politica_publica_psicologo']);
+            }
             if (!empty($payload['proyecto']) && is_string($payload['proyecto'])) {
                 $parts[] = 'Proyecto: ' . $payload['proyecto'];
             }
         } elseif ($role === 'medico') {
             if (!empty($payload['temas_hospital']) && is_array($payload['temas_hospital'])) {
                 $parts[] = 'Temas hospital: ' . implode(', ', $payload['temas_hospital']);
+            }
+            if (!empty($payload['espacios_participacion_medico']) && is_string($payload['espacios_participacion_medico'])) {
+                $parts[] = 'Espacios de participación: ' . $payload['espacios_participacion_medico'];
             }
         } elseif ($role === 'abogado') {
             if (!empty($payload['mesa_salud_mental']) && is_array($payload['mesa_salud_mental'])) {
@@ -1954,6 +2013,10 @@ final class AoatController
             }
             if (!empty($payload['safer']) && is_array($payload['safer'])) {
                 $parts[] = 'SAFER: ' . implode(', ', $payload['safer']);
+            }
+        } elseif ($role === 'politologo') {
+            if (!empty($payload['ppmsmypa']) && is_array($payload['ppmsmypa'])) {
+                $parts[] = 'PPMSMYPA: ' . implode(', ', $payload['ppmsmypa']);
             }
         } elseif ($role === 'profesional social' || $role === 'profesional_social') {
             if (!empty($payload['actividad_social']) && is_array($payload['actividad_social'])) {
@@ -2093,6 +2156,9 @@ final class AoatController
         if (trim((string) ($filters['q'] ?? '')) !== '') {
             $filterParts[] = 'Buscar: ' . trim((string) $filters['q']);
         }
+        if (trim((string) ($filters['period_label'] ?? '')) !== '') {
+            $filterParts[] = 'Periodo: ' . trim((string) $filters['period_label']);
+        }
         if (trim((string) ($filters['state'] ?? '')) !== '') {
             $filterParts[] = 'Estado AoAT: ' . trim((string) $filters['state']);
         }
@@ -2124,9 +2190,10 @@ final class AoatController
 
             $rowsHtml .= '<tr>'
                 . '<td>' . (int) ($row['id'] ?? 0) . '</td>'
+                . '<td>' . $esc((string) ($row['period_name'] ?? 'Sin periodo')) . '</td>'
                 . '<td>' . $esc((string) ($row['activity_date'] ?? '')) . '</td>'
                 . '<td>' . $esc($professionalName) . '</td>'
-                . '<td>' . $esc(ucwords(str_replace('_', ' ', (string) ($row['professional_role'] ?? '')))) . '</td>'
+                . '<td>' . $esc($this->aoatProfessionalRoleLabel((string) ($row['professional_role'] ?? ''))) . '</td>'
                 . '<td>' . $esc((string) ($row['subregion'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['municipality'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['activity_type'] ?? '')) . '</td>'
@@ -2144,7 +2211,7 @@ final class AoatController
             $rowsHtml .= '</tr>';
         }
 
-        $headerHtml = '<th>ID</th><th>Fecha actividad</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Actividad</th><th>Estado AoAT</th><th>Motivo auditoría</th><th>Observación auditoría</th><th>Número AoAT</th><th>Con quién realizó</th>';
+        $headerHtml = '<th>ID</th><th>Periodo</th><th>Fecha actividad</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Actividad</th><th>Estado AoAT</th><th>Motivo auditoría</th><th>Observación auditoría</th><th>Número AoAT</th><th>Con quién realizó</th>';
         foreach ($fieldLabels as $fieldLabel) {
             $headerHtml .= '<th>' . $esc($fieldLabel) . '</th>';
         }
@@ -2182,7 +2249,7 @@ final class AoatController
             . '<table><thead><tr>'
             . $headerHtml
             . '</tr></thead><tbody>'
-            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="23">Sin registros.</td></tr>')
+            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="24">Sin registros.</td></tr>')
             . '</tbody></table>'
             . '<p class="footer">Documento generado automáticamente desde la plataforma Equipo de Promoción y Prevención.</p>'
             . '</div></div></body></html>';
@@ -2207,13 +2274,14 @@ final class AoatController
         $logoAntioquiaSrc = $forPdf ? PdfImageHelper::imageDataUri($logoAntioquia) : $this->buildExcelImageTag($logoAntioquia, 'Gobernación de Antioquia');
 
         $professionalName = trim((string) (($record['professional_name'] ?? '') . ' ' . ($record['professional_last_name'] ?? '')));
-        $roleLabel = ucwords(str_replace('_', ' ', (string) ($record['professional_role'] ?? '')));
+        $roleLabel = $this->aoatProfessionalRoleLabel((string) ($record['professional_role'] ?? ''));
         $activityDate = $this->formatExportDate((string) ($payload['activity_date'] ?? ''));
         $createdAt = $this->formatExportDateTime((string) ($record['created_at'] ?? ''));
 
         $summaryRows = [
             'ID AoAT' => (string) ($record['id'] ?? ''),
             'Fecha de registro' => $createdAt,
+            'Periodo' => (string) ($record['period_name'] ?? 'Sin periodo'),
             'Fecha AoAT' => $activityDate,
             'Profesional' => $professionalName,
             'Rol profesional' => $roleLabel,
@@ -2345,15 +2413,31 @@ final class AoatController
             'prev_violencias' => 'Cualificación temas en prevención de violencias',
             'prev_adicciones' => 'Cualificación temas en prevención de adicciones',
             'salud_mental' => 'Cualificación temas de salud mental',
+            'politica_publica_psicologo' => 'Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)',
             'mesa_salud_mental' => 'Mesa Municipal de Salud Mental y Prevención de las Adicciones',
             'ppmsmypa' => 'Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)',
             'safer' => 'SAFER',
             'temas_hospital' => 'Temas dictados en el hospital',
+            'espacios_participacion_medico' => 'Espacios de participación',
             'actividad_social' => 'Actividades realizadas (Profesional social)',
             'otro_caso' => 'Otro caso identificado',
         ];
 
         return $labels[$key] ?? ucwords(str_replace('_', ' ', $key));
+    }
+
+    private function aoatProfessionalRoleLabel(string $role): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', strtolower(str_replace('_', ' ', trim($role)))) ?? strtolower(trim($role));
+
+        return match ($normalized) {
+            'psicologo' => 'Psicólogo',
+            'medico' => 'Médico',
+            'politologo' => 'Politólogo',
+            'abogado' => 'Abogado',
+            'profesional social' => 'Profesional social',
+            default => ucwords(str_replace('_', ' ', $role)),
+        };
     }
 
     /**
@@ -2436,6 +2520,41 @@ final class AoatController
         }
 
         return array_values(array_unique($out));
+    }
+
+    /**
+     * @param array<string, mixed>|null $activePeriod
+     */
+    private function resolveAoatPeriodFilter(Request $request, ?array $activePeriod): string
+    {
+        $raw = trim((string) $request->input('period_id', ''));
+        if ($raw === 'all') {
+            return 'all';
+        }
+        if ($raw !== '' && ctype_digit($raw) && (int) $raw > 0) {
+            return (string) (int) $raw;
+        }
+
+        $activeId = (int) ($activePeriod['id'] ?? 0);
+
+        return $activeId > 0 ? (string) $activeId : 'all';
+    }
+
+    /**
+     * @param list<array<string, mixed>> $periods
+     */
+    private function resolvePeriodFilterLabel(string $periodFilter, array $periods): string
+    {
+        if ($periodFilter === 'all') {
+            return 'Todos';
+        }
+        foreach ($periods as $period) {
+            if ((int) ($period['id'] ?? 0) === (int) $periodFilter) {
+                return (string) ($period['name'] ?? ('Periodo #' . $periodFilter));
+            }
+        }
+
+        return 'Periodo #' . $periodFilter;
     }
 }
 

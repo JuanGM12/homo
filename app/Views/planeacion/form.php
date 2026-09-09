@@ -5,6 +5,8 @@
 /** @var string $role */
 /** @var int $planYear */
 /** @var array<string, mixed> $oldInput */
+/** @var array<int, array{subregion:string, municipality:string}> $allowedMunicipalities */
+/** @var list<string> $readOnlyMonthKeys */
 $shortenLabel = function (string $text, int $max = 72): string {
     $t = trim($text);
     if (mb_strlen($t) <= $max) {
@@ -13,6 +15,21 @@ $shortenLabel = function (string $text, int $max = 72): string {
     return mb_substr($t, 0, $max - 1, 'UTF-8') . '…';
 };
 $oldInput = is_array($oldInput ?? null) ? $oldInput : [];
+$allowedMunicipalities = is_array($allowedMunicipalities ?? null) ? $allowedMunicipalities : [];
+$allowedTerritories = [];
+foreach ($allowedMunicipalities as $row) {
+    if (!is_array($row)) {
+        continue;
+    }
+    $subregion = trim((string) ($row['subregion'] ?? ''));
+    $municipality = trim((string) ($row['municipality'] ?? ''));
+    if ($subregion === '' || $municipality === '') {
+        continue;
+    }
+    $allowedTerritories[$subregion][] = $municipality;
+}
+$allowedTerritoriesJson = htmlspecialchars(json_encode($allowedTerritories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys : [];
 ?>
 
 <section class="mb-4">
@@ -74,6 +91,7 @@ $oldInput = is_array($oldInput ?? null) ? $oldInput : [];
                                 class="form-select"
                                 required
                                 data-subregion-select
+                                data-allowed-territories="<?= $allowedTerritoriesJson ?>"
                                 data-current-value="<?= htmlspecialchars((string) ($oldInput['subregion'] ?? ($plan['subregion'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
                             >
                                 <option value="">Seleccione la subregión</option>
@@ -218,6 +236,7 @@ $oldInput = is_array($oldInput ?? null) ? $oldInput : [];
                             $monthData = $existingPayload[$key] ?? null;
                             $selectedTopics = $monthData['topics'] ?? [];
                             $population = $monthData['population'] ?? '';
+                            $isReadOnlyMonth = in_array($key, $readOnlyMonthKeys, true);
                             ?>
                             <div class="accordion-item app-accordion-item">
                                 <h2 class="accordion-header" id="heading-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>">
@@ -248,8 +267,9 @@ $oldInput = is_array($oldInput ?? null) ? $oldInput : [];
                                                         <div class="form-check app-form-check-option">
                                                             <input class="form-check-input" type="checkbox"
                                                                    name="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>_temas[]"
-                                                                   id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>"
-                                                                   value="<?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>"
+                                                           id="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>"
+                                                           value="<?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>"
+                                                                   <?= $isReadOnlyMonth ? 'disabled' : '' ?>
                                                                    <?= $isChecked ? 'checked' : '' ?>>
                                                             <label class="form-check-label" for="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>" title="<?= htmlspecialchars($topic, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <?= htmlspecialchars($shortenLabel($topic), ENT_QUOTES, 'UTF-8') ?>
@@ -266,7 +286,11 @@ $oldInput = is_array($oldInput ?? null) ? $oldInput : [];
                                                 name="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>_poblacion"
                                                 rows="2"
                                                 placeholder="A quién se dirigirán las capacitaciones"
+                                                <?= $isReadOnlyMonth ? 'readonly' : '' ?>
                                             ><?= htmlspecialchars((string) $population, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                            <?php if ($isReadOnlyMonth): ?>
+                                                <div class="form-text">Mes de solo lectura.</div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>

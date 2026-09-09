@@ -48,10 +48,12 @@ final class UserRepository
         $sql = "
             SELECT
                 u.*,
-                GROUP_CONCAT(COALESCE(r.description, r.name) ORDER BY r.name SEPARATOR ', ') AS roles_list
+                GROUP_CONCAT(DISTINCT COALESCE(r.description, r.name) ORDER BY r.name SEPARATOR ', ') AS roles_list,
+                GROUP_CONCAT(DISTINCT CONCAT(um.subregion, '|', um.municipality) ORDER BY um.subregion, um.municipality SEPARATOR '||') AS municipalities_list
             FROM users u
             LEFT JOIN user_roles ur ON ur.user_id = u.id
             LEFT JOIN roles r ON r.id = ur.role_id
+            LEFT JOIN user_municipalities um ON um.user_id = u.id
             $whereSql
             GROUP BY u.id
             ORDER BY u.created_at ASC, u.id ASC
@@ -84,11 +86,12 @@ final class UserRepository
         $roles = $rolesStmt->fetchAll(PDO::FETCH_COLUMN);
 
         $user['roles'] = $roles;
+        $user['municipalities'] = $this->findMunicipalitiesForUser($id);
 
         return $user;
     }
 
-    public function create(array $data, array $roles): int
+    public function create(array $data, array $roles, array $municipalities = []): int
     {
         $pdo = Connection::getPdo();
         $pdo->beginTransaction();
@@ -107,9 +110,11 @@ final class UserRepository
 
             $userId = (int) $pdo->lastInsertId();
 
+            $roles = $this->sanitizeAssignableRoles($roles);
             if ($roles !== []) {
                 $this->syncRoles($userId, $roles, $pdo);
             }
+            $this->syncMunicipalities($userId, $municipalities, $pdo);
 
             $pdo->commit();
 
@@ -120,7 +125,7 @@ final class UserRepository
         }
     }
 
-    public function update(int $id, array $data, array $roles): void
+    public function update(int $id, array $data, array $roles, array $municipalities = []): void
     {
         $pdo = Connection::getPdo();
         $pdo->beginTransaction();
@@ -144,7 +149,13 @@ final class UserRepository
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
 
-            $this->syncRoles($id, $roles, $pdo);
+            $roles = $this->sanitizeAssignableRoles($roles);
+            if ($this->userHasRole($id, 'abogado', $pdo)) {
+                $roles[] = 'abogado';
+            }
+
+            $this->syncRoles($id, array_values(array_unique($roles)), $pdo);
+            $this->syncMunicipalities($id, $municipalities, $pdo);
 
             $pdo->commit();
         } catch (PDOException $e) {
@@ -165,6 +176,20 @@ final class UserRepository
         $pdo = Connection::getPdo();
         $stmt = $pdo->query('SELECT id, name, description FROM roles ORDER BY name ASC');
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function findMunicipalitiesForUser(int $userId): array
+    {
+        $pdo = Connection::getPdo();
+        $stmt = $pdo->prepare(
+            'SELECT subregion, municipality
+             FROM user_municipalities
+             WHERE user_id = :user_id
+             ORDER BY subregion ASC, municipality ASC'
+        );
+        $stmt->execute([':user_id' => $userId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     /**
@@ -214,6 +239,69 @@ final class UserRepository
                     ':role_id' => $roleId,
                 ]);
             }
+        }
+    }
+
+    private function sanitizeAssignableRoles(array $roles): array
+    {
+        return array_values(array_filter(array_map(static function (mixed $role): string {
+            return strtolower(trim((string) $role));
+        }, $roles), static fn (string $role): bool => $role !== '' && $role !== 'abogado'));
+    }
+
+    private function userHasRole(int $userId, string $roleName, PDO $pdo): bool
+    {
+        $stmt = $pdo->prepare(
+            'SELECT 1 FROM user_roles ur
+             INNER JOIN roles r ON r.id = ur.role_id
+             WHERE ur.user_id = :user_id AND r.name = :role
+             LIMIT 1'
+        );
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':role' => $roleName,
+        ]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private function syncMunicipalities(int $userId, array $municipalities, PDO $pdo): void
+    {
+        $pdo->prepare('DELETE FROM user_municipalities WHERE user_id = :user_id')
+            ->execute([':user_id' => $userId]);
+
+        if ($municipalities === []) {
+            return;
+        }
+
+        $insertStmt = $pdo->prepare(
+            'INSERT INTO user_municipalities (user_id, subregion, municipality)
+             VALUES (:user_id, :subregion, :municipality)'
+        );
+
+        $seen = [];
+        foreach ($municipalities as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $subregion = trim((string) ($row['subregion'] ?? ''));
+            $municipality = trim((string) ($row['municipality'] ?? ''));
+            if ($subregion === '' || $municipality === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($municipality, 'UTF-8');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+
+            $insertStmt->execute([
+                ':user_id' => $userId,
+                ':subregion' => $subregion,
+                ':municipality' => $municipality,
+            ]);
         }
     }
 }

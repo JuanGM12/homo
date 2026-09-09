@@ -151,6 +151,8 @@ final class App
         $this->router->post('/admin/usuarios/desactivar', [\App\Controllers\UsersController::class, 'deactivate'])->middleware('auth', 'role:admin');
         $this->router->get('/admin/aoat-metas', [\App\Controllers\AoatMetaRulesController::class, 'index'])->middleware('auth', 'role:admin');
         $this->router->post('/admin/aoat-metas', [\App\Controllers\AoatMetaRulesController::class, 'update'])->middleware('auth', 'role:admin');
+        $this->router->post('/admin/aoat-periodos', [\App\Controllers\AoatMetaRulesController::class, 'createPeriod'])->middleware('auth', 'role:admin');
+        $this->router->post('/admin/aoat-periodos/activar', [\App\Controllers\AoatMetaRulesController::class, 'activatePeriod'])->middleware('auth', 'role:admin');
     }
 
     public function run(): void
