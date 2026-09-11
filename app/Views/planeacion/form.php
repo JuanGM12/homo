@@ -227,9 +227,10 @@ $readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys :
                 <div class="app-form-section">
                     <h2 class="h6 fw-semibold text-secondary mb-3">Temas y población por mes</h2>
                     <p class="text-muted small mb-3">
-                        Puedes diligenciar solo los meses que ya tengas definidos. Para cada mes que uses,
-                        selecciona al menos un tema y describe la población objetivo.
-                    </p>
+                    Puedes diligenciar solo los meses que ya tengas definidos. Para cada mes que uses,
+                    selecciona al menos un tema y describe la población objetivo.
+                    Los meses de enero a julio quedan en solo lectura; a partir de agosto sí puedes editar.
+                </p>
                     <div class="accordion app-accordion-plan" id="monthsAccordion">
                         <?php foreach ($months as $key => $label): ?>
                             <?php

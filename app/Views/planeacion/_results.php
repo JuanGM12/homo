@@ -13,6 +13,27 @@ $currentSort = (string) ($_GET['sort'] ?? 'created_at');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 $userId = (int) ($currentUser['id'] ?? 0);
 $isAdmin = in_array('admin', $currentUser['roles'] ?? [], true);
+$canCreateOwnRecord = (bool) ($canCreateOwnRecord ?? false);
+$assignedMunicipalities = is_array($assignedMunicipalities ?? null) ? $assignedMunicipalities : [];
+$planBelongsToAssignedMunicipality = static function (array $plan) use ($assignedMunicipalities): bool {
+    $subregion = trim((string) ($plan['subregion'] ?? ''));
+    $municipality = trim((string) ($plan['municipality'] ?? ''));
+    if ($subregion === '' || $municipality === '') {
+        return false;
+    }
+
+    foreach ($assignedMunicipalities as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        if (trim((string) ($row['subregion'] ?? '')) === $subregion
+            && trim((string) ($row['municipality'] ?? '')) === $municipality) {
+            return true;
+        }
+    }
+
+    return false;
+};
 
 $monthOrder = [
     'enero' => 'Enero',
@@ -188,8 +209,6 @@ if ($totalPages <= 7) {
                     $timestamp = $createdAt !== '' ? strtotime($createdAt) : false;
                     $createdDate = $timestamp ? date('d/m/Y', $timestamp) : ($createdAt !== '' ? $createdAt : 'Sin fecha');
                     $createdTime = $timestamp ? date('H:i', $timestamp) : '';
-                    $createdMonth = $timestamp ? (int) date('n', $timestamp) : 0;
-                    $isReadOnlyByCreatedMonth = $createdMonth >= 1 && $createdMonth <= 8;
                     ?>
                     <tr class="planeacion-row">
                         <td class="planeacion-cell-strong">
@@ -238,7 +257,9 @@ if ($totalPages <= 7) {
                                     Ver detalles
                                 </button>
                                 <?php
-                                $canEditPlan = !empty($plan['editable']) && $isOwner && !$isReadOnlyByCreatedMonth;
+                                $canEditPlan = !empty($plan['editable'])
+                                    && $canCreateOwnRecord
+                                    && ($isOwner || $planBelongsToAssignedMunicipality($plan));
                                 ?>
                                 <?php if ($canEditPlan): ?>
                                     <a href="/planeacion/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-primary">

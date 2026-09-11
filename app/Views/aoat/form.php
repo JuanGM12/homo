@@ -874,6 +874,14 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                                             </label>
                                         </div>
                                     </div>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="politica_publica_psicologo[]" value="No aplica" <?= in_array('No aplica', $politicaPublicaPsicologo, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small">
+                                                No aplica
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

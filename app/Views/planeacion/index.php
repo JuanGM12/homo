@@ -34,7 +34,7 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
             <p class="text-muted mb-0">
                 <?= $isAudit
                     ? 'Visualiza las planeaciones registradas por asesor, año, subregion y municipio de los profesionales a tu cargo.'
-                    : 'Visualiza tus planeaciones registradas por año, subregion y municipio.'
+                    : 'Visualiza tus planeaciones y las de los municipios que tienes asignados, aunque las haya registrado otro profesional.'
                 ?>
             </p>
         </div>

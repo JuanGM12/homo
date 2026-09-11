@@ -87,6 +87,45 @@ final class TrainingPlanRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /**
+     * Planeaciones propias más las de los municipios actualmente asignados.
+     * Si $territories está vacío, equivale a findForUser (solo lo propio).
+     *
+     * @param array<int, array{subregion?:string, municipality?:string}> $territories
+     * @return array<int, array<string, mixed>>
+     */
+    public function findForUserAndAssignedMunicipalities(int $userId, array $territories): array
+    {
+        $pdo = Connection::getPdo();
+        $params = [':user_id' => $userId];
+        $territoryClauses = [];
+
+        foreach ($territories as $index => $row) {
+            $subregion = trim((string) ($row['subregion'] ?? ''));
+            $municipality = trim((string) ($row['municipality'] ?? ''));
+            if ($subregion === '' || $municipality === '') {
+                continue;
+            }
+
+            $subKey = ':sub' . $index;
+            $munKey = ':mun' . $index;
+            $territoryClauses[] = '(subregion = ' . $subKey . ' AND municipality = ' . $munKey . ')';
+            $params[$subKey] = $subregion;
+            $params[$munKey] = $municipality;
+        }
+
+        $sql = 'SELECT * FROM training_plans WHERE user_id = :user_id';
+        if ($territoryClauses !== []) {
+            $sql .= ' OR (' . implode(' OR ', $territoryClauses) . ')';
+        }
+        $sql .= ' ORDER BY plan_year DESC, created_at DESC';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     public function findById(int $id): ?array
     {
         $pdo = Connection::getPdo();

@@ -18,7 +18,7 @@ final class PlaneacionController
 {
     private const INDEX_PAGE_SIZE = 20;
     private const FORM_OLD_INPUT_KEY = 'planeacion.form_old_input';
-    private const READ_ONLY_MONTH_KEYS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto'];
+    private const READ_ONLY_MONTH_KEYS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio'];
 
     private TrainingPlanRepository $repository;
 
@@ -45,6 +45,8 @@ final class PlaneacionController
 
         $canViewAll = Auth::canViewAllModuleRecords($user);
         $isAuditView = $canViewAll;
+        $assignedMunicipalities = $this->municipalitiesAssignedToUser((int) $user['id']);
+        $canCreateOwnRecord = $this->userCanCreateOwnRecord($user);
 
         $search = trim((string) $request->input('q', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
@@ -55,30 +57,7 @@ final class PlaneacionController
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
 
-        if ($isAuditView) {
-            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
-            $auditRoles = [];
-
-            if ($isAdmin || $isCoordinator) {
-                $auditRoles = [];
-            } elseif ($isSpecialist) {
-                if ($primaryRole === 'medico') {
-                    $auditRoles = ['medico'];
-                } elseif ($primaryRole === 'abogado') {
-                    $auditRoles = ['abogado'];
-                } elseif ($primaryRole === 'psicologo') {
-                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
-                }
-            }
-
-            $records = $this->repository->findForAudit($auditRoles);
-        } else {
-            $records = $this->repository->findForUser((int) $user['id']);
-        }
-
-        if (!$canViewAll) {
-            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
-        }
+        $records = $this->visibleRecordsForUser($user, $isAuditView, $isAdmin, $isCoordinator, $isSpecialist, $assignedMunicipalities);
 
         $records = $this->applyIndexFilters($records, $search, '', $fromDate, $toDate, $subregionFilter, $municipalityFilters);
 
@@ -87,7 +66,14 @@ final class PlaneacionController
         $paginatedRecords = $pagination['items'];
 
         if ((string) $request->input('partial', '') === 'results') {
-            $html = $this->renderResultsPartial($paginatedRecords, $pagination, $isAuditView, $user);
+            $html = $this->renderResultsPartial(
+                $paginatedRecords,
+                $pagination,
+                $isAuditView,
+                $user,
+                $assignedMunicipalities,
+                $canCreateOwnRecord
+            );
 
             return Response::json(['html' => $html]);
         }
@@ -97,7 +83,8 @@ final class PlaneacionController
             'records' => $paginatedRecords,
             'pagination' => $pagination,
             'isAuditView' => $isAuditView,
-            'canCreateOwnRecord' => $this->userCanCreateOwnRecord($user),
+            'canCreateOwnRecord' => $canCreateOwnRecord,
+            'assignedMunicipalities' => $assignedMunicipalities,
         ]);
     }
 
@@ -217,31 +204,8 @@ final class PlaneacionController
 
         $canViewAll = Auth::canViewAllModuleRecords($user);
         $isAuditView = $canViewAll;
-
-        if ($isAuditView) {
-            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
-            $auditRoles = [];
-
-            if ($isAdmin || $isCoordinator) {
-                $auditRoles = [];
-            } elseif ($isSpecialist) {
-                if ($primaryRole === 'medico') {
-                    $auditRoles = ['medico'];
-                } elseif ($primaryRole === 'abogado') {
-                    $auditRoles = ['abogado'];
-                } elseif ($primaryRole === 'psicologo') {
-                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
-                }
-            }
-
-            $records = $this->repository->findForAudit($auditRoles);
-        } else {
-            $records = $this->repository->findForUser((int) $user['id']);
-        }
-
-        if (!$canViewAll) {
-            $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
-        }
+        $assignedMunicipalities = $this->municipalitiesAssignedToUser((int) $user['id']);
+        $records = $this->visibleRecordsForUser($user, $isAuditView, $isAdmin, $isCoordinator, $isSpecialist, $assignedMunicipalities);
 
         $search = trim((string) $request->input('q', ''));
         $fromDate = trim((string) $request->input('from_date', ''));
@@ -745,7 +709,7 @@ final class PlaneacionController
         }
 
         $plan = $this->repository->findById($id);
-        if (!$plan || (int) $plan['user_id'] !== (int) $user['id']) {
+        if (!$plan || !$this->userCanEditPlan($user, $plan)) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
@@ -755,7 +719,7 @@ final class PlaneacionController
             return Response::redirect('/planeacion');
         }
 
-        if (empty($plan['editable']) || !$this->planAllowsEditingByCreatedMonth($plan)) {
+        if (empty($plan['editable'])) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Edición no permitida',
@@ -766,18 +730,19 @@ final class PlaneacionController
         }
 
         $professional = [
-            'id' => $user['id'],
-            'name' => $user['name'],
-            'email' => $user['email'],
+            'id' => $plan['user_id'] ?? $user['id'],
+            'name' => (string) (($plan['professional_name'] ?? '') !== '' ? $plan['professional_name'] : $user['name']),
+            'email' => (string) (($plan['professional_email'] ?? '') !== '' ? $plan['professional_email'] : $user['email']),
         ];
         $oldInput = $this->consumeOldInput('edit', $id);
+        $planRole = trim((string) ($plan['professional_role'] ?? ''));
 
         return Response::view('planeacion/form', [
             'pageTitle' => 'Editar planeación anual',
             'mode' => 'edit',
             'plan' => $plan,
             'professional' => $professional,
-            'role' => (string) ($user['role'] ?? (($user['roles'] ?? [])[0] ?? '')),
+            'role' => $planRole !== '' ? $planRole : (string) ($user['role'] ?? (($user['roles'] ?? [])[0] ?? '')),
             'planYear' => (int) ($plan['plan_year'] ?? date('Y')),
             'oldInput' => $oldInput,
             'allowedMunicipalities' => $this->municipalitiesAssignedToUser((int) $user['id']),
@@ -802,7 +767,7 @@ final class PlaneacionController
         }
 
         $plan = $this->repository->findById($id);
-        if (!$plan || (int) $plan['user_id'] !== (int) $user['id']) {
+        if (!$plan || !$this->userCanEditPlan($user, $plan)) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
@@ -812,7 +777,7 @@ final class PlaneacionController
             return Response::redirect('/planeacion');
         }
 
-        if (empty($plan['editable']) || !$this->planAllowsEditingByCreatedMonth($plan)) {
+        if (empty($plan['editable'])) {
             Flash::set([
                 'type' => 'info',
                 'title' => 'Edición no permitida',
@@ -885,6 +850,74 @@ final class PlaneacionController
         $allowed = ['abogado', 'Medico', 'medico', 'psicologo', 'especialista'];
 
         return (bool) array_intersect($roles, $allowed);
+    }
+
+    /**
+     * Puede editar una planeación propia o la de un municipio que tiene asignado.
+     *
+     * @param array<string, mixed> $user
+     * @param array<string, mixed> $plan
+     */
+    private function userCanEditPlan(array $user, array $plan): bool
+    {
+        if (!$this->userCanCreateOwnRecord($user)) {
+            return false;
+        }
+
+        if ((int) ($plan['user_id'] ?? 0) === (int) $user['id']) {
+            return true;
+        }
+
+        return $this->userHasAssignedMunicipality(
+            (int) $user['id'],
+            (string) ($plan['subregion'] ?? ''),
+            (string) ($plan['municipality'] ?? '')
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @param array<int, array{subregion:string, municipality:string}> $assignedMunicipalities
+     * @return array<int, array<string, mixed>>
+     */
+    private function visibleRecordsForUser(
+        array $user,
+        bool $isAuditView,
+        bool $isAdmin,
+        bool $isCoordinator,
+        bool $isSpecialist,
+        array $assignedMunicipalities
+    ): array {
+        if ($isAuditView) {
+            $roles = $user['roles'] ?? [];
+            $primaryRole = strtolower((string) ($user['role'] ?? (($roles[0] ?? '') ?: '')));
+            $auditRoles = [];
+
+            if ($isAdmin || $isCoordinator) {
+                $auditRoles = [];
+            } elseif ($isSpecialist) {
+                if ($primaryRole === 'medico') {
+                    $auditRoles = ['medico'];
+                } elseif ($primaryRole === 'abogado') {
+                    $auditRoles = ['abogado'];
+                } elseif ($primaryRole === 'psicologo') {
+                    $auditRoles = ['psicologo', 'profesional social', 'profesional_social'];
+                }
+            }
+
+            return $this->repository->findForAudit($auditRoles);
+        }
+
+        // Sin municipios asignados: sigue viendo solo lo suyo.
+        // Con uno o más: ve lo suyo y además las planeaciones de esos municipios.
+        if ($assignedMunicipalities === []) {
+            return $this->repository->findForUser((int) $user['id']);
+        }
+
+        return $this->repository->findForUserAndAssignedMunicipalities(
+            (int) $user['id'],
+            $assignedMunicipalities
+        );
     }
 
     /**
@@ -1022,9 +1055,16 @@ final class PlaneacionController
      * @param array<int, array<string, mixed>> $records
      * @param array<string, mixed> $pagination
      * @param array<string, mixed> $user
+     * @param array<int, array{subregion:string, municipality:string}> $assignedMunicipalities
      */
-    private function renderResultsPartial(array $records, array $pagination, bool $isAuditView, array $user): string
-    {
+    private function renderResultsPartial(
+        array $records,
+        array $pagination,
+        bool $isAuditView,
+        array $user,
+        array $assignedMunicipalities = [],
+        bool $canCreateOwnRecord = false
+    ): string {
         $isAuditViewLocal = $isAuditView;
         $currentUser = $user;
 
@@ -1174,19 +1214,21 @@ final class PlaneacionController
         return false;
     }
 
-    private function planAllowsEditingByCreatedMonth(array $plan): bool
+    private function userHasAssignedMunicipality(int $userId, string $subregion, string $municipality): bool
     {
-        $createdAt = trim((string) ($plan['created_at'] ?? ''));
-        if ($createdAt === '') {
-            return true;
+        $subregion = trim($subregion);
+        $municipality = trim($municipality);
+        if ($subregion === '' || $municipality === '') {
+            return false;
         }
 
-        $timestamp = strtotime($createdAt);
-        if (!$timestamp) {
-            return true;
+        foreach ($this->municipalitiesAssignedToUser($userId) as $row) {
+            if ($row['subregion'] === $subregion && $row['municipality'] === $municipality) {
+                return true;
+            }
         }
 
-        return (int) date('n', $timestamp) >= 9;
+        return false;
     }
 
     /**
