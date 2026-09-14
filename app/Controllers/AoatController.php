@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatActivityWithOptionRepository;
 use App\Repositories\AoatPeriodRepository;
 use App\Repositories\AoatRepository;
 use App\Services\Auth;
@@ -189,12 +190,17 @@ final class AoatController
             'profession' => (string) ($user['profession'] ?? ''),
         ];
 
+        $oldInput = $this->consumeOldInput('create');
+
         return Response::view('aoat/form', [
             'pageTitle' => 'Registrar AoAT',
             'mode' => 'create',
             'record' => null,
             'professional' => $professional,
-            'oldInput' => $this->consumeOldInput('create'),
+            'oldInput' => $oldInput,
+            'activityWithOptions' => $this->activityWithSelectOptions(
+                is_array($oldInput) ? (string) ($oldInput['activity_with'] ?? '') : ''
+            ),
         ]);
     }
 
@@ -240,6 +246,17 @@ final class AoatController
                 'type' => 'error',
                 'title' => 'Campos obligatorios incompletos',
                 'message' => 'Completa estos campos: ' . implode(', ', $missingRequiredFields) . '.',
+            ]);
+
+            return Response::redirect('/aoat/nueva');
+        }
+
+        if (!$this->activityWithIsAllowed($activityWith)) {
+            $this->flashOldInput('create', 0, $request);
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Con quién realizó la actividad',
+                'message' => 'Debes seleccionar una de las opciones parametrizadas.',
             ]);
 
             return Response::redirect('/aoat/nueva');
@@ -697,12 +714,19 @@ final class AoatController
             'profession' => (string) ($user['profession'] ?? ''),
         ];
 
+        $oldInput = $this->consumeOldInput('edit', (int) $record['id']);
+        $payload = $this->decodePayload($record);
+        $currentActivityWith = is_array($oldInput) && isset($oldInput['activity_with'])
+            ? (string) $oldInput['activity_with']
+            : (string) ($payload['activity_with'] ?? '');
+
         return Response::view('aoat/form', [
             'pageTitle' => 'Editar AoAT',
             'mode' => 'edit',
             'record' => $record,
             'professional' => $professional,
-            'oldInput' => $this->consumeOldInput('edit', (int) $record['id']),
+            'oldInput' => $oldInput,
+            'activityWithOptions' => $this->activityWithSelectOptions($currentActivityWith),
         ]);
     }
 
@@ -819,6 +843,18 @@ final class AoatController
                 'type' => 'error',
                 'title' => 'Campos obligatorios incompletos',
                 'message' => 'Completa estos campos: ' . implode(', ', $missingRequiredFields) . '.',
+            ]);
+
+            return Response::redirect('/aoat/editar?id=' . $id);
+        }
+
+        $existingPayload = $this->decodePayload($record);
+        if (!$this->activityWithIsAllowed($activityWith, (string) ($existingPayload['activity_with'] ?? ''))) {
+            $this->flashOldInput('edit', $id, $request);
+            Flash::set([
+                'type' => 'error',
+                'title' => 'Con quién realizó la actividad',
+                'message' => 'Debes seleccionar una de las opciones parametrizadas.',
             ]);
 
             return Response::redirect('/aoat/editar?id=' . $id);
@@ -1755,6 +1791,19 @@ final class AoatController
         }
 
         return $missing;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function activityWithSelectOptions(?string $current = null): array
+    {
+        return (new AoatActivityWithOptionRepository())->labelsForSelect($current);
+    }
+
+    private function activityWithIsAllowed(string $value, ?string $legacyCurrent = null): bool
+    {
+        return (new AoatActivityWithOptionRepository())->isAllowed($value, $legacyCurrent);
     }
 
     private function flashOldInput(string $mode, int $recordId, Request $request): void

@@ -217,6 +217,10 @@ if ($currentUser) {
                                         <i class="bi bi-sliders" aria-hidden="true"></i>
                                         <span>Metas AoAT</span>
                                     </a>
+                                    <a href="/admin/aoat-con-quien" class="app-sidebar-link <?= str_starts_with($currentPath, '/admin/aoat-con-quien') ? 'active' : '' ?>">
+                                        <i class="bi bi-list-check" aria-hidden="true"></i>
+                                        <span>Con quién realizó AoAT</span>
+                                    </a>
                                 <?php endif; ?>
                                 <div class="app-sidebar-divider mt-auto">
                                     <span class="app-sidebar-divider-label">Acciones</span>

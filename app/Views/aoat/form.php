@@ -2,6 +2,7 @@
 /** @var array|null $record */
 /** @var array $professional */
 /** @var array $oldInput */
+/** @var list<string>|null $activityWithOptions */
 
 $isEdit = isset($record) && isset($record['id']);
 $role = strtolower((string) ($professional['role'] ?? ''));
@@ -140,13 +141,20 @@ $actividadSocial = isset($formData['actividad_social']) && is_array($formData['a
                         <div class="row g-3 mb-4">
                             <div class="col-md-8">
                                 <label class="form-label">Con quién realizó la actividad <span class="text-danger">*</span></label>
-                                <input
-                                    type="text"
-                                    name="activity_with"
-                                    class="form-control"
-                                    value="<?= htmlspecialchars((string) ($oldPayload['activity_with'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                    required
-                                >
+                                <?php
+                                $activityWith = (string) ($oldPayload['activity_with'] ?? '');
+                                $activityWithOptions = is_array($activityWithOptions ?? null) ? $activityWithOptions : [];
+                                ?>
+                                <select name="activity_with" class="form-select" required>
+                                    <option value="">Seleccione una opción</option>
+                                    <?php foreach ($activityWithOptions as $option): ?>
+                                        <?php $optionLabel = trim((string) $option); ?>
+                                        <?php if ($optionLabel === '') { continue; } ?>
+                                        <option value="<?= htmlspecialchars($optionLabel, ENT_QUOTES, 'UTF-8') ?>" <?= $activityWith === $optionLabel ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($optionLabel, ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Estado de la AoAT</label>
