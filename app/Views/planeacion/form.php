@@ -30,24 +30,28 @@ foreach ($allowedMunicipalities as $row) {
 }
 $allowedTerritoriesJson = htmlspecialchars(json_encode($allowedTerritories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 $readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys : [];
+$formReadOnly = !empty($formReadOnly);
 ?>
 
 <section class="mb-4">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb small">
             <li class="breadcrumb-item"><a href="/planeacion">Planeación anual</a></li>
-            <li class="breadcrumb-item active" aria-current="page"><?= $mode === 'edit' ? 'Editar' : 'Nueva' ?></li>
+            <li class="breadcrumb-item active" aria-current="page"><?= $formReadOnly ? 'Consultar' : ($mode === 'edit' ? 'Editar' : 'Nueva') ?></li>
         </ol>
     </nav>
 
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
         <div>
             <h1 class="h4 mb-1">
-                <?= $mode === 'edit' ? 'Editar planeación anual' : 'Nueva planeación anual' ?>
+                <?= $formReadOnly ? 'Consultar planeación anual' : ($mode === 'edit' ? 'Editar planeación anual' : 'Nueva planeación anual') ?>
             </h1>
             <p class="text-muted small mb-0">
                 <?= htmlspecialchars(mb_convert_case($role, MB_CASE_TITLE, 'UTF-8'), ENT_QUOTES, 'UTF-8') ?> · Año <?= (int) $planYear ?>
             </p>
+            <?php if ($formReadOnly): ?>
+                <p class="text-muted small mb-0 mt-1">Consulta en modo lectura. No es posible guardar cambios.</p>
+            <?php endif; ?>
         </div>
         <a href="/planeacion" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i> Volver
@@ -56,7 +60,7 @@ $readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys :
 
     <div class="card border-0 app-form-card">
         <div class="card-body p-4 p-md-5">
-            <form method="post" action="<?= $mode === 'edit' ? '/planeacion/editar' : '/planeacion/nueva' ?>" class="app-plan-form">
+            <form method="post" action="<?= $mode === 'edit' ? '/planeacion/editar' : '/planeacion/nueva' ?>" class="app-plan-form" <?= $formReadOnly ? 'data-read-only="1"' : '' ?>>
                 <?php if ($mode === 'edit' && $plan !== null): ?>
                     <input type="hidden" name="id" value="<?= htmlspecialchars((string) $plan['id'], ENT_QUOTES, 'UTF-8') ?>">
                 <?php endif; ?>
@@ -93,6 +97,7 @@ $readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys :
                                 data-subregion-select
                                 data-allowed-territories="<?= $allowedTerritoriesJson ?>"
                                 data-current-value="<?= htmlspecialchars((string) ($oldInput['subregion'] ?? ($plan['subregion'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                <?= $formReadOnly ? 'disabled' : '' ?>
                             >
                                 <option value="">Seleccione la subregión</option>
                             </select>
@@ -237,7 +242,7 @@ $readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys :
                             $monthData = $existingPayload[$key] ?? null;
                             $selectedTopics = $monthData['topics'] ?? [];
                             $population = $monthData['population'] ?? '';
-                            $isReadOnlyMonth = in_array($key, $readOnlyMonthKeys, true);
+                            $isReadOnlyMonth = $formReadOnly || in_array($key, $readOnlyMonthKeys, true);
                             ?>
                             <div class="accordion-item app-accordion-item">
                                 <h2 class="accordion-header" id="heading-<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>">
@@ -301,10 +306,12 @@ $readOnlyMonthKeys = is_array($readOnlyMonthKeys ?? null) ? $readOnlyMonthKeys :
                 </div>
 
                 <div class="app-form-submit d-flex justify-content-end gap-2">
-                    <a href="/planeacion" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="/planeacion" class="btn btn-outline-secondary"><?= $formReadOnly ? 'Volver' : 'Cancelar' ?></a>
+                    <?php if (!$formReadOnly): ?>
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check2-circle me-1"></i> Guardar planeación
                     </button>
+                    <?php endif; ?>
                 </div>
             </form>
         </div>

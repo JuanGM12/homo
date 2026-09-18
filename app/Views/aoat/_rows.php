@@ -38,11 +38,11 @@ $formatActivityDate = static function (?string $value): array {
     $isOwner = $userId !== null && (int) $ownerId === (int) $userId;
     $state = (string) ($record['state'] ?? '');
     $canEditForm = !$isAudit && $isOwner && !in_array($state, ['Aprobada', 'Realizado'], true);
+    $inActivePeriod = !empty($record['period_active']);
     $canAuditState = $isAudit && !$isOwner && $state === 'Asignada' && $canAuditRole;
     $canApproveFromRealizado = $isAudit && !$isOwner && $state === 'Realizado' && $canAuditRole;
     $canReturnAgainFromRealizado = $isAudit && !$isOwner && $state === 'Realizado' && $canAuditRole;
     $canBulkSelect = $canAuditState || $canApproveFromRealizado;
-    $canMarkRealizado = !$isAudit && $isOwner && $state === 'Devuelta';
     $canExportSingle = ($isAdmin || $isCoordinator || $isSpecialist) || ($isOwner && $state === 'Aprobada');
     $canDeleteThisRow = $isAudit && is_array($user) && AoatController::canUserDeleteAoatRecord($user, $record);
 
@@ -57,7 +57,10 @@ $formatActivityDate = static function (?string $value): array {
     $canEditNumberOnly = !$isAudit
         && $isOwner
         && in_array($state, ['Aprobada', 'Realizado'], true);
-    $canEditForm = $canEditForm || $canEditNumberOnly;
+    $canEditFullForm = $canEditForm && $inActivePeriod;
+    $canEditForm = $canEditFullForm || $canEditNumberOnly;
+    $canViewReadOnly = !$isAudit && $isOwner && !$canEditForm;
+    $canMarkRealizado = !$isAudit && $isOwner && $state === 'Devuelta' && $inActivePeriod;
 
     $auditMotive = trim((string) ($record['audit_motive'] ?? ''));
     $auditObservation = trim((string) ($record['audit_observation'] ?? ''));
@@ -174,6 +177,11 @@ $formatActivityDate = static function (?string $value): array {
                         <i class="bi bi-pencil me-1"></i>
                         Editar
                     </a>
+                <?php elseif ($canViewReadOnly): ?>
+                    <a href="/aoat/editar?id=<?= (int) $record['id'] ?>" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-eye me-1"></i>
+                        Ver
+                    </a>
                 <?php endif; ?>
                 <?php if ($canAuditState): ?>
                     <button
@@ -234,7 +242,7 @@ $formatActivityDate = static function (?string $value): array {
                         Eliminar
                     </button>
                 <?php endif; ?>
-                <?php if (!$canExportSingle && !$canEditForm && !$canAuditState && !$canApproveFromRealizado && !$canReturnAgainFromRealizado && !$canMarkRealizado && !$canDeleteThisRow): ?>
+                <?php if (!$canExportSingle && !$canEditForm && !$canViewReadOnly && !$canAuditState && !$canApproveFromRealizado && !$canReturnAgainFromRealizado && !$canMarkRealizado && !$canDeleteThisRow): ?>
                     <span class="aoat-no-actions">Sin acciones adicionales</span>
                 <?php endif; ?>
             </div>

@@ -2,7 +2,11 @@
 /** @var string $mode */
 /** @var array<string, mixed>|null $record */
 /** @var array<string, mixed> $professional */
+/** @var array<int, array{subregion:string, municipality:string}>|null $allowedMunicipalities */
+/** @var bool|null $readOnly */
+
 $isEdit = $mode === 'edit' && $record !== null;
+$formReadOnly = !empty($readOnly);
 
 $payload = [];
 if (!empty($record['payload'])) {
@@ -11,13 +15,27 @@ if (!empty($record['payload'])) {
         $payload = $decoded;
     }
 }
+
+$allowedMunicipalities = is_array($allowedMunicipalities ?? null) ? $allowedMunicipalities : [];
+$allowedTerritories = [];
+foreach ($allowedMunicipalities as $row) {
+    $subregion = trim((string) ($row['subregion'] ?? ''));
+    $municipality = trim((string) ($row['municipality'] ?? ''));
+    if ($subregion === '' || $municipality === '') {
+        continue;
+    }
+    $allowedTerritories[$subregion][] = $municipality;
+}
+$allowedTerritoriesJson = htmlspecialchars(json_encode($allowedTerritories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$periodName = trim((string) ($record['period_name'] ?? ''));
+$disabledAttr = $formReadOnly ? 'disabled' : '';
 ?>
 
 <section class="mb-4">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb small">
             <li class="breadcrumb-item"><a href="/pic">Seguimiento PIC</a></li>
-            <li class="breadcrumb-item active" aria-current="page"><?= $isEdit ? 'Editar registro' : 'Nuevo registro' ?></li>
+            <li class="breadcrumb-item active" aria-current="page"><?= $isEdit ? ($formReadOnly ? 'Ver' : 'Editar') : 'Nuevo registro' ?></li>
         </ol>
     </nav>
 
@@ -25,9 +43,15 @@ if (!empty($record['payload'])) {
         <div class="col-lg-10 col-xl-9">
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-body p-4 p-md-5">
-                    <h1 class="h4 fw-bold mb-4"><?= $isEdit ? 'Editar registro Seguimiento PIC' : 'Nuevo registro Seguimiento PIC' ?></h1>
+                    <h1 class="h4 fw-bold mb-4"><?= $isEdit ? ($formReadOnly ? 'Consultar registro Seguimiento PIC' : 'Editar registro Seguimiento PIC') : 'Nuevo registro Seguimiento PIC' ?></h1>
 
-                    <form method="post" action="<?= $isEdit ? '/pic/editar' : '/pic/nuevo' ?>" id="form-pic">
+                    <?php if ($formReadOnly): ?>
+                        <div class="alert alert-info border-0 shadow-sm mb-4">
+                            Este registro se muestra en modo lectura<?= $periodName !== '' ? ' (periodo ' . htmlspecialchars($periodName, ENT_QUOTES, 'UTF-8') . ')' : '' ?>. No es posible guardar cambios.
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="post" action="<?= $isEdit ? '/pic/editar' : '/pic/nuevo' ?>" id="form-pic" <?= $formReadOnly ? 'data-read-only="1"' : '' ?>>
                         <?php if ($isEdit): ?>
                             <input type="hidden" name="id" value="<?= (int) $record['id'] ?>">
                         <?php endif; ?>
@@ -52,7 +76,9 @@ if (!empty($record['payload'])) {
                                     class="form-select"
                                     required
                                     data-subregion-select
+                                    data-allowed-territories="<?= $allowedTerritoriesJson ?>"
                                     data-current-value="<?= htmlspecialchars((string) ($record['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $disabledAttr ?>
                                 >
                                     <option value="">Seleccione la subregión</option>
                                 </select>
@@ -77,17 +103,17 @@ if (!empty($record['payload'])) {
                             <label class="form-label">¿El municipio cuenta con Zona de orientación Escolar? <span class="text-danger">*</span></label>
                             <div class="d-flex gap-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="zona_orientacion_escolar" id="zona_escolar_si" value="Si" required <?= ($payload['zona_orientacion_escolar'] ?? '') === 'Si' ? 'checked' : '' ?> data-pic-toggle="zona-escolar">
+                                    <input class="form-check-input" type="radio" name="zona_orientacion_escolar" id="zona_escolar_si" value="Si" required <?= ($payload['zona_orientacion_escolar'] ?? '') === 'Si' ? 'checked' : '' ?> data-pic-toggle="zona-escolar" <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="zona_escolar_si">Sí</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="zona_orientacion_escolar" id="zona_escolar_no" value="No" <?= ($payload['zona_orientacion_escolar'] ?? '') === 'No' ? 'checked' : '' ?> data-pic-toggle="zona-escolar">
+                                    <input class="form-check-input" type="radio" name="zona_orientacion_escolar" id="zona_escolar_no" value="No" <?= ($payload['zona_orientacion_escolar'] ?? '') === 'No' ? 'checked' : '' ?> data-pic-toggle="zona-escolar" <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="zona_escolar_no">No</label>
                                 </div>
                             </div>
                             <div class="mt-2" id="wrap-zona-escolar" style="display:<?= ($payload['zona_orientacion_escolar'] ?? '') === 'Si' ? 'block' : 'none' ?>;">
                                 <label class="form-label">¿Cuántas personas fueron atendidas en la zona de orientación escolar? <span class="text-danger">*</span></label>
-                                <input type="number" name="personas_zona_orientacion_escolar" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_zona_orientacion_escolar'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="number" name="personas_zona_orientacion_escolar" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_zona_orientacion_escolar'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= $disabledAttr ?>>
                             </div>
                         </div>
 
@@ -95,17 +121,17 @@ if (!empty($record['payload'])) {
                             <label class="form-label">¿El municipio cuenta con Centro de escucha? <span class="text-danger">*</span></label>
                             <div class="d-flex gap-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="centro_escucha" id="centro_escucha_si" value="Si" required data-pic-toggle="centro-escucha" <?= ($payload['centro_escucha'] ?? '') === 'Si' ? 'checked' : '' ?>>
+                                    <input class="form-check-input" type="radio" name="centro_escucha" id="centro_escucha_si" value="Si" required data-pic-toggle="centro-escucha" <?= ($payload['centro_escucha'] ?? '') === 'Si' ? 'checked' : '' ?> <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="centro_escucha_si">Sí</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="centro_escucha" id="centro_escucha_no" value="No" data-pic-toggle="centro-escucha" <?= ($payload['centro_escucha'] ?? '') === 'No' ? 'checked' : '' ?>>
+                                    <input class="form-check-input" type="radio" name="centro_escucha" id="centro_escucha_no" value="No" data-pic-toggle="centro-escucha" <?= ($payload['centro_escucha'] ?? '') === 'No' ? 'checked' : '' ?> <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="centro_escucha_no">No</label>
                                 </div>
                             </div>
                             <div class="mt-2" id="wrap-centro-escucha" style="display:<?= ($payload['centro_escucha'] ?? '') === 'Si' ? 'block' : 'none' ?>;">
                                 <label class="form-label">¿Cuántas personas fueron atendidas en el centro de escucha?</label>
-                                <input type="number" name="personas_centro_escucha" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_centro_escucha'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="number" name="personas_centro_escucha" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_centro_escucha'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= $disabledAttr ?>>
                             </div>
                         </div>
 
@@ -113,17 +139,17 @@ if (!empty($record['payload'])) {
                             <label class="form-label">¿El municipio cuenta con Zona de orientación Universitaria? <span class="text-danger">*</span></label>
                             <div class="d-flex gap-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="zona_orientacion_universitaria" id="zona_uni_si" value="Si" required data-pic-toggle="zona-uni" <?= ($payload['zona_orientacion_universitaria'] ?? '') === 'Si' ? 'checked' : '' ?>>
+                                    <input class="form-check-input" type="radio" name="zona_orientacion_universitaria" id="zona_uni_si" value="Si" required data-pic-toggle="zona-uni" <?= ($payload['zona_orientacion_universitaria'] ?? '') === 'Si' ? 'checked' : '' ?> <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="zona_uni_si">Sí</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="zona_orientacion_universitaria" id="zona_uni_no" value="No" data-pic-toggle="zona-uni" <?= ($payload['zona_orientacion_universitaria'] ?? '') === 'No' ? 'checked' : '' ?>>
+                                    <input class="form-check-input" type="radio" name="zona_orientacion_universitaria" id="zona_uni_no" value="No" data-pic-toggle="zona-uni" <?= ($payload['zona_orientacion_universitaria'] ?? '') === 'No' ? 'checked' : '' ?> <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="zona_uni_no">No</label>
                                 </div>
                             </div>
                             <div class="mt-2" id="wrap-zona-uni" style="display:<?= ($payload['zona_orientacion_universitaria'] ?? '') === 'Si' ? 'block' : 'none' ?>;">
                                 <label class="form-label">¿Cuántas personas fueron atendidas en la Zona de orientación Universitaria?</label>
-                                <input type="number" name="personas_zona_orientacion_universitaria" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_zona_orientacion_universitaria'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="number" name="personas_zona_orientacion_universitaria" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_zona_orientacion_universitaria'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= $disabledAttr ?>>
                             </div>
                         </div>
 
@@ -131,26 +157,28 @@ if (!empty($record['payload'])) {
                             <label class="form-label">¿El municipio cuenta con Redes Comunitarias activas? <span class="text-danger">*</span></label>
                             <div class="d-flex gap-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="redes_comunitarias_activas" id="redes_si" value="Si" required data-pic-toggle="redes" <?= ($payload['redes_comunitarias_activas'] ?? '') === 'Si' ? 'checked' : '' ?>>
+                                    <input class="form-check-input" type="radio" name="redes_comunitarias_activas" id="redes_si" value="Si" required data-pic-toggle="redes" <?= ($payload['redes_comunitarias_activas'] ?? '') === 'Si' ? 'checked' : '' ?> <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="redes_si">Sí</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="redes_comunitarias_activas" id="redes_no" value="No" data-pic-toggle="redes" <?= ($payload['redes_comunitarias_activas'] ?? '') === 'No' ? 'checked' : '' ?>>
+                                    <input class="form-check-input" type="radio" name="redes_comunitarias_activas" id="redes_no" value="No" data-pic-toggle="redes" <?= ($payload['redes_comunitarias_activas'] ?? '') === 'No' ? 'checked' : '' ?> <?= $disabledAttr ?>>
                                     <label class="form-check-label" for="redes_no">No</label>
                                 </div>
                             </div>
                             <div class="mt-2" id="wrap-redes" style="display:<?= ($payload['redes_comunitarias_activas'] ?? '') === 'Si' ? 'block' : 'none' ?>;">
                                 <label class="form-label">¿Con cuántas personas está conformada la red comunitaria? <span class="text-danger">*</span></label>
-                                <input type="number" name="personas_red_comunitaria" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_red_comunitaria'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="number" name="personas_red_comunitaria" class="form-control" min="0" step="1" placeholder="Número" value="<?= htmlspecialchars((string) ($payload['personas_red_comunitaria'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= $disabledAttr ?>>
                             </div>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2">
-                            <a href="/pic" class="btn btn-outline-secondary">Cancelar</a>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check2-circle me-1"></i>
-                                <?= $isEdit ? 'Guardar cambios' : 'Guardar registro' ?>
-                            </button>
+                            <a href="/pic" class="btn btn-outline-secondary"><?= $formReadOnly ? 'Volver' : 'Cancelar' ?></a>
+                            <?php if (!$formReadOnly): ?>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check2-circle me-1"></i>
+                                    <?= $isEdit ? 'Guardar cambios' : 'Guardar registro' ?>
+                                </button>
+                            <?php endif; ?>
                         </div>
                     </form>
                 </div>
@@ -185,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
-<?php if ($isEdit && !empty($record['subregion'])): ?>
+<?php if ($isEdit && !$formReadOnly && !empty($record['subregion'])): ?>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var subregionSelect = document.querySelector('#subregion');

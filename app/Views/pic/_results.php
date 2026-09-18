@@ -90,6 +90,7 @@ if ($totalPages <= 7) {
                     <?php
                     $headers = [
                         'created_at' => 'Fecha registro',
+                        'period' => 'Periodo',
                         'professional_name' => 'Profesional',
                         'professional_role' => 'Rol',
                         'subregion' => 'Subregion',
@@ -128,6 +129,7 @@ if ($totalPages <= 7) {
                     $detail = [
                         'professional' => (string) ($row['professional_name'] ?? ''),
                         'email' => (string) ($row['professional_email'] ?? ''),
+                        'period' => (string) ($row['period_name'] ?? 'Sin periodo'),
                         'subregion' => (string) ($row['subregion'] ?? ''),
                         'municipality' => (string) ($row['municipality'] ?? ''),
                         'created_at' => (string) ($row['created_at'] ?? ''),
@@ -159,6 +161,11 @@ if ($totalPages <= 7) {
                                     <span class="pic-date-sub"><?= htmlspecialchars($createdTime, ENT_QUOTES, 'UTF-8') ?></span>
                                 <?php endif; ?>
                             </div>
+                        </td>
+                        <td>
+                            <span class="aoat-period-pill <?= !empty($row['period_active']) ? 'is-active' : '' ?>">
+                                <?= htmlspecialchars((string) ($row['period_name'] ?? 'Sin periodo'), ENT_QUOTES, 'UTF-8') ?>
+                            </span>
                         </td>
                         <td>
                             <div class="pic-professional">
@@ -194,12 +201,19 @@ if ($totalPages <= 7) {
                                     Ver detalles
                                 </button>
                                 <?php
-                                $canEditPic = !empty($row['editable']) && $isOwner;
+                                $inActivePeriod = !empty($row['period_active']);
+                                $canEditPic = !empty($row['editable']) && $isOwner && $inActivePeriod;
+                                $canViewPic = $isOwner && !$canEditPic;
                                 ?>
                                 <?php if ($canEditPic): ?>
                                     <a href="/pic/editar?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil me-1"></i>
                                         Editar
+                                    </a>
+                                <?php elseif ($canViewPic): ?>
+                                    <a href="/pic/editar?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye me-1"></i>
+                                        Ver
                                     </a>
                                 <?php endif; ?>
                                 <?php if ($isAdmin): ?>
@@ -218,7 +232,7 @@ if ($totalPages <= 7) {
                                         </button>
                                     </form>
                                 <?php endif; ?>
-                                <?php if (!$canEditPic && !$isAdmin): ?>
+                                <?php if (!$canEditPic && !$canViewPic && !$isAdmin): ?>
                                     <span class="pic-no-actions">No editable</span>
                                 <?php endif; ?>
                             </div>

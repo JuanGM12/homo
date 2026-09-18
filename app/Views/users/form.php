@@ -162,7 +162,7 @@ if ($isEdit) {
                         <div class="mb-4">
                             <label class="form-label d-block">Municipios asignados</label>
                             <p class="text-muted small mb-2">
-                                Selecciona uno o más municipios para limitar la planeación anual de este usuario. Si queda vacío, podrá usar todos los municipios.
+                                Selecciona uno o más municipios para limitar la planeación anual, el plan de entrenamiento y el seguimiento PIC de este usuario. Si queda vacío, podrá usar todos los municipios.
                             </p>
                             <select
                                 name="municipalities[]"

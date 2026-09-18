@@ -195,6 +195,42 @@ final class UserRepository
     /**
      * Usuarios activos con al menos un rol distinto de admin (asesores para Encuesta de Opinión AoAT).
      */
+    /**
+     * @return list<int>
+     */
+    public function findActiveIdsByRole(string $role): array
+    {
+        $role = strtolower(trim($role));
+        if ($role === '') {
+            return [];
+        }
+        $aliases = [$role];
+        if ($role === 'profesional social' || $role === 'profesional_social') {
+            $aliases = ['profesional social', 'profesional_social'];
+        }
+
+        $pdo = Connection::getPdo();
+        $placeholders = [];
+        $params = [];
+        foreach ($aliases as $i => $alias) {
+            $ph = ':role_' . $i;
+            $placeholders[] = $ph;
+            $params[$ph] = $alias;
+        }
+        $stmt = $pdo->prepare(
+            'SELECT DISTINCT u.id
+             FROM users u
+             INNER JOIN user_roles ur ON ur.user_id = u.id
+             INNER JOIN roles r ON r.id = ur.role_id
+             WHERE u.active = 1
+               AND LOWER(r.name) IN (' . implode(', ', $placeholders) . ')
+             ORDER BY u.id ASC'
+        );
+        $stmt->execute($params);
+
+        return array_map(static fn (array $row): int => (int) $row['id'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+    }
+
     public function findNonAdminAdvisors(): array
     {
         $pdo = Connection::getPdo();

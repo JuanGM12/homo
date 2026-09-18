@@ -250,6 +250,39 @@ final class AsistenciaRepository
     }
 
     /**
+     * @param list<int> $actividadIds
+     * @return list<array<string, mixed>>
+     */
+    public function findAsistentesByActividadIds(array $actividadIds): array
+    {
+        $actividadIds = array_values(array_filter(
+            array_map(static fn (mixed $id): int => (int) $id, $actividadIds),
+            static fn (int $id): bool => $id > 0
+        ));
+        if ($actividadIds === []) {
+            return [];
+        }
+
+        $pdo = Connection::getPdo();
+        $placeholders = [];
+        $params = [];
+        foreach ($actividadIds as $i => $id) {
+            $ph = ':aid_bulk_' . $i;
+            $placeholders[] = $ph;
+            $params[$ph] = $id;
+        }
+
+        $sql = 'SELECT *
+                FROM asistencia_asistentes
+                WHERE actividad_id IN (' . implode(', ', $placeholders) . ')
+                ORDER BY registered_at ASC, id ASC';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return array_map([$this, 'decodeGrupoPoblacional'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+    }
+
+    /**
      * Comprueba si ya existe un registro para esta actividad y documento (evitar duplicados).
      */
     public function findAsistenteByActividadAndDocument(int $actividadId, string $documentNumber): ?array

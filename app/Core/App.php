@@ -138,6 +138,19 @@ final class App
         $this->router->get('/pic/exportar', [\App\Controllers\PicController::class, 'export'])->middleware('auth');
         $this->router->post('/pic/eliminar', [\App\Controllers\PicController::class, 'destroy'])->middleware('auth', 'role:admin');
 
+        $this->router->get('/cronograma', [\App\Controllers\CronogramaController::class, 'index'])->middleware('auth');
+        $this->router->get('/cronograma/actividades', [\App\Controllers\CronogramaController::class, 'actividades'])->middleware('auth');
+        $this->router->get('/cronograma/dia', [\App\Controllers\CronogramaController::class, 'dia'])->middleware('auth');
+        $this->router->get('/cronograma/detalle', [\App\Controllers\CronogramaController::class, 'detalle'])->middleware('auth');
+        $this->router->post('/cronograma/guardar', [\App\Controllers\CronogramaController::class, 'guardar'])->middleware('auth');
+        $this->router->post('/cronograma/eliminar', [\App\Controllers\CronogramaController::class, 'eliminar'])->middleware('auth');
+        $this->router->get('/cronograma/exportar', [\App\Controllers\CronogramaController::class, 'exportCsv'])->middleware('auth');
+        $this->router->get('/cronograma/exportar-pdf', [\App\Controllers\CronogramaController::class, 'exportPdf'])->middleware('auth');
+
+        $this->router->get('/boletin', [\App\Controllers\BoletinController::class, 'index'])->middleware('auth');
+        $this->router->get('/boletin/exportar-pdf', [\App\Controllers\BoletinController::class, 'exportPdf'])->middleware('auth');
+        $this->router->post('/boletin/exportar-pdf', [\App\Controllers\BoletinController::class, 'exportPdf'])->middleware('auth');
+
         // Perfil de usuario autenticado
         $this->router->get('/perfil', [\App\Controllers\ProfileController::class, 'edit'])->middleware('auth');
         $this->router->post('/perfil', [\App\Controllers\ProfileController::class, 'update'])->middleware('auth');

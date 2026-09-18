@@ -21,6 +21,7 @@ if ($currentUser && !empty($currentUser['must_change_password'])) {
     }
 }
 $showSidebar = $currentUser && !$isLogin;
+$isCronograma = str_starts_with($pathForNav, '/cronograma');
 $currentUserRoles = $currentUser['roles'] ?? [];
 $initials = '';
 if ($currentUser) {
@@ -157,14 +158,15 @@ if ($currentUser) {
                                         </a>
                                     <?php endif;
                                     $plannerRoles = ['abogado', 'medico', 'psicologo'];
-                                    $canAccessPlaneacion = !empty(array_intersect($plannerRoles, $currentUserRoles)) || in_array('admin', $currentUserRoles, true);
+                                    $canAccessPlaneacion = !empty(array_intersect($plannerRoles, $currentUserRoles)) || in_array('admin', $currentUserRoles, true) || in_array('coordinadora', $currentUserRoles, true) || in_array('coordinador', $currentUserRoles, true);
                                     if ($canAccessPlaneacion): ?>
                                         <a href="/planeacion" class="app-sidebar-link <?= str_starts_with($currentPath, '/planeacion') ? 'active' : '' ?>">
                                             <i class="bi bi-calendar3" aria-hidden="true"></i>
                                             <span>Planeación anual</span>
                                         </a>
                                     <?php endif;
-                                    $canAccessEntrenamiento = in_array('psicologo', $currentUserRoles, true) || in_array('admin', $currentUserRoles, true);
+                                    $entrenamientoRoles = ['psicologo', 'abogado', 'medico', 'politologo', 'profesional social', 'profesional_social', 'especialista'];
+                                    $canAccessEntrenamiento = !empty(array_intersect($entrenamientoRoles, $currentUserRoles)) || in_array('admin', $currentUserRoles, true) || in_array('coordinadora', $currentUserRoles, true) || in_array('coordinador', $currentUserRoles, true);
                                     if ($canAccessEntrenamiento): ?>
                                         <a href="/entrenamiento" class="app-sidebar-link <?= str_starts_with($currentPath, '/entrenamiento') ? 'active' : '' ?>">
                                             <i class="bi bi-journal-check" aria-hidden="true"></i>
@@ -178,12 +180,26 @@ if ($currentUser) {
                                             <i class="bi bi-geo-alt" aria-hidden="true"></i>
                                             <span>Seguimiento PIC</span>
                                         </a>
+                                    <?php endif;
+                                    $cronogramaRoles = ['medico', 'psicologo', 'politologo', 'abogado', 'profesional social', 'profesional_social', 'especialista', 'coordinadora', 'coordinador'];
+                                    $canAccessCronograma = !empty(array_intersect($cronogramaRoles, $currentUserRoles)) || in_array('admin', $currentUserRoles, true);
+                                    if ($canAccessCronograma): ?>
+                                        <a href="/cronograma" class="app-sidebar-link <?= str_starts_with($currentPath, '/cronograma') ? 'active' : '' ?>">
+                                            <i class="bi bi-calendar-month" aria-hidden="true"></i>
+                                            <span>Cronograma</span>
+                                        </a>
                                     <?php endif; ?>
                                 <?php endif; ?>
                                 <a href="/asistencia" class="app-sidebar-link <?= str_starts_with($currentPath, '/asistencia') ? 'active' : '' ?>">
                                     <i class="bi bi-list-check" aria-hidden="true"></i>
                                     <span>Listado de Asistencia</span>
                                 </a>
+                                <?php if (\App\Controllers\BoletinController::userMaySeeBoletin($currentUser)): ?>
+                                <a href="/boletin" class="app-sidebar-link <?= str_starts_with($currentPath, '/boletin') ? 'active' : '' ?>">
+                                    <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+                                    <span>Boletín de resultados</span>
+                                </a>
+                                <?php endif; ?>
                                 <?php
                                 $canSeeEvalNav = \App\Controllers\EvaluacionesController::userMaySeeEvaluacionesNav($currentUser);
                                 if ($canSeeEvalNav): ?>
@@ -247,7 +263,7 @@ if ($currentUser) {
 
 
                 <div class="app-main flex-grow-1">
-                    <div class="container">
+                    <div class="<?= $isCronograma ? 'container-fluid' : 'container' ?>">
                         <?php require $viewFile; ?>
                     </div>
                 </div>

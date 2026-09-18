@@ -6,12 +6,15 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatPeriodRepository;
 use App\Repositories\EntrenamientoPlanRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Services\QualificationCatalog;
 use App\Support\MunicipalityListRequest;
+use App\Support\UserMunicipalities;
 use DateTimeImmutable;
 
 final class EntrenamientoController
@@ -43,6 +46,10 @@ final class EntrenamientoController
         $isAuditView = $canViewAll;
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
+        $periodRepo = new AoatPeriodRepository();
+        $periodOptions = $periodRepo->all();
+        $activePeriod = $periodRepo->active();
+        $periodFilter = $this->resolvePeriodFilter($request, $activePeriod);
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
@@ -61,7 +68,7 @@ final class EntrenamientoController
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters, $periodFilter);
         $records = $this->sortRecords($records, $sort, $dir);
         $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
         $paginatedRecords = $pagination['items'];
@@ -78,6 +85,9 @@ final class EntrenamientoController
             'pagination' => $pagination,
             'isAuditView' => $isAuditView,
             'canCreateOwnRecord' => $this->userCanCreateOwnRecord($user),
+            'periodOptions' => $periodOptions,
+            'activePeriod' => $activePeriod,
+            'filterPeriod' => $periodFilter,
         ]);
     }
 
@@ -91,17 +101,13 @@ final class EntrenamientoController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $professional = [
-            'id' => $user['id'],
-            'name' => $user['name'],
-            'email' => $user['email'],
-        ];
-
         return Response::view('entrenamiento/form', [
             'pageTitle' => 'Nuevo plan de entrenamiento',
             'mode' => 'create',
             'plan' => null,
-            'professional' => $professional,
+            'professional' => $this->professionalFromUser($user),
+            'allowedMunicipalities' => UserMunicipalities::assignedTo((int) $user['id']),
+            'readOnly' => false,
         ]);
     }
 
@@ -117,32 +123,9 @@ final class EntrenamientoController
 
         $subregion = trim((string) $request->input('subregion'));
         $municipality = trim((string) $request->input('municipality'));
+        $role = $this->qualificationRoleForUser($user);
 
-        $errors = [];
-        if ($subregion === '') {
-            $errors[] = 'Debes seleccionar la subregión.';
-        }
-        if ($municipality === '') {
-            $errors[] = 'Debes seleccionar el municipio.';
-        }
-
-        $suicidio = $this->collectArrayInput($request->input('suicidio'));
-        $violencias = $this->collectArrayInput($request->input('violencias'));
-        $adicciones = $this->collectArrayInput($request->input('adicciones'));
-        $otrosTemas = $this->collectArrayInput($request->input('otros_temas_salud_mental'));
-
-        if (empty($suicidio)) {
-            $errors[] = 'Debes seleccionar al menos una opción en SUICIDIO.';
-        }
-        if (empty($violencias)) {
-            $errors[] = 'Debes seleccionar al menos una opción en VIOLENCIAS.';
-        }
-        if (empty($adicciones)) {
-            $errors[] = 'Debes seleccionar al menos una opción en ADICCIONES.';
-        }
-        if (empty($otrosTemas)) {
-            $errors[] = 'Debes seleccionar al menos una opción en OTROS TEMAS DE INTERÉS EN SALUD MENTAL.';
-        }
+        $errors = $this->validatePlanForm($request, (int) $user['id'], $subregion, $municipality, $role);
 
         if (!empty($errors)) {
             Flash::set([
@@ -153,26 +136,16 @@ final class EntrenamientoController
             return Response::redirect('/entrenamiento/nuevo');
         }
 
-        $payload = [
-            'suicidio' => $suicidio,
-            'violencias' => $violencias,
-            'adicciones' => $adicciones,
-            'otros_temas_salud_mental' => $otrosTemas,
-            'tema_propuesto_1' => trim((string) $request->input('tema_propuesto_1')),
-            'tema_propuesto_2' => trim((string) $request->input('tema_propuesto_2')),
-            'tema_propuesto_3' => trim((string) $request->input('tema_propuesto_3')),
-            'tema_propuesto_4' => trim((string) $request->input('tema_propuesto_4')),
-            'justificacion_temas' => trim((string) $request->input('justificacion_temas')),
-        ];
-
+        $activePeriod = (new AoatPeriodRepository())->active();
         $this->repository->create([
             'user_id' => (int) $user['id'],
+            'period_id' => $activePeriod !== null ? (int) ($activePeriod['id'] ?? 0) : null,
             'professional_name' => (string) $user['name'],
             'professional_email' => (string) $user['email'],
             'subregion' => $subregion,
             'municipality' => $municipality,
             'editable' => 1,
-            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            'payload' => json_encode($this->buildPlanPayload($request, $role), JSON_UNESCAPED_UNICODE),
         ]);
 
         Flash::set([
@@ -189,7 +162,7 @@ final class EntrenamientoController
         if (!$user) {
             return Response::redirect('/login');
         }
-        if (!$this->userCanCreateOwnRecord($user)) {
+        if (!$this->userCanAccessModule($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -199,35 +172,38 @@ final class EntrenamientoController
         }
 
         $plan = $this->repository->findById($id);
-        if (!$plan || (int) $plan['user_id'] !== (int) $user['id']) {
+        if ($plan === null) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No encontrado',
+                'message' => 'El plan indicado no existe.',
+            ]);
+            return Response::redirect('/entrenamiento');
+        }
+
+        $isOwner = (int) ($plan['user_id'] ?? 0) === (int) $user['id'];
+        $isCoordinator = $this->userIsCoordinator($user);
+        if (!$isOwner && !$isCoordinator) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
-                'message' => 'No puedes editar este registro.',
+                'message' => 'No puedes consultar este registro.',
             ]);
             return Response::redirect('/entrenamiento');
         }
 
-        if (empty($plan['editable'])) {
-            Flash::set([
-                'type' => 'info',
-                'title' => 'Edición no permitida',
-                'message' => 'Este plan ya fue aprobado por el especialista y no puede modificarse.',
-            ]);
-            return Response::redirect('/entrenamiento');
-        }
-
-        $professional = [
-            'id' => $user['id'],
-            'name' => $user['name'],
-            'email' => $user['email'],
-        ];
+        $readOnly = $isCoordinator || empty($plan['editable']) || !$this->isRecordInActivePeriod($plan);
+        $professional = $isOwner && !$isCoordinator
+            ? $this->professionalFromUser($user)
+            : $this->professionalFromPlan($plan, $user);
 
         return Response::view('entrenamiento/form', [
-            'pageTitle' => 'Editar plan de entrenamiento',
+            'pageTitle' => $readOnly ? 'Consultar plan de entrenamiento' : 'Editar plan de entrenamiento',
             'mode' => 'edit',
             'plan' => $plan,
             'professional' => $professional,
+            'allowedMunicipalities' => $isCoordinator ? [] : UserMunicipalities::assignedTo((int) $user['id']),
+            'readOnly' => $readOnly,
         ]);
     }
 
@@ -265,34 +241,19 @@ final class EntrenamientoController
             return Response::redirect('/entrenamiento');
         }
 
+        if (!$this->isRecordInActivePeriod($plan)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Periodo cerrado',
+                'message' => 'Este plan pertenece a un periodo anterior y solo puede consultarse en modo lectura.',
+            ]);
+            return Response::redirect('/entrenamiento/editar?id=' . $id);
+        }
+
         $subregion = trim((string) $request->input('subregion'));
         $municipality = trim((string) $request->input('municipality'));
-
-        $errors = [];
-        if ($subregion === '') {
-            $errors[] = 'Debes seleccionar la subregión.';
-        }
-        if ($municipality === '') {
-            $errors[] = 'Debes seleccionar el municipio.';
-        }
-
-        $suicidio = $this->collectArrayInput($request->input('suicidio'));
-        $violencias = $this->collectArrayInput($request->input('violencias'));
-        $adicciones = $this->collectArrayInput($request->input('adicciones'));
-        $otrosTemas = $this->collectArrayInput($request->input('otros_temas_salud_mental'));
-
-        if (empty($suicidio)) {
-            $errors[] = 'Debes seleccionar al menos una opción en SUICIDIO.';
-        }
-        if (empty($violencias)) {
-            $errors[] = 'Debes seleccionar al menos una opción en VIOLENCIAS.';
-        }
-        if (empty($adicciones)) {
-            $errors[] = 'Debes seleccionar al menos una opción en ADICCIONES.';
-        }
-        if (empty($otrosTemas)) {
-            $errors[] = 'Debes seleccionar al menos una opción en OTROS TEMAS DE INTERÉS EN SALUD MENTAL.';
-        }
+        $role = $this->qualificationRoleForUser($user);
+        $errors = $this->validatePlanForm($request, (int) $user['id'], $subregion, $municipality, $role);
 
         if (!empty($errors)) {
             Flash::set([
@@ -303,22 +264,10 @@ final class EntrenamientoController
             return Response::redirect('/entrenamiento/editar?id=' . $id);
         }
 
-        $payload = [
-            'suicidio' => $suicidio,
-            'violencias' => $violencias,
-            'adicciones' => $adicciones,
-            'otros_temas_salud_mental' => $otrosTemas,
-            'tema_propuesto_1' => trim((string) $request->input('tema_propuesto_1')),
-            'tema_propuesto_2' => trim((string) $request->input('tema_propuesto_2')),
-            'tema_propuesto_3' => trim((string) $request->input('tema_propuesto_3')),
-            'tema_propuesto_4' => trim((string) $request->input('tema_propuesto_4')),
-            'justificacion_temas' => trim((string) $request->input('justificacion_temas')),
-        ];
-
         $this->repository->update($id, [
             'subregion' => $subregion,
             'municipality' => $municipality,
-            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            'payload' => json_encode($this->buildPlanPayload($request, $role), JSON_UNESCAPED_UNICODE),
         ]);
 
         Flash::set([
@@ -353,13 +302,12 @@ final class EntrenamientoController
         $lines = [];
         $lines[] = implode(';', [
             'Fecha registro',
+            'Periodo',
             'Nombre',
             'Subregión',
             'Municipio',
-            'Suicidio',
-            'Violencias',
-            'Adicciones',
-            'Otros temas salud mental',
+            'Cualificación',
+            'Otro caso',
             'Tema propuesto 1',
             'Tema propuesto 2',
             'Tema propuesto 3',
@@ -375,15 +323,24 @@ final class EntrenamientoController
                     $payload = $decoded;
                 }
             }
+            $role = QualificationCatalog::inferRoleFromPayload($payload);
+            $payload = QualificationCatalog::hydrateLegacyPayload($payload, $role !== '' ? $role : 'psicologo');
+            $qualificationParts = [];
+            foreach (QualificationCatalog::displaySections($payload, $role) as $section) {
+                $values = $section['values'] ?? [];
+                if ($values === []) {
+                    continue;
+                }
+                $qualificationParts[] = $section['title'] . ': ' . implode(' | ', $values);
+            }
             $row = [
                 (string) ($plan['created_at'] ?? ''),
+                (string) ($plan['period_name'] ?? ''),
                 (string) ($plan['professional_name'] ?? ''),
                 (string) ($plan['subregion'] ?? ''),
                 (string) ($plan['municipality'] ?? ''),
-                is_array($payload['suicidio'] ?? null) ? implode(' | ', $payload['suicidio']) : '',
-                is_array($payload['violencias'] ?? null) ? implode(' | ', $payload['violencias']) : '',
-                is_array($payload['adicciones'] ?? null) ? implode(' | ', $payload['adicciones']) : '',
-                is_array($payload['otros_temas_salud_mental'] ?? null) ? implode(' | ', $payload['otros_temas_salud_mental']) : '',
+                implode(' || ', $qualificationParts),
+                (string) ($payload['otro_caso'] ?? ''),
                 (string) ($payload['tema_propuesto_1'] ?? ''),
                 (string) ($payload['tema_propuesto_2'] ?? ''),
                 (string) ($payload['tema_propuesto_3'] ?? ''),
@@ -513,6 +470,8 @@ final class EntrenamientoController
 
         $search = trim((string) $request->input('q', ''));
         $stateFilter = trim((string) $request->input('state', ''));
+        $periodRepo = new AoatPeriodRepository();
+        $periodFilter = $this->resolvePeriodFilter($request, $periodRepo->active());
         $fromDate = trim((string) $request->input('from_date', ''));
         $toDate = trim((string) $request->input('to_date', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
@@ -520,7 +479,7 @@ final class EntrenamientoController
         $sort = trim((string) $request->input('sort', 'created_at'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters, $periodFilter);
 
         return $this->sortRecords($records, $sort, $dir);
     }
@@ -565,6 +524,17 @@ final class EntrenamientoController
         if ($muns !== []) {
             $meta[] = 'Municipio(s): ' . $esc(implode(', ', $muns));
         }
+        $periodFilter = trim((string) $request->input('period_id', ''));
+        if ($periodFilter !== '' && $periodFilter !== 'all') {
+            $periodLabel = $esc($periodFilter);
+            foreach ((new AoatPeriodRepository())->all() as $period) {
+                if ((string) (int) ($period['id'] ?? 0) === $periodFilter) {
+                    $periodLabel = $esc((string) ($period['name'] ?? $periodFilter));
+                    break;
+                }
+            }
+            $meta[] = 'Periodo: ' . $periodLabel;
+        }
 
         $rows = '';
         foreach ($records as $plan) {
@@ -581,6 +551,7 @@ final class EntrenamientoController
 
             $rows .= '<tr>'
                 . '<td>' . $esc($createdFmt) . '</td>'
+                . '<td>' . $esc((string) ($plan['period_name'] ?? 'Sin periodo')) . '</td>'
                 . '<td><strong>' . $esc($name) . '</strong><br><span class="sub">' . $esc($email) . '</span></td>'
                 . '<td>' . $esc((string) ($plan['subregion'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($plan['municipality'] ?? '')) . '</td>'
@@ -628,9 +599,10 @@ final class EntrenamientoController
             . '<div class="section-title">Planes de entrenamiento</div>'
             . '<table><thead><tr>'
             . '<th style="width:11%">Fecha registro</th>'
-            . '<th style="width:32%">Profesional</th>'
-            . '<th style="width:19%">Subregión</th>'
-            . '<th style="width:19%">Municipio</th>'
+            . '<th style="width:10%">Periodo</th>'
+            . '<th style="width:27%">Profesional</th>'
+            . '<th style="width:18%">Subregión</th>'
+            . '<th style="width:18%">Municipio</th>'
             . '<th style="width:10%">Estado</th>'
             . '</tr></thead><tbody>'
             . $rows
@@ -638,17 +610,28 @@ final class EntrenamientoController
             . '</body></html>';
     }
 
+    private function userIsCoordinator(array $user): bool
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+
+        return in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+    }
+
     private function userCanAccessModule(array $user): bool
     {
         $roles = $user['roles'] ?? [];
-        $allowed = ['psicologo', 'admin', 'especialista', 'coordinadora', 'coordinador'];
+        $allowed = ['psicologo', 'abogado', 'medico', 'politologo', 'profesional social', 'profesional_social', 'admin', 'especialista', 'coordinadora', 'coordinador'];
         return (bool) array_intersect($roles, $allowed);
     }
 
     private function userCanCreateOwnRecord(array $user): bool
     {
+        if ($this->userIsCoordinator($user)) {
+            return false;
+        }
+
         $roles = $user['roles'] ?? [];
-        $allowed = ['psicologo', 'especialista'];
+        $allowed = ['psicologo', 'abogado', 'medico', 'politologo', 'profesional social', 'profesional_social', 'especialista'];
 
         return (bool) array_intersect($roles, $allowed);
     }
@@ -673,6 +656,9 @@ final class EntrenamientoController
         }
         if ($primaryRole === 'medico' || in_array('medico', $roles, true)) {
             return ['medico'];
+        }
+        if ($primaryRole === 'politologo' || in_array('politologo', $roles, true)) {
+            return ['politologo'];
         }
         if ($primaryRole === 'abogado' || in_array('abogado', $roles, true)) {
             return ['abogado'];
@@ -709,7 +695,7 @@ final class EntrenamientoController
      */
     private function sortRecords(array $records, string $sort, string $dir): array
     {
-        $allowedSorts = ['created_at', 'professional_name', 'subregion', 'municipality', 'state'];
+        $allowedSorts = ['created_at', 'professional_name', 'subregion', 'municipality', 'state', 'period'];
         if (!in_array($sort, $allowedSorts, true)) {
             $sort = 'created_at';
         }
@@ -740,6 +726,9 @@ final class EntrenamientoController
         if ($sort === 'state') {
             return !empty($row['editable']) ? 'editable' : 'aprobado';
         }
+        if ($sort === 'period') {
+            return strtolower(trim((string) ($row['period_name'] ?? '')));
+        }
 
         return strtolower(trim((string) ($row[$sort] ?? '')));
     }
@@ -758,13 +747,18 @@ final class EntrenamientoController
         string $fromDate,
         string $toDate,
         string $subregionFilter = '',
-        array $municipalityFilters = []
+        array $municipalityFilters = [],
+        string $periodFilter = 'all'
     ): array {
-        if ($search === '' && $stateFilter === '' && $fromDate === '' && $toDate === '' && $subregionFilter === '' && $municipalityFilters === []) {
+        if ($search === '' && $stateFilter === '' && $fromDate === '' && $toDate === '' && $subregionFilter === '' && $municipalityFilters === [] && $periodFilter === 'all') {
             return $records;
         }
 
-        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters, $periodFilter): bool {
+            if ($periodFilter !== 'all' && (int) ($row['period_id'] ?? 0) !== (int) $periodFilter) {
+                return false;
+            }
+
             if ($stateFilter !== '') {
                 $state = !empty($row['editable']) ? 'Editable' : 'Aprobado';
                 if ($state !== $stateFilter) {
@@ -823,11 +817,126 @@ final class EntrenamientoController
         return is_string($html) ? $html : '';
     }
 
-    private function collectArrayInput(mixed $input): array
+    private function professionalFromPlan(array $plan, array $fallbackUser): array
     {
-        if (!is_array($input)) {
-            return [];
+        $payload = [];
+        if (!empty($plan['payload'])) {
+            $decoded = json_decode((string) $plan['payload'], true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
         }
-        return array_values(array_filter(array_map('strval', $input)));
+        $role = QualificationCatalog::inferRoleFromPayload($payload);
+        if ($role === '') {
+            $role = $this->qualificationRoleForUser($fallbackUser);
+        }
+
+        return [
+            'id' => $plan['user_id'] ?? 0,
+            'name' => (string) ($plan['professional_name'] ?? $fallbackUser['name'] ?? ''),
+            'last_name' => '',
+            'email' => (string) ($plan['professional_email'] ?? $fallbackUser['email'] ?? ''),
+            'profession' => '',
+            'role' => $role,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function professionalFromUser(array $user): array
+    {
+        return [
+            'id' => $user['id'] ?? 0,
+            'name' => (string) ($user['name'] ?? ''),
+            'last_name' => (string) ($user['last_name'] ?? ''),
+            'email' => (string) ($user['email'] ?? ''),
+            'profession' => (string) ($user['profession'] ?? ''),
+            'role' => $this->qualificationRoleForUser($user),
+        ];
+    }
+
+    private function qualificationRoleForUser(array $user): string
+    {
+        $primary = QualificationCatalog::normalizeRole((string) ($user['role'] ?? ''));
+        if (QualificationCatalog::roleConfig($primary) !== null) {
+            return $primary;
+        }
+
+        foreach (($user['roles'] ?? []) as $role) {
+            $normalized = QualificationCatalog::normalizeRole((string) $role);
+            if (QualificationCatalog::roleConfig($normalized) !== null) {
+                return $normalized;
+            }
+        }
+
+        return $primary;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function validatePlanForm(Request $request, int $userId, string $subregion, string $municipality, string $role): array
+    {
+        $errors = [];
+        if ($subregion === '') {
+            $errors[] = 'Debes seleccionar la subregión.';
+        }
+        if ($municipality === '') {
+            $errors[] = 'Debes seleccionar el municipio.';
+        }
+        if ($subregion !== '' && $municipality !== '' && !UserMunicipalities::canUse($userId, $subregion, $municipality)) {
+            $errors[] = 'Solo puedes registrar planes en los municipios que tienes asignados.';
+        }
+
+        $qualError = QualificationCatalog::validateFromRequest($role, $request);
+        if ($qualError !== null) {
+            $errors[] = $qualError;
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildPlanPayload(Request $request, string $role): array
+    {
+        $payload = QualificationCatalog::collectPosted($role, $request);
+        $payload['tema_propuesto_1'] = trim((string) $request->input('tema_propuesto_1'));
+        $payload['tema_propuesto_2'] = trim((string) $request->input('tema_propuesto_2'));
+        $payload['tema_propuesto_3'] = trim((string) $request->input('tema_propuesto_3'));
+        $payload['tema_propuesto_4'] = trim((string) $request->input('tema_propuesto_4'));
+        $payload['justificacion_temas'] = trim((string) $request->input('justificacion_temas'));
+
+        return $payload;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function isRecordInActivePeriod(array $record): bool
+    {
+        return (new AoatPeriodRepository())->isActivePeriodId(
+            isset($record['period_id']) ? (int) $record['period_id'] : 0
+        );
+    }
+
+    /**
+     * @param array<string, mixed>|null $activePeriod
+     */
+    private function resolvePeriodFilter(Request $request, ?array $activePeriod): string
+    {
+        $raw = trim((string) $request->input('period_id', ''));
+        if ($raw === 'all') {
+            return 'all';
+        }
+        if ($raw !== '' && ctype_digit($raw) && (int) $raw > 0) {
+            return (string) (int) $raw;
+        }
+
+        $activeId = (int) ($activePeriod['id'] ?? 0);
+
+        return $activeId > 0 ? (string) $activeId : 'all';
     }
 }

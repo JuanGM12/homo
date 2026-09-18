@@ -14,6 +14,9 @@ $canFilterProfessional = (bool) ($dashboard['can_filter_professional'] ?? false)
 $filterProfessionalId = $dashboard['filter_professional_id'] ?? null;
 $filterProfessionalName = (string) ($dashboard['filter_professional_name'] ?? '');
 $professionalOptions = $dashboard['professional_options'] ?? [];
+$periodOptions = is_array($dashboard['period_options'] ?? null) ? $dashboard['period_options'] : [];
+$filterPeriod = (string) ($dashboard['filter_period'] ?? '');
+$filterPeriodName = (string) ($dashboard['filter_period_name'] ?? '');
 $informeForm = is_array($informeForm ?? null) ? $informeForm : null;
 $isAuthenticated = Auth::check();
 $user = Auth::user();
@@ -38,6 +41,9 @@ $suppressOperationalScopeMetrics = $isAuthenticated && $user !== null && !Auth::
                         Equipo a cargo · Consolidado
                     <?php else: ?>
                         Panel Personal · Gestión Territorial
+                    <?php endif; ?>
+                    <?php if ($filterPeriodName !== ''): ?>
+                        · <?= htmlspecialchars($filterPeriodName, ENT_QUOTES, 'UTF-8') ?>
                     <?php endif; ?>
                 </span>
                 <h1 class="hero-title mb-2">
@@ -78,14 +84,35 @@ $suppressOperationalScopeMetrics = $isAuthenticated && $user !== null && !Auth::
 
             <div class="col-lg-4">
                 <div class="hero-panel shadow-sm rounded-4 bg-white">
-                    <?php if ($canFilterProfessional): ?>
-                        <form method="get" action="/" class="mb-3">
-                            <label class="form-label small text-muted mb-1" for="dashboard-profesional-filter">Profesional</label>
+                    <form method="get" action="/" class="mb-3">
+                        <label class="form-label small text-muted mb-1" for="dashboard-period-filter">Periodo</label>
+                        <select
+                            name="period_id"
+                            id="dashboard-period-filter"
+                            class="form-select form-select-sm"
+                            onchange="this.form.submit()"
+                        >
+                            <option value="all" <?= $filterPeriod === 'all' ? 'selected' : '' ?>>Todos</option>
+                            <?php foreach ($periodOptions as $period): ?>
+                                <?php
+                                $periodId = (string) (int) ($period['id'] ?? 0);
+                                if ($periodId === '0') {
+                                    continue;
+                                }
+                                ?>
+                                <option value="<?= htmlspecialchars($periodId, ENT_QUOTES, 'UTF-8') ?>" <?= $filterPeriod === $periodId ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= !empty($period['active']) ? ' (activo)' : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="small text-muted mb-0 mt-1">Aplica a AoAT, entrenamientos y PIC. Evaluaciones, asistencia y planeación no usan periodo.</p>
+                        <?php if ($canFilterProfessional): ?>
+                            <label class="form-label small text-muted mb-1 mt-3" for="dashboard-profesional-filter">Profesional</label>
                             <select
-                                    name="profesional"
-                                    id="dashboard-profesional-filter"
-                                    class="form-select form-select-sm"
-                                    onchange="this.form.submit()"
+                                name="profesional"
+                                id="dashboard-profesional-filter"
+                                class="form-select form-select-sm"
+                                onchange="this.form.submit()"
                             >
                                 <option value=""><?= htmlspecialchars($consolidatedFilterLabel, ENT_QUOTES, 'UTF-8') ?></option>
                                 <?php foreach ($professionalOptions as $opt): ?>
@@ -98,8 +125,8 @@ $suppressOperationalScopeMetrics = $isAuthenticated && $user !== null && !Auth::
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                        </form>
-                    <?php endif; ?>
+                        <?php endif; ?>
+                    </form>
                     <div class="hero-panel-header d-flex justify-content-between align-items-center mb-3">
                         <div>
                             <h2 class="h6 mb-1">Ejecución operativa</h2>

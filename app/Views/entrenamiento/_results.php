@@ -13,6 +13,8 @@ $currentSort = (string) ($_GET['sort'] ?? 'created_at');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 $userId = (int) ($currentUser['id'] ?? 0);
 $isAdmin = in_array('admin', $currentUser['roles'] ?? [], true);
+$isCoordinator = in_array('coordinador', $currentUser['roles'] ?? [], true)
+    || in_array('coordinadora', $currentUser['roles'] ?? [], true);
 
 $query = $_GET;
 unset($query['partial']);
@@ -90,6 +92,7 @@ if ($totalPages <= 7) {
                     <?php
                     $headers = [
                         'created_at' => 'Fecha registro',
+                        'period' => 'Periodo',
                         'professional_name' => 'Profesional',
                         'subregion' => 'Subregion',
                         'municipality' => 'Municipio',
@@ -124,18 +127,21 @@ if ($totalPages <= 7) {
                         }
                     }
 
+                    $qualificationRole = \App\Services\QualificationCatalog::inferRoleFromPayload($payload);
+                    $payload = \App\Services\QualificationCatalog::hydrateLegacyPayload($payload, $qualificationRole !== '' ? $qualificationRole : 'psicologo');
+                    $qualificationSections = \App\Services\QualificationCatalog::displaySections($payload, $qualificationRole);
+
                     $trainingDetail = [
                         'professional' => (string) ($plan['professional_name'] ?? ''),
                         'email' => (string) ($plan['professional_email'] ?? ''),
+                        'period' => (string) ($plan['period_name'] ?? 'Sin periodo'),
                         'subregion' => (string) ($plan['subregion'] ?? ''),
                         'municipality' => (string) ($plan['municipality'] ?? ''),
                         'created_at' => (string) ($plan['created_at'] ?? ''),
                         'state' => !empty($plan['editable']) ? 'Editable' : 'Aprobado',
+                        'qualification_sections' => $qualificationSections,
                         'payload' => [
-                            'suicidio' => is_array($payload['suicidio'] ?? null) ? array_values($payload['suicidio']) : [],
-                            'violencias' => is_array($payload['violencias'] ?? null) ? array_values($payload['violencias']) : [],
-                            'adicciones' => is_array($payload['adicciones'] ?? null) ? array_values($payload['adicciones']) : [],
-                            'otros_temas_salud_mental' => is_array($payload['otros_temas_salud_mental'] ?? null) ? array_values($payload['otros_temas_salud_mental']) : [],
+                            'otro_caso' => (string) ($payload['otro_caso'] ?? ''),
                             'tema_propuesto_1' => (string) ($payload['tema_propuesto_1'] ?? ''),
                             'tema_propuesto_2' => (string) ($payload['tema_propuesto_2'] ?? ''),
                             'tema_propuesto_3' => (string) ($payload['tema_propuesto_3'] ?? ''),
@@ -159,6 +165,11 @@ if ($totalPages <= 7) {
                                     <span class="entrenamiento-date-sub"><?= htmlspecialchars($createdTime, ENT_QUOTES, 'UTF-8') ?></span>
                                 <?php endif; ?>
                             </div>
+                        </td>
+                        <td>
+                            <span class="aoat-period-pill <?= !empty($plan['period_active']) ? 'is-active' : '' ?>">
+                                <?= htmlspecialchars((string) ($plan['period_name'] ?? 'Sin periodo'), ENT_QUOTES, 'UTF-8') ?>
+                            </span>
                         </td>
                         <td>
                             <div class="entrenamiento-professional">
@@ -191,12 +202,19 @@ if ($totalPages <= 7) {
                                     Ver detalles
                                 </button>
                                 <?php
-                                $canEditPlan = !empty($plan['editable']) && $isOwner;
+                                $inActivePeriod = !empty($plan['period_active']);
+                                $canEditPlan = !empty($plan['editable']) && $isOwner && $inActivePeriod && !$isCoordinator;
+                                $canViewPlan = ($isOwner && !$canEditPlan) || $isCoordinator;
                                 ?>
                                 <?php if ($canEditPlan): ?>
                                     <a href="/entrenamiento/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil me-1"></i>
                                         Editar
+                                    </a>
+                                <?php elseif ($canViewPlan): ?>
+                                    <a href="/entrenamiento/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye me-1"></i>
+                                        Ver
                                     </a>
                                 <?php endif; ?>
                                 <?php if ($isAdmin): ?>
@@ -215,7 +233,7 @@ if ($totalPages <= 7) {
                                         </button>
                                     </form>
                                 <?php endif; ?>
-                                <?php if (!$canEditPlan && !$isAdmin): ?>
+                                <?php if (!$canEditPlan && !$canViewPlan && !$isAdmin): ?>
                                     <span class="entrenamiento-no-actions">Sin acciones</span>
                                 <?php endif; ?>
                             </div>

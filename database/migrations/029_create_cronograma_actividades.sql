@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS cronograma_actividades (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    professional_name VARCHAR(150) NOT NULL,
+    professional_email VARCHAR(150) NOT NULL,
+    professional_role VARCHAR(80) NOT NULL,
+    subregion VARCHAR(120) NOT NULL,
+    municipality VARCHAR(120) NOT NULL,
+    activity_date DATE NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fin TIME NOT NULL,
+    activity_type VARCHAR(40) NOT NULL,
+    tema VARCHAR(500) NOT NULL,
+    tema_otro VARCHAR(500) NULL,
+    poblacion_atendida TEXT NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_cronograma_fecha (activity_date),
+    KEY idx_cronograma_user (user_id),
+    KEY idx_cronograma_muni (municipality),
+    KEY idx_cronograma_subregion (subregion),
+    CONSTRAINT fk_cronograma_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

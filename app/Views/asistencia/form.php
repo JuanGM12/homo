@@ -101,7 +101,7 @@
                                 <?php endforeach; ?>
                             </div>
                             <small class="text-muted d-block mt-1">
-                                Estas opciones son fijas según el rol del asesor. Puedes usar el buscador para filtrar.
+                                Las mismas opciones del plan de entrenamiento, según el rol del asesor. Puedes usar el buscador para filtrar.
                             </small>
                         </div>
 

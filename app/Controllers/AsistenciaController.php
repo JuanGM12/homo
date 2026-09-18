@@ -12,6 +12,7 @@ use App\Repositories\UserRepository;
 use App\Services\AsistenciaInformeService;
 use App\Services\Auth;
 use App\Services\Flash;
+use App\Services\QualificationCatalog;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
 use App\Support\MunicipalityListRequest;
@@ -121,89 +122,18 @@ final class AsistenciaController
         ];
     }
 
-    /** Tipos de listado / Actividad (select2 múltiple) */
     /**
-     * Tipos de listado / actividad por rol profesional.
+     * Tipos de listado AoAT: mismo catálogo unificado que Plan de Entrenamiento / AoAT.
      *
-     * @return array<string, array<int, string>>
-     */
-    private static function getTiposActividadCatalog(): array
-    {
-        return [
-            'medico' => [
-                'Abordaje del manejo de alcohol en el primer nivel de atención - Alcohol y embarazo.',
-                'Abordaje del manejo de tabaco en el primer nivel.',
-                'Adicciones en la baja complejidad',
-                'Conducta suicida',
-                'Desmonte de benzodiacepinas',
-                'Desmonte de opioides',
-                'Epilepsia',
-                'Intoxicaciones por medicamentos de control',
-                'Manejo del dolor',
-                'Paciente agitado',
-                'Pre Test',
-                'Post Test',
-                'Resolución 347 de 2026',
-                'Trastorno Afectivo Bipolar',
-                'Trastorno de Déficit de Atención e Hiperactividad',
-                'Trastorno Depresivo',
-                'Trastorno Psicótico',
-                'Trastornos de Ansiedad',
-                'Trastornos del Sueño',
-            ],
-            'psicologo' => [
-                'Adicciones - Módulo 1: Modelos explicativos (biopsicosocial, aprendizaje y condicionamiento), neurobiología de las adicciones, determinantes sociales, factores de riesgo y de protección, prevención basada en evidencia, influencia normativa.',
-                'Adicciones - Módulo 2: Comprensión de las adicciones según tipo de sustancia, dependencias comportamentales (juego patológico, nomofobia, juegos electrónicos, oniomanía, adicción al trabajo, vigorexia), cigarrillos electrónicos, cannabis, patología dual.',
-                'Adicciones - Módulo 3: Rutas de atención, tamizajes (ASSIST, AUDIT, CRAFFT, Fagerstróm), intervenciones (entrevista motivacional, intervención única, mindfulness), grupos de apoyo, reducción de riesgos y daños.',
-                'Presentación del programa Salud para el Alma',
-                'Salud Mental - Análisis de Caso y Recomendaciones Técnicas a Aplicar',
-                'Salud Mental - Cuidado al cuidador',
-                'Salud Mental - Cuidado del profesional - burnout',
-                'Salud Mental - Dispositivos Comunitarios',
-                'Salud Mental - Estigma',
-                'Salud Mental - Estrategias de Salud Mental (Aventura Crecer, Comp Parent, VQSC, JPL, FQSC, SAFER)',
-                'Salud Mental - Grupos de apoyo y ayuda mutua (violencias, SPA, suicidio): teoría y conformación',
-                'Salud Mental - Normatividad en Salud Mental y Adicciones',
-                'Salud Mental - Primeros auxilios psicológicos e intervención en crisis',
-                'Salud Mental - Trastornos mentales prioritarios de interés en salud pública',
-                'Suicidio - Módulo 1: Evolución histórica del suicidio, aproximación conceptual de la conducta suicida, teorías explicativas de primera generación, teorías explicativas de segunda generación, factores de riesgo (biológicos, psiquiátricos, psicológicos y sociales), factores de protección, señales de alarma, ruta de atención y articulación intersectorial, notificación y seguimiento, plan de seguridad.',
-                'Suicidio - Módulo 2: Comunicación y suicidio como factor de riesgo y de protección, impacto del lenguaje y los mensajes, efecto Werther, efecto Papageno, principios de la comunicación responsable, recomendaciones de la OMS para medios y contextos comunitarios, pautas de lo que se debe y no se debe comunicar, aplicación del efecto Papageno en contextos comunitarios e institucionales, roles y responsabilidades de actores clave, poder de la narrativa y reducción del estigma, recursos y guías para la comunicación responsable.',
-                'Suicidio - Módulo 3: Concepto y alcances de la posvención, posvención como estrategia de prevención y salud pública, impacto psicosocial del suicidio, duelo por suicidio y sus particularidades, duelo y tamizajes para suicidio (RQC, SRQ, Whooley, GAD-2, Zarit, Plutchick, PHQ-9, C-SSRS), estigma y silencios, principios orientadores de la posvención, acciones de posvención en el territorio, acompañamiento a familias e instituciones, comunicación posterior a una muerte por suicidio, identificación y seguimiento de personas en riesgo, articulación con servicios de salud mental, autocuidado del profesional psicosocial.',
-                'Violencias - Módulo 1: Definición, marco normativo, epidemiología, tipología, característica.',
-                'Violencias - Módulo 2: Violencias interpersonales, violencia familiar y de pareja, violencia comunitaria, violencia juvenil, bullying.',
-                'Violencias - Módulo 3: Modelos de prevención de las violencias interpersonales (prevención universal, selectiva, indicada y de recurrencias), programas basados en la evidencia para la prevención de las violencias.',
-            ],
-            'abogado' => [
-                'Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones',
-                'Actualización de la Política pública Municipal de Salud y Prevención de las Adicciones',
-                'Presentación inicial',
-                'SAFER - Módulo 1: Socialización de la problemática pública del alcohol, generalidades.',
-                'SAFER - Módulo 2: Socialización de la problemática pública del alcohol, generalidades.',
-                'SAFER - Módulo 3: Legislación actual con énfasis en consumo de menores y mujeres.',
-                'SAFER - Módulo 4: Legislación actual con énfasis en consumo de menores y mujeres.',
-                'SAFER - Módulo 5: Socialización de la problemática pública del alcohol.',
-            ],
-            'politologo' => [
-                'Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)',
-            ],
-            'trabajador_social' => [
-                'Actividad de apoyo',
-                'Espacio de articulación',
-                'Formación (desarrollo de capacidades)',
-                'Profesional social actividades',
-            ],
-        ];
-    }
-
-    /**
      * @return string[]
      */
     public static function getTiposActividadByRole(?string $role): array
     {
-        $catalog = self::getTiposActividadCatalog();
-        $normalizedRole = self::normalizeActividadRole($role);
+        if ($role === null || trim($role) === '') {
+            return [];
+        }
 
-        return $catalog[$normalizedRole] ?? [];
+        return QualificationCatalog::listadoOptionsForRole($role);
     }
 
 
@@ -1928,16 +1858,6 @@ final class AsistenciaController
         }
 
         return null;
-    }
-
-    private static function normalizeActividadRole(?string $role): string
-    {
-        $normalized = strtolower(trim((string) $role));
-        if ($normalized === 'profesional social' || $normalized === 'profesional_social' || $normalized === 'trabajador social') {
-            return 'trabajador_social';
-        }
-
-        return $normalized;
     }
 
     private function especialistaAdvisorRole(array $user): ?string

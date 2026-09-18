@@ -14,13 +14,13 @@ use App\Services\Flash;
 use App\Services\Mailer;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
+use App\Services\QualificationCatalog;
 use App\Support\MunicipalityListRequest;
 
 final class AoatController
 {
     private const INDEX_PAGE_SIZE = 20;
     private const FORM_OLD_INPUT_KEY = 'aoat_old_input';
-    private const POLITOLOGO_PPMSMYPA_OPTION = 'Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)';
 
     /** Texto libre del profesional al pasar de Devuelta → Realizado (visible para el especialista). */
     public const PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE = 'professional_compliance_note';
@@ -201,6 +201,7 @@ final class AoatController
             'activityWithOptions' => $this->activityWithSelectOptions(
                 is_array($oldInput) ? (string) ($oldInput['activity_with'] ?? '') : ''
             ),
+            'readOnly' => false,
         ]);
     }
 
@@ -684,6 +685,7 @@ final class AoatController
         }
 
         $canEditApprovedNumberOnly = $this->canEditApprovedOrRealizadoAoatNumber($record);
+        $inActivePeriod = $this->isRecordInActivePeriod($record);
 
         if (($record['state'] ?? '') === 'Aprobada' && !$canEditApprovedNumberOnly) {
             Flash::set([
@@ -721,12 +723,13 @@ final class AoatController
             : (string) ($payload['activity_with'] ?? '');
 
         return Response::view('aoat/form', [
-            'pageTitle' => 'Editar AoAT',
+            'pageTitle' => (!$inActivePeriod && !$canEditApprovedNumberOnly) ? 'Consultar AoAT' : 'Editar AoAT',
             'mode' => 'edit',
             'record' => $record,
             'professional' => $professional,
             'oldInput' => $oldInput,
             'activityWithOptions' => $this->activityWithSelectOptions($currentActivityWith),
+            'readOnly' => !$inActivePeriod && !$canEditApprovedNumberOnly,
         ]);
     }
 
@@ -759,6 +762,17 @@ final class AoatController
         }
 
         $canEditApprovedNumberOnly = $this->canEditApprovedOrRealizadoAoatNumber($record);
+        $inActivePeriod = $this->isRecordInActivePeriod($record);
+
+        if (!$inActivePeriod && !$canEditApprovedNumberOnly) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Periodo cerrado',
+                'message' => 'Este registro pertenece a un periodo anterior y solo puede consultarse en modo lectura.',
+            ]);
+
+            return Response::redirect('/aoat/editar?id=' . $id);
+        }
 
         if (($record['state'] ?? '') === 'Aprobada' && !$canEditApprovedNumberOnly) {
             Flash::set([
@@ -1305,6 +1319,16 @@ final class AoatController
             return Response::redirect('/aoat');
         }
 
+        if (!$this->isRecordInActivePeriod($record)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Periodo cerrado',
+                'message' => 'Este registro pertenece a un periodo anterior y no puede modificarse.',
+            ]);
+
+            return Response::redirect('/aoat');
+        }
+
         $complianceNote = trim((string) $request->input(self::PAYLOAD_PROFESSIONAL_COMPLIANCE_NOTE, ''));
         if (mb_strlen($complianceNote) < 15) {
             Flash::set([
@@ -1643,84 +1667,7 @@ final class AoatController
      */
     private function validateAoatQualificationSections(Request $request, array $user): ?string
     {
-        $role = $this->primaryProfessionalRole($user);
-
-        if ($role === 'abogado') {
-            if ($this->inputStringArray($request, 'mesa_salud_mental') === []) {
-                return 'Debes marcar al menos una opción en «Actualización de la Mesa Municipal de Salud Mental y Prevención de las Adicciones».';
-            }
-            if ($this->inputStringArray($request, 'ppmsmypa') === []) {
-                return 'Debes marcar al menos una opción en «Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)».';
-            }
-            if ($this->inputStringArray($request, 'safer') === []) {
-                return 'Debes marcar al menos una opción en «SAFER».';
-            }
-
-            return null;
-        }
-
-        if ($role === 'medico') {
-            if ($this->inputStringArray($request, 'temas_hospital') === []) {
-                return 'Debes seleccionar al menos un tema dictado en el Hospital del municipio visitado.';
-            }
-            $allowedEspacios = ['COVE', 'Mesa de salud Mental', 'Eventos'];
-            $espacio = trim((string) $request->input('espacios_participacion_medico', ''));
-            if ($espacio === '' || !in_array($espacio, $allowedEspacios, true)) {
-                return 'Debes seleccionar una opción en «Espacios de participación».';
-            }
-
-            return null;
-        }
-
-        if ($role === 'politologo') {
-            return null;
-        }
-
-        if ($role === 'psicologo') {
-            if ($this->inputStringArray($request, 'prev_suicidio') === []) {
-                return 'Debes marcar al menos una opción en «Cualificación temas en prevención del suicidio».';
-            }
-            if ($this->inputStringArray($request, 'prev_violencias') === []) {
-                return 'Debes marcar al menos una opción en «Cualificación temas en prevención de Violencias».';
-            }
-            if ($this->inputStringArray($request, 'prev_adicciones') === []) {
-                return 'Debes marcar al menos una opción en «Cualificación temas en prevención de Adicciones».';
-            }
-            if ($this->inputStringArray($request, 'salud_mental') === []) {
-                return 'Debes marcar al menos una opción en «Cualificación temas de Salud Mental».';
-            }
-            if ($this->inputStringArray($request, 'politica_publica_psicologo') === []) {
-                return 'Debes marcar al menos una opción en «Actualización de la Política Pública Municipal de Salud y Prevención de las Adicciones (PPMSMYPA)».';
-            }
-
-            $allowedProyectos = [
-                'Competencias Parentales',
-                'Familias que se Cuidan',
-                'La Aventura de Crecer',
-                'Veredas que se Cuidan',
-                'Dispositivos comunitarios',
-                'Presentación del programa salud para el alma',
-                'SAFER',
-                'No aplica',
-            ];
-            $proyecto = trim((string) $request->input('proyecto', ''));
-            if ($proyecto === '' || !in_array($proyecto, $allowedProyectos, true)) {
-                return 'Debes seleccionar una opción en «Proyectos».';
-            }
-
-            return null;
-        }
-
-        if ($role === 'profesional social') {
-            if ($this->inputStringArray($request, 'actividad_social') === []) {
-                return 'Debes marcar al menos una opción en «Seleccione la actividad realizada».';
-            }
-
-            return null;
-        }
-
-        // Otros perfiles (p. ej. admin): no muestran bloques de cualificación en el formulario.
-        return null;
+        return QualificationCatalog::validateFromRequest($this->primaryProfessionalRole($user), $request);
     }
 
     private function buildPayload(Request $request, array $user): array
@@ -1738,7 +1685,8 @@ final class AoatController
         );
 
         if ($this->primaryProfessionalRole($user) === 'politologo') {
-            $payload['ppmsmypa'] = [self::POLITOLOGO_PPMSMYPA_OPTION];
+            $locked = QualificationCatalog::politologoLockedValue();
+            $payload['ppmsmypa'] = $locked !== '' ? [$locked] : ($payload['ppmsmypa'] ?? []);
         }
 
         return $payload;
@@ -1756,6 +1704,16 @@ final class AoatController
         $state = (string) ($record['state'] ?? '');
 
         return in_array($state, ['Aprobada', 'Realizado'], true);
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function isRecordInActivePeriod(array $record): bool
+    {
+        return (new AoatPeriodRepository())->isActivePeriodId(
+            isset($record['period_id']) ? (int) $record['period_id'] : 0
+        );
     }
 
     /**

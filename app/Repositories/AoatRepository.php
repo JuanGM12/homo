@@ -172,10 +172,26 @@ final class AoatRepository
             $params[':subregion'] = $filters['subregion'];
         }
 
-        $municipality = trim((string) ($filters['municipality'] ?? ''));
-        if ($municipality !== '') {
-            $where[] = 'TRIM(municipality) = :municipality';
-            $params[':municipality'] = $municipality;
+        $municipalities = [];
+        if (!empty($filters['municipalities']) && is_array($filters['municipalities'])) {
+            $municipalities = array_values(array_unique(array_filter(
+                array_map(static fn (mixed $m): string => trim((string) $m), $filters['municipalities']),
+                static fn (string $m): bool => $m !== ''
+            )));
+        } else {
+            $municipality = trim((string) ($filters['municipality'] ?? ''));
+            if ($municipality !== '') {
+                $municipalities = [$municipality];
+            }
+        }
+        if ($municipalities !== []) {
+            $placeholders = [];
+            foreach ($municipalities as $i => $mun) {
+                $ph = ':mun_aoat_' . $i;
+                $placeholders[] = $ph;
+                $params[$ph] = $mun;
+            }
+            $where[] = 'TRIM(municipality) IN (' . implode(', ', $placeholders) . ')';
         }
 
         if (!empty($filters['from_date'])) {
@@ -209,6 +225,30 @@ final class AoatRepository
         if (!empty($filters['activity_type'])) {
             $where[] = "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.activity_type')) = :activity_type";
             $params[':activity_type'] = $filters['activity_type'];
+        } elseif (!empty($filters['activity_types']) && is_array($filters['activity_types'])) {
+            $types = array_values(array_unique(array_filter(
+                array_map(static fn (mixed $t): string => trim((string) $t), $filters['activity_types']),
+                static fn (string $t): bool => $t !== ''
+            )));
+            if ($types !== []) {
+                $placeholders = [];
+                foreach ($types as $i => $type) {
+                    $ph = ':act_type_' . $i;
+                    $placeholders[] = $ph;
+                    $params[$ph] = $type;
+                }
+                $where[] = "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.activity_type')) IN (" . implode(', ', $placeholders) . ')';
+            }
+        }
+
+        $role = strtolower(trim(str_replace('_', ' ', (string) ($filters['professional_role'] ?? ''))));
+        if ($role !== '') {
+            if ($role === 'profesional social') {
+                $where[] = "(LOWER(REPLACE(TRIM(professional_role), '_', ' ')) = 'profesional social')";
+            } else {
+                $where[] = 'LOWER(TRIM(professional_role)) = :professional_role';
+                $params[':professional_role'] = $role;
+            }
         }
 
         $sql = 'SELECT * FROM aoat_records';

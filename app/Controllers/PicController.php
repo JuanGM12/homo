@@ -6,12 +6,14 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatPeriodRepository;
 use App\Repositories\PicRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
 use App\Support\MunicipalityListRequest;
+use App\Support\UserMunicipalities;
 
 final class PicController
 {
@@ -62,8 +64,12 @@ final class PicController
         $roleFilter = trim((string) $request->input('role', ''));
         $subregionFilter = trim((string) $request->input('subregion', ''));
         $municipalityFilters = MunicipalityListRequest::parse($request);
+        $periodRepo = new AoatPeriodRepository();
+        $periodOptions = $periodRepo->all();
+        $activePeriod = $periodRepo->active();
+        $periodFilter = $this->resolvePeriodFilter($request, $activePeriod);
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters, $periodFilter);
         $records = $this->sortRecords($records, $sort, $dir);
         $pagination = $this->paginateRecords($records, $currentPage, self::INDEX_PAGE_SIZE);
         $paginatedRecords = $pagination['items'];
@@ -83,6 +89,9 @@ final class PicController
             'roleOptions' => $roleOptions,
             'filterSubregion' => $subregionFilter,
             'filterMunicipalities' => $municipalityFilters,
+            'periodOptions' => $periodOptions,
+            'activePeriod' => $activePeriod,
+            'filterPeriod' => $periodFilter,
         ]);
     }
 
@@ -107,6 +116,8 @@ final class PicController
             'mode' => 'create',
             'record' => null,
             'professional' => $professional,
+            'allowedMunicipalities' => UserMunicipalities::assignedTo((int) $user['id']),
+            'readOnly' => false,
         ]);
     }
 
@@ -120,7 +131,7 @@ final class PicController
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
-        $errors = $this->validatePicForm($request);
+        $errors = $this->validatePicForm($request, (int) $user['id']);
         if (!empty($errors)) {
             Flash::set([
                 'type' => 'error',
@@ -130,9 +141,11 @@ final class PicController
             return Response::redirect('/pic/nuevo');
         }
 
+        $activePeriod = (new AoatPeriodRepository())->active();
         $payload = $this->buildPayload($request);
         $this->repository->create([
             'user_id' => (int) $user['id'],
+            'period_id' => $activePeriod !== null ? (int) ($activePeriod['id'] ?? 0) : null,
             'professional_name' => (string) $user['name'],
             'professional_email' => (string) $user['email'],
             'subregion' => trim((string) $request->input('subregion')),
@@ -174,14 +187,7 @@ final class PicController
             return Response::redirect('/pic');
         }
 
-        if (empty($record['editable'])) {
-            Flash::set([
-                'type' => 'info',
-                'title' => 'Edición no permitida',
-                'message' => 'Este registro ya fue aprobado por el especialista y no puede modificarse.',
-            ]);
-            return Response::redirect('/pic');
-        }
+        $readOnly = empty($record['editable']) || !$this->isRecordInActivePeriod($record);
 
         $professional = [
             'id' => $user['id'],
@@ -190,10 +196,12 @@ final class PicController
         ];
 
         return Response::view('pic/form', [
-            'pageTitle' => 'Editar registro Seguimiento PIC',
+            'pageTitle' => $readOnly ? 'Consultar registro Seguimiento PIC' : 'Editar registro Seguimiento PIC',
             'mode' => 'edit',
             'record' => $record,
             'professional' => $professional,
+            'allowedMunicipalities' => UserMunicipalities::assignedTo((int) $user['id']),
+            'readOnly' => $readOnly,
         ]);
     }
 
@@ -231,7 +239,16 @@ final class PicController
             return Response::redirect('/pic');
         }
 
-        $errors = $this->validatePicForm($request);
+        if (!$this->isRecordInActivePeriod($record)) {
+            Flash::set([
+                'type' => 'info',
+                'title' => 'Periodo cerrado',
+                'message' => 'Este registro pertenece a un periodo anterior y solo puede consultarse en modo lectura.',
+            ]);
+            return Response::redirect('/pic/editar?id=' . $id);
+        }
+
+        $errors = $this->validatePicForm($request, (int) $user['id']);
         if (!empty($errors)) {
             Flash::set([
                 'type' => 'error',
@@ -292,8 +309,9 @@ final class PicController
         $format = strtolower(trim((string) $request->input('format', 'excel')));
         $subregionFilter = trim((string) $request->input('subregion', ''));
         $municipalityFilters = MunicipalityListRequest::parse($request);
+        $periodFilter = $this->resolvePeriodFilter($request, (new AoatPeriodRepository())->active());
 
-        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters);
+        $records = $this->applyIndexFilters($records, $search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters, $periodFilter);
         $records = $this->sortRecords($records, $sort, $dir);
 
         if ($records === []) {
@@ -314,6 +332,7 @@ final class PicController
                 'to_date' => $toDate,
                 'subregion' => $subregionFilter,
                 'municipalities' => $municipalityFilters,
+                'period_id' => $periodFilter,
             ]);
 
             $pdfBinary = PdfService::renderHtml($html, 'L', 'Seguimiento PIC');
@@ -327,6 +346,7 @@ final class PicController
         $lines = [];
         $lines[] = implode(';', [
             'Fecha registro',
+            'Periodo',
             'Nombre',
             'Rol',
             'Subregión',
@@ -353,6 +373,7 @@ final class PicController
                 return '"' . str_replace('"', '""', $v) . '"';
             }, [
                 (string) ($row['created_at'] ?? ''),
+                (string) ($row['period_name'] ?? 'Sin periodo'),
                 (string) ($row['professional_name'] ?? ''),
                 (string) ($row['professional_role'] ?? ''),
                 (string) ($row['subregion'] ?? ''),
@@ -563,7 +584,7 @@ final class PicController
      */
     private function sortRecords(array $records, string $sort, string $dir): array
     {
-        $allowedSorts = ['created_at', 'professional_name', 'professional_role', 'subregion', 'municipality', 'state'];
+        $allowedSorts = ['created_at', 'period', 'professional_name', 'professional_role', 'subregion', 'municipality', 'state'];
         if (!in_array($sort, $allowedSorts, true)) {
             $sort = 'created_at';
         }
@@ -594,16 +615,17 @@ final class PicController
         if ($sort === 'state') {
             return !empty($row['editable']) ? 'editable' : 'aprobado';
         }
+        if ($sort === 'period') {
+            return strtolower(trim((string) ($row['period_name'] ?? '')));
+        }
 
         return strtolower(trim((string) ($row[$sort] ?? '')));
     }
 
     /**
      * @param array<int, array<string, mixed>> $records
-     * @return array<int, array<string, mixed>>
-     */
-    /**
      * @param list<string> $municipalityFilters
+     * @return array<int, array<string, mixed>>
      */
     private function applyIndexFilters(
         array $records,
@@ -613,13 +635,18 @@ final class PicController
         string $fromDate,
         string $toDate,
         string $subregionFilter = '',
-        array $municipalityFilters = []
+        array $municipalityFilters = [],
+        string $periodFilter = 'all'
     ): array {
-        if ($search === '' && $stateFilter === '' && $roleFilter === '' && $fromDate === '' && $toDate === '' && $subregionFilter === '' && $municipalityFilters === []) {
+        if ($search === '' && $stateFilter === '' && $roleFilter === '' && $fromDate === '' && $toDate === '' && $subregionFilter === '' && $municipalityFilters === [] && $periodFilter === 'all') {
             return $records;
         }
 
-        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters): bool {
+        return array_values(array_filter($records, static function (array $row) use ($search, $stateFilter, $roleFilter, $fromDate, $toDate, $subregionFilter, $municipalityFilters, $periodFilter): bool {
+            if ($periodFilter !== 'all' && (int) ($row['period_id'] ?? 0) !== (int) $periodFilter) {
+                return false;
+            }
+
             if ($stateFilter !== '') {
                 $state = !empty($row['editable']) ? 'Editable' : 'Aprobado';
                 if ($state !== $stateFilter) {
@@ -690,6 +717,17 @@ final class PicController
                 $filterLabels[] = $label . ': ' . (string) $filters[$key];
             }
         }
+        $periodFilter = (string) ($filters['period_id'] ?? '');
+        if ($periodFilter !== '' && $periodFilter !== 'all') {
+            $periodLabel = $periodFilter;
+            foreach ((new AoatPeriodRepository())->all() as $period) {
+                if ((string) (int) ($period['id'] ?? 0) === $periodFilter) {
+                    $periodLabel = (string) ($period['name'] ?? $periodFilter);
+                    break;
+                }
+            }
+            $filterLabels[] = 'Periodo: ' . $periodLabel;
+        }
         $muns = $filters['municipalities'] ?? [];
         if (is_array($muns) && $muns !== []) {
             $filterLabels[] = 'Municipio(s): ' . implode(', ', $muns);
@@ -707,6 +745,7 @@ final class PicController
 
             $rowsHtml .= '<tr>'
                 . '<td>' . $esc((string) ($row['created_at'] ?? '')) . '</td>'
+                . '<td>' . $esc((string) ($row['period_name'] ?? 'Sin periodo')) . '</td>'
                 . '<td>' . $esc((string) ($row['professional_name'] ?? '')) . '</td>'
                 . '<td>' . $esc(ucwords(str_replace('_', ' ', (string) ($row['professional_role'] ?? '')))) . '</td>'
                 . '<td>' . $esc((string) ($row['subregion'] ?? '')) . '</td>'
@@ -744,7 +783,7 @@ final class PicController
             . '<p><strong>Registros exportados:</strong> ' . $esc((string) count($records)) . '</p>'
             . '<p><strong>Filtros:</strong> ' . $esc($filterLabels !== [] ? implode(' | ', $filterLabels) : 'Sin filtros aplicados') . '</p></div>'
             . '<table class="report"><thead><tr>'
-            . '<th>Fecha registro</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Estado</th>'
+            . '<th>Fecha registro</th><th>Periodo</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Estado</th>'
             . '<th>Zona orientación escolar</th><th>Personas zona OE</th><th>Centro de escucha</th><th>Personas centro</th>'
             . '<th>Zona orientación universitaria</th><th>Personas zona OU</th><th>Redes comunitarias</th><th>Personas red</th>'
             . '</tr></thead><tbody>' . $rowsHtml . '</tbody></table>'
@@ -768,7 +807,7 @@ final class PicController
         return is_string($html) ? $html : '';
     }
 
-    private function validatePicForm(Request $request): array
+    private function validatePicForm(Request $request, int $userId): array
     {
         $errors = [];
         $subregion = trim((string) $request->input('subregion'));
@@ -779,6 +818,9 @@ final class PicController
         }
         if ($municipality === '') {
             $errors[] = 'Debes seleccionar el municipio.';
+        }
+        if ($subregion !== '' && $municipality !== '' && !UserMunicipalities::canUse($userId, $subregion, $municipality)) {
+            $errors[] = 'Solo puedes registrar seguimientos PIC en los municipios que tienes asignados.';
         }
 
         $zonaEscolar = trim((string) $request->input('zona_orientacion_escolar'));
@@ -840,5 +882,33 @@ final class PicController
             'redes_comunitarias_activas' => trim((string) $request->input('redes_comunitarias_activas')),
             'personas_red_comunitaria' => trim((string) $request->input('personas_red_comunitaria')),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function isRecordInActivePeriod(array $record): bool
+    {
+        return (new AoatPeriodRepository())->isActivePeriodId(
+            isset($record['period_id']) ? (int) $record['period_id'] : 0
+        );
+    }
+
+    /**
+     * @param array<string, mixed>|null $activePeriod
+     */
+    private function resolvePeriodFilter(Request $request, ?array $activePeriod): string
+    {
+        $raw = trim((string) $request->input('period_id', ''));
+        if ($raw === 'all') {
+            return 'all';
+        }
+        if ($raw !== '' && ctype_digit($raw) && (int) $raw > 0) {
+            return (string) (int) $raw;
+        }
+
+        $activeId = (int) ($activePeriod['id'] ?? 0);
+
+        return $activeId > 0 ? (string) $activeId : 'all';
     }
 }

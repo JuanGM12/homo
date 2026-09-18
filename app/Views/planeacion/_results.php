@@ -13,6 +13,8 @@ $currentSort = (string) ($_GET['sort'] ?? 'created_at');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 $userId = (int) ($currentUser['id'] ?? 0);
 $isAdmin = in_array('admin', $currentUser['roles'] ?? [], true);
+$isCoordinator = in_array('coordinador', $currentUser['roles'] ?? [], true)
+    || in_array('coordinadora', $currentUser['roles'] ?? [], true);
 $canCreateOwnRecord = (bool) ($canCreateOwnRecord ?? false);
 $assignedMunicipalities = is_array($assignedMunicipalities ?? null) ? $assignedMunicipalities : [];
 $planBelongsToAssignedMunicipality = static function (array $plan) use ($assignedMunicipalities): bool {
@@ -260,11 +262,17 @@ if ($totalPages <= 7) {
                                 $canEditPlan = !empty($plan['editable'])
                                     && $canCreateOwnRecord
                                     && ($isOwner || $planBelongsToAssignedMunicipality($plan));
+                                $canViewPlan = $isCoordinator && !$canEditPlan;
                                 ?>
                                 <?php if ($canEditPlan): ?>
                                     <a href="/planeacion/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil me-1"></i>
                                         Editar
+                                    </a>
+                                <?php elseif ($canViewPlan): ?>
+                                    <a href="/planeacion/editar?id=<?= (int) $plan['id'] ?>" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye me-1"></i>
+                                        Ver
                                     </a>
                                 <?php endif; ?>
                                 <?php if ($isAdmin): ?>
@@ -283,7 +291,7 @@ if ($totalPages <= 7) {
                                         </button>
                                     </form>
                                 <?php endif; ?>
-                                <?php if (!$canEditPlan && !$isAdmin): ?>
+                                <?php if (!$canEditPlan && !$canViewPlan && !$isAdmin): ?>
                                     <span class="planeacion-no-actions">No editable</span>
                                 <?php endif; ?>
                             </div>

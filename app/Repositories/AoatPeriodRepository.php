@@ -38,6 +38,17 @@ final class AoatPeriodRepository
         }
     }
 
+    public function isActivePeriodId(?int $periodId): bool
+    {
+        $active = $this->active();
+        $activeId = (int) ($active['id'] ?? 0);
+        if ($activeId <= 0) {
+            return true;
+        }
+
+        return (int) $periodId === $activeId;
+    }
+
     public function create(string $name, bool $active): void
     {
         $name = $this->normalizeName($name);

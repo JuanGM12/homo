@@ -7,12 +7,12 @@ namespace App\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\TrainingPlanRepository;
-use App\Repositories\UserRepository;
 use App\Services\Auth;
 use App\Services\Flash;
 use App\Services\PdfImageHelper;
 use App\Services\PdfService;
 use App\Support\MunicipalityListRequest;
+use App\Support\UserMunicipalities;
 
 final class PlaneacionController
 {
@@ -95,7 +95,7 @@ final class PlaneacionController
             return Response::redirect('/login');
         }
 
-        if (!$this->userCanAccessModule($user)) {
+        if (!$this->userCanAccessModule($user) || !$this->userCanCreateOwnRecord($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -129,7 +129,7 @@ final class PlaneacionController
             return Response::redirect('/login');
         }
 
-        if (!$this->userCanAccessModule($user)) {
+        if (!$this->userCanAccessModule($user) || !$this->userCanCreateOwnRecord($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -699,7 +699,7 @@ final class PlaneacionController
             return Response::redirect('/login');
         }
 
-        if (!$this->userCanCreateOwnRecord($user)) {
+        if (!$this->userCanAccessModule($user)) {
             return Response::view('errors/403', ['pageTitle' => 'Acceso denegado'], 403);
         }
 
@@ -709,24 +709,38 @@ final class PlaneacionController
         }
 
         $plan = $this->repository->findById($id);
-        if (!$plan || !$this->userCanEditPlan($user, $plan)) {
+        if ($plan === null) {
             Flash::set([
                 'type' => 'error',
-                'title' => 'No autorizado',
-                'message' => 'No puedes editar esta planeación.',
+                'title' => 'No encontrado',
+                'message' => 'La planeación indicada no existe.',
             ]);
 
             return Response::redirect('/planeacion');
         }
 
-        if (empty($plan['editable'])) {
-            Flash::set([
-                'type' => 'info',
-                'title' => 'Edición no permitida',
-                'message' => 'Esta planeación está en modo lectura y no puede modificarse.',
-            ]);
+        $isCoordinator = $this->userIsCoordinator($user);
+        $formReadOnly = $isCoordinator;
+        if (!$isCoordinator) {
+            if (!$this->userCanCreateOwnRecord($user) || !$this->userCanEditPlan($user, $plan)) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'No autorizado',
+                    'message' => 'No puedes editar esta planeación.',
+                ]);
 
-            return Response::redirect('/planeacion');
+                return Response::redirect('/planeacion');
+            }
+
+            if (empty($plan['editable'])) {
+                Flash::set([
+                    'type' => 'info',
+                    'title' => 'Edición no permitida',
+                    'message' => 'Esta planeación está en modo lectura y no puede modificarse.',
+                ]);
+
+                return Response::redirect('/planeacion');
+            }
         }
 
         $professional = [
@@ -738,15 +752,16 @@ final class PlaneacionController
         $planRole = trim((string) ($plan['professional_role'] ?? ''));
 
         return Response::view('planeacion/form', [
-            'pageTitle' => 'Editar planeación anual',
+            'pageTitle' => $formReadOnly ? 'Consultar planeación anual' : 'Editar planeación anual',
             'mode' => 'edit',
             'plan' => $plan,
             'professional' => $professional,
             'role' => $planRole !== '' ? $planRole : (string) ($user['role'] ?? (($user['roles'] ?? [])[0] ?? '')),
             'planYear' => (int) ($plan['plan_year'] ?? date('Y')),
             'oldInput' => $oldInput,
-            'allowedMunicipalities' => $this->municipalitiesAssignedToUser((int) $user['id']),
+            'allowedMunicipalities' => $formReadOnly ? [] : $this->municipalitiesAssignedToUser((int) $user['id']),
             'readOnlyMonthKeys' => self::READ_ONLY_MONTH_KEYS,
+            'formReadOnly' => $formReadOnly,
         ]);
     }
 
@@ -836,6 +851,13 @@ final class PlaneacionController
         return Response::redirect('/planeacion');
     }
 
+    private function userIsCoordinator(array $user): bool
+    {
+        $roles = array_map('strtolower', $user['roles'] ?? []);
+
+        return in_array('coordinadora', $roles, true) || in_array('coordinador', $roles, true);
+    }
+
     private function userCanAccessModule(array $user): bool
     {
         $roles = $user['roles'] ?? [];
@@ -846,6 +868,10 @@ final class PlaneacionController
 
     private function userCanCreateOwnRecord(array $user): bool
     {
+        if ($this->userIsCoordinator($user)) {
+            return false;
+        }
+
         $roles = $user['roles'] ?? [];
         $allowed = ['abogado', 'Medico', 'medico', 'psicologo', 'especialista'];
 
@@ -1181,37 +1207,12 @@ final class PlaneacionController
      */
     private function municipalitiesAssignedToUser(int $userId): array
     {
-        if ($userId <= 0) {
-            return [];
-        }
-
-        $repo = new UserRepository();
-        $rows = $repo->findMunicipalitiesForUser($userId);
-
-        return array_values(array_filter(array_map(static function (array $row): array {
-            return [
-                'subregion' => trim((string) ($row['subregion'] ?? '')),
-                'municipality' => trim((string) ($row['municipality'] ?? '')),
-            ];
-        }, $rows), static function (array $row): bool {
-            return $row['subregion'] !== '' && $row['municipality'] !== '';
-        }));
+        return UserMunicipalities::assignedTo($userId);
     }
 
     private function userCanUseMunicipality(int $userId, string $subregion, string $municipality): bool
     {
-        $assigned = $this->municipalitiesAssignedToUser($userId);
-        if ($assigned === []) {
-            return true;
-        }
-
-        foreach ($assigned as $row) {
-            if ($row['subregion'] === $subregion && $row['municipality'] === $municipality) {
-                return true;
-            }
-        }
-
-        return false;
+        return UserMunicipalities::canUse($userId, $subregion, $municipality);
     }
 
     private function userHasAssignedMunicipality(int $userId, string $subregion, string $municipality): bool

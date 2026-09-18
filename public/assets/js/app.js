@@ -7,6 +7,7 @@
         '/entrenamiento',
         '/planeacion',
         '/encuesta-opinion-aoat/listar',
+        '/boletin',
         '/asistencia',
         '/admin/usuarios',
     ]);
@@ -18,6 +19,7 @@
         '/entrenamiento',
         '/planeacion',
         '/encuesta-opinion-aoat/listar',
+        '/boletin',
     ]);
 
     const homoFilterFormsByPath = {
@@ -26,6 +28,7 @@
         '/pic': ['[data-pic-filters]'],
         '/entrenamiento': ['[data-entrenamiento-filters]'],
         '/planeacion': ['[data-planeacion-filters]'],
+        '/boletin': ['[data-boletin-filters]'],
         '/encuesta-opinion-aoat/listar': ['[data-encuesta-filters]'],
         '/asistencia': ['#asi-filter-form'],
         '/admin/usuarios': ['form[action="/admin/usuarios"]'],
@@ -234,7 +237,7 @@
                         <div style="font-size:1.4rem;font-weight:800;color:#24433d;">Encuesta registrada</div>
                         <div style="margin-top:0.75rem;color:#536b66;line-height:1.7;">
                             Tu opinión ha sido recibida por el <strong>Programa de Promoción y Prevención</strong>.<br>
-                            La información será tratada Ãºnicamente con fines estadísticos.
+                            La información será tratada únicamente con fines estadísticos.
                         </div>
                     </div>
                 </div>
@@ -299,7 +302,7 @@
             Swal.fire({
                 icon: 'info',
                 title: 'Frase del mes',
-                text: 'â€œLos sueÃ±os no se cumplen, sino que se trabajanâ€.',
+                text: 'Los sueños no se cumplen, sino que se trabajan.',
                 confirmButtonText: 'Seguir trabajando',
             });
         });
@@ -332,8 +335,8 @@
      * Sustituye el &lt;select multiple&gt; por un botón + panel con casillas (clic sin Ctrl).
      *
      * @param {HTMLSelectElement} sel
-     * @param {string} emptyLabel Texto cuando no hay selección (ej. Â«Todos los municipiosÂ»).
-     * @param {{ multiCountWord?: string, toggleTitle?: string }} [opts] multiCountWord: palabra tras el nÃºmero (ej. Â«municipiosÂ», Â«actividadesÂ»).
+     * @param {string} emptyLabel Texto cuando no hay selección (ej. «Todos los municipios»).
+     * @param {{ multiCountWord?: string, toggleTitle?: string }} [opts] multiCountWord: palabra tras el número (ej. Â«municipiosÂ», Â«actividadesÂ»).
      */
     function homoMountMunicipalityMultiWidget(sel, emptyLabel, opts = {}) {
         if (!(sel instanceof HTMLSelectElement)) {
@@ -561,6 +564,7 @@
                         return;
                     }
                     const isNumberOnlyEdit = !!(form.dataset && form.dataset.numberOnlyEdit === '1');
+                    const isReadOnlyForm = isNumberOnlyEdit || !!(form.dataset && form.dataset.readOnly === '1');
 
                     const territoryRoot = subregionSelect.closest('[data-territory-filter]') || form;
                     const isTerritoryFilter = territoryRoot.hasAttribute('data-territory-filter');
@@ -616,7 +620,7 @@
                             municipalitySelect.innerHTML =
                                 '<option value="">' + municipalityEmptyLabel + '</option>';
                         }
-                        municipalitySelect.disabled = isNumberOnlyEdit || !subregionValue;
+                        municipalitySelect.disabled = isReadOnlyForm || !subregionValue;
 
                         if (subregionValue && territoryData[subregionValue]) {
                             territoryData[subregionValue].forEach((municipio) => {
@@ -648,7 +652,7 @@
                         fillMunicipalities('', true);
                     }
 
-                    if (isNumberOnlyEdit) {
+                    if (isReadOnlyForm) {
                         subregionSelect.disabled = true;
                         municipalitySelect.disabled = true;
                         if (isMulti && municipalitySelect.dataset.homoMuniWidget === '1') {
@@ -1288,7 +1292,7 @@
             Swal.fire({
                 icon: 'error',
                 title: 'PRE - TEST no encontrado',
-                text: 'Para diligenciar el POST - TEST debes haber completado primero el PRE - TEST con el mismo nÃºmero de documento.',
+                text: 'Para diligenciar el POST - TEST debes haber completado primero el PRE - TEST con el mismo número de documento.',
             });
         };
 
@@ -1311,7 +1315,7 @@
                 Swal.fire({
                     icon: 'error',
                     title: 'Documento no válido',
-                    text: 'El nÃºmero de documento debe contener solo nÃºmeros.',
+                    text: 'El número de documento debe contener solo números.',
                 });
                 return;
             }
@@ -1400,7 +1404,7 @@
                 Swal.fire({
                     icon: 'warning',
                     title: 'Desactivar usuario',
-                    html: `Â¿Seguro que deseas desactivar al usuario <strong>${userName}</strong>?<br><span class="text-muted">Podrás reactivarlo más adelante editando su registro.</span>`,
+                    html: `¿Seguro que deseas desactivar al usuario <strong>${userName}</strong>?<br><span class="text-muted">Podrás reactivarlo más adelante editando su registro.</span>`,
                     showCancelButton: true,
                     confirmButtonText: 'Sí, desactivar',
                     cancelButtonText: 'Cancelar',
@@ -1469,18 +1473,18 @@
                 const municipality = plan.municipality || '';
                 const months = Array.isArray(plan.months) ? plan.months : [];
 
-                let html = `<p><strong>AÃ±o:</strong> ${year}<br><strong>Subregión:</strong> ${subregion}<br><strong>Municipio:</strong> ${municipality}</p>`;
+                let html = `<p><strong>Año:</strong> ${year}<br><strong>Subregión:</strong> ${subregion}<br><strong>Municipio:</strong> ${municipality}</p>`;
 
                 if (months.length > 0) {
                     html += '<div class="text-start"><hr><h6 class="fw-semibold mb-2">Meses planificados</h6>';
                     html += '<div class="small">';
                     months.forEach((m) => {
                         const label = m.label || '';
-                        const topics = Array.isArray(m.topics) ? m.topics.join('<br>â€¢ ') : '';
+                        const topics = Array.isArray(m.topics) ? m.topics.join('<br>• ') : '';
                         const population = m.population || '';
                         html += `<p class="mb-2"><strong>${label}</strong><br>`;
                         if (topics) {
-                            html += `Temas:<br>â€¢ ${topics}<br>`;
+                            html += `Temas:<br>• ${topics}<br>`;
                         }
                         if (population) {
                             html += `<span class="text-muted">Población objetivo:</span> ${population}`;
@@ -1489,7 +1493,7 @@
                     });
                     html += '</div></div>';
                 } else {
-                    html += '<p class="text-muted small mb-0">AÃºn no hay meses diligenciados en esta planeación.</p>';
+                    html += '<p class="text-muted small mb-0">Aún no hay meses diligenciados en esta planeación.</p>';
                 }
 
                 Swal.fire({
@@ -1546,7 +1550,7 @@
 
         let html = `<div class="plan-detail-shell">
             <div class="plan-detail-header">
-                <p class="plan-detail-meta"><strong>AÃ±o:</strong> ${escapeHtml(year)}</p>
+                <p class="plan-detail-meta"><strong>Año:</strong> ${escapeHtml(year)}</p>
                 <p class="plan-detail-meta"><strong>Asesor:</strong> ${escapeHtml(professional || 'Sin nombre')}</p>
                 <p class="plan-detail-meta"><strong>Subregion:</strong> ${escapeHtml(subregion)}</p>
                 <p class="plan-detail-meta"><strong>Rol:</strong> ${escapeHtml(professionalRole || 'Sin rol')}</p>
@@ -1637,12 +1641,7 @@
 
     const buildTrainingDetailHtml = (data) => {
         const payload = data && typeof data.payload === 'object' ? data.payload : {};
-        const topicSections = [
-            ['suicidio', 'Suicidio'],
-            ['violencias', 'Violencias'],
-            ['adicciones', 'Adicciones'],
-            ['otros_temas_salud_mental', 'Otros temas en salud mental'],
-        ];
+        const qualificationSections = Array.isArray(data.qualification_sections) ? data.qualification_sections : [];
 
         const proposedTopics = [
             payload.tema_propuesto_1 || '',
@@ -1655,6 +1654,7 @@
             <div class="training-detail-header">
                 <p class="training-detail-meta"><strong>Profesional:</strong> ${escapeHtml(data.professional || 'Sin nombre')}</p>
                 <p class="training-detail-meta"><strong>Correo:</strong> ${escapeHtml(data.email || 'Sin correo')}</p>
+                <p class="training-detail-meta"><strong>Periodo:</strong> ${escapeHtml(data.period || 'Sin periodo')}</p>
                 <p class="training-detail-meta"><strong>Subregion:</strong> ${escapeHtml(data.subregion || '')}</p>
                 <p class="training-detail-meta"><strong>Municipio:</strong> ${escapeHtml(data.municipality || '')}</p>
                 <p class="training-detail-meta"><strong>Fecha registro:</strong> ${escapeHtml(data.created_at || '')}</p>
@@ -1662,23 +1662,31 @@
             </div>
             <div class="training-detail-grid">`;
 
-        topicSections.forEach(([key, label]) => {
-            const values = Array.isArray(payload[key]) ? payload[key].filter((value) => String(value).trim() !== '') : [];
-            html += `<section class="training-detail-card">
-                <p class="training-detail-label">${escapeHtml(label)}</p>`;
+        if (qualificationSections.length > 0) {
+            qualificationSections.forEach((section) => {
+                const title = section && section.title ? String(section.title) : 'Cualificación';
+                const values = Array.isArray(section && section.values) ? section.values.filter((value) => String(value).trim() !== '') : [];
+                html += `<section class="training-detail-card">
+                    <p class="training-detail-label">${escapeHtml(title)}</p>`;
+                if (values.length > 0) {
+                    html += '<ul class="training-detail-list">';
+                    values.forEach((value) => {
+                        html += `<li>${escapeHtml(value)}</li>`;
+                    });
+                    html += '</ul>';
+                } else {
+                    html += '<p class="training-detail-empty">Sin informacion registrada.</p>';
+                }
+                html += '</section>';
+            });
+        }
 
-            if (values.length > 0) {
-                html += '<ul class="training-detail-list">';
-                values.forEach((value) => {
-                    html += `<li>${escapeHtml(value)}</li>`;
-                });
-                html += '</ul>';
-            } else {
-                html += '<p class="training-detail-empty">Sin informacion registrada.</p>';
-            }
-
-            html += '</section>';
-        });
+        if (payload.otro_caso) {
+            html += `<section class="training-detail-card training-detail-card--wide">
+                <p class="training-detail-label">Otro caso</p>
+                <p class="training-detail-copy">${escapeHtml(payload.otro_caso)}</p>
+            </section>`;
+        }
 
         html += `<section class="training-detail-card">
             <p class="training-detail-label">Temas propuestos</p>`;
@@ -1757,6 +1765,7 @@
             <div class="pic-detail-header">
                 <p class="pic-detail-meta"><strong>Profesional:</strong> ${escapeHtml(data.professional || 'Sin nombre')}</p>
                 <p class="pic-detail-meta"><strong>Correo:</strong> ${escapeHtml(data.email || 'Sin correo')}</p>
+                <p class="pic-detail-meta"><strong>Periodo:</strong> ${escapeHtml(data.period || 'Sin periodo')}</p>
                 <p class="pic-detail-meta"><strong>Subregion:</strong> ${escapeHtml(data.subregion || '')}</p>
                 <p class="pic-detail-meta"><strong>Municipio:</strong> ${escapeHtml(data.municipality || '')}</p>
                 <p class="pic-detail-meta"><strong>Fecha registro:</strong> ${escapeHtml(data.created_at || '')}</p>
@@ -2651,6 +2660,7 @@
         });
 
         const picSearchInput = picFilterForm.querySelector('input[name="q"]');
+        const picPeriodSelect = picFilterForm.querySelector('select[name="period_id"]');
         const picStateSelect = picFilterForm.querySelector('select[name="state"]');
         const picRoleSelect = picFilterForm.querySelector('select[name="role"]');
         const picFromDateInput = picFilterForm.querySelector('input[name="from_date"]');
@@ -2660,6 +2670,10 @@
 
         if (picSearchInput) {
             picSearchInput.addEventListener('input', scheduleApplyPicFilters);
+        }
+
+        if (picPeriodSelect) {
+            picPeriodSelect.addEventListener('change', () => applyPicFilters(1));
         }
 
         if (picStateSelect) {
@@ -2796,6 +2810,7 @@
         const entrenamientoStateSelect = entrenamientoFilterForm.querySelector('select[name="state"]');
         const entrenamientoFromDateInput = entrenamientoFilterForm.querySelector('input[name="from_date"]');
         const entrenamientoToDateInput = entrenamientoFilterForm.querySelector('input[name="to_date"]');
+        const entrenamientoPeriodSelect = entrenamientoFilterForm.querySelector('select[name="period_id"]');
         const entrenamientoSortInput = entrenamientoFilterForm.querySelector('input[name="sort"]');
         const entrenamientoDirInput = entrenamientoFilterForm.querySelector('input[name="dir"]');
 
@@ -2805,6 +2820,10 @@
 
         if (entrenamientoStateSelect) {
             entrenamientoStateSelect.addEventListener('change', () => applyEntrenamientoFilters(1));
+        }
+
+        if (entrenamientoPeriodSelect) {
+            entrenamientoPeriodSelect.addEventListener('change', () => applyEntrenamientoFilters(1));
         }
 
         entrenamientoFilterForm.querySelector('[data-subregion-select]')?.addEventListener('change', () =>
@@ -3077,7 +3096,7 @@
                     position: 'top-end',
                     icon: 'info',
                     title: 'Preparando descarga...',
-                    text: 'La exportación puede tardar unos segundos segÃºn la cantidad de registros.',
+                    text: 'La exportación puede tardar unos segundos según la cantidad de registros.',
                     showConfirmButton: false,
                     timer: 2600,
                     timerProgressBar: true,
@@ -3134,7 +3153,7 @@
                     position: 'top-end',
                     icon: 'info',
                     title: 'Preparando descarga...',
-                    text: 'La exportación puede tardar unos segundos segÃºn la cantidad de registros.',
+                    text: 'La exportación puede tardar unos segundos según la cantidad de registros.',
                     showConfirmButton: false,
                     timer: 2800,
                     timerProgressBar: true,
@@ -3529,6 +3548,178 @@
             homoSaveFiltersForPath(path, '?' + q);
         }
     })();
+
+    const boletinFilterForm = document.querySelector('[data-boletin-filters]');
+    const boletinResults = document.querySelector('[data-boletin-results]');
+    const boletinExportLink = document.querySelector('[data-boletin-export]');
+
+    if (boletinFilterForm && boletinResults) {
+        let boletinFilterTimer = null;
+        let boletinAbortController = null;
+
+        const updateBoletinUrl = (params) => {
+            const cleanParams = new URLSearchParams(params);
+            cleanParams.delete('partial');
+            const query = cleanParams.toString();
+            const url = '/boletin' + (query ? `?${query}` : '');
+            window.history.replaceState({}, '', url);
+            homoSaveFiltersForPath('/boletin', '?' + query);
+        };
+
+        const boletinFilterParams = () => {
+            if (!boletinFilterForm) {
+                return new URLSearchParams();
+            }
+            return new URLSearchParams(new FormData(boletinFilterForm));
+        };
+
+        const downloadBoletinPdf = (official, fromDate, toDate) => {
+            const params = boletinFilterParams();
+            params.delete('partial');
+            if (official) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/boletin/exportar-pdf';
+                form.style.display = 'none';
+                params.set('official', '1');
+                params.set('from_date', fromDate);
+                params.set('to_date', toDate);
+                params.forEach((value, key) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    form.appendChild(input);
+                });
+                document.body.appendChild(form);
+                form.submit();
+                return;
+            }
+            const query = params.toString();
+            window.location.href = '/boletin/exportar-pdf' + (query ? `?${query}` : '');
+        };
+
+        const promptBoletinDates = async (fromDate, toDate) => {
+            const result = await Swal.fire({
+                title: 'Rango de fechas del boletín',
+                html:
+                    '<p class="small text-muted mb-3">El boletín real usará este rango y filtrará los resultados con esas fechas.</p>'
+                    + '<div class="boletin-swal-dates">'
+                    + '<label>Desde<input id="boletin-swal-from" type="date" class="form-control" value="' + (fromDate || '') + '"></label>'
+                    + '<label>Hasta<input id="boletin-swal-to" type="date" class="form-control" value="' + (toDate || '') + '"></label>'
+                    + '</div>',
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Generar y descargar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const from = (document.getElementById('boletin-swal-from') || {}).value || '';
+                    const to = (document.getElementById('boletin-swal-to') || {}).value || '';
+                    if (!from || !to) {
+                        Swal.showValidationMessage('Selecciona fecha desde y hasta.');
+                        return false;
+                    }
+                    if (from > to) {
+                        Swal.showValidationMessage('La fecha inicial no puede ser posterior a la final.');
+                        return false;
+                    }
+                    return { from, to };
+                },
+            });
+            if (!result.isConfirmed || !result.value) {
+                return null;
+            }
+            return result.value;
+        };
+
+        if (boletinExportLink) {
+            boletinExportLink.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const params = boletinFilterParams();
+                const fromFilter = (params.get('from_date') || '').trim();
+                const toFilter = (params.get('to_date') || '').trim();
+
+                const choice = await Swal.fire({
+                    title: 'Descargar PDF',
+                    html: '<p class="mb-1">¿Desea generar un <strong>boletín real</strong>?</p>'
+                        + '<p class="small text-muted mb-0">Si elige sí, se asignará un número consecutivo (Boletín #1, #2…) y el PDF mostrará el rango de fechas.</p>',
+                    icon: 'question',
+                    showDenyButton: true,
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, boletín real',
+                    denyButtonText: 'No, solo descargar',
+                    cancelButtonText: 'Cancelar',
+                    reverseButtons: true,
+                });
+
+                if (choice.isDenied) {
+                    downloadBoletinPdf(false);
+                    return;
+                }
+                if (!choice.isConfirmed) {
+                    return;
+                }
+
+                let fromDate = fromFilter;
+                let toDate = toFilter;
+                if (!fromDate || !toDate) {
+                    const picked = await promptBoletinDates(fromDate, toDate);
+                    if (!picked) {
+                        return;
+                    }
+                    fromDate = picked.from;
+                    toDate = picked.to;
+                }
+                downloadBoletinPdf(true, fromDate, toDate);
+            });
+        }
+
+        const applyBoletinFilters = () => {
+            const formData = new FormData(boletinFilterForm);
+            const params = new URLSearchParams(formData);
+            params.set('partial', 'results');
+
+            if (boletinAbortController) {
+                boletinAbortController.abort();
+            }
+            boletinAbortController = new AbortController();
+
+            fetch('/boletin?' + params.toString(), {
+                headers: { Accept: 'application/json' },
+                signal: boletinAbortController.signal,
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (typeof data.html === 'string') {
+                        boletinResults.innerHTML = data.html;
+                        updateBoletinUrl(params);
+                    }
+                })
+                .catch((error) => {
+                    if (error && error.name === 'AbortError') {
+                        return;
+                    }
+                });
+        };
+
+        const scheduleApplyBoletinFilters = () => {
+            if (boletinFilterTimer !== null) {
+                clearTimeout(boletinFilterTimer);
+            }
+            boletinFilterTimer = setTimeout(applyBoletinFilters, 280);
+        };
+
+        boletinFilterForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            applyBoletinFilters();
+        });
+        boletinFilterForm.addEventListener('change', scheduleApplyBoletinFilters);
+
+        if (homoPendingAjaxRefresh['/boletin']) {
+            applyBoletinFilters();
+            delete homoPendingAjaxRefresh['/boletin'];
+        }
+    }
 });
 
 /**

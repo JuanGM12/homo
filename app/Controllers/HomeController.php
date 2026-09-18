@@ -8,6 +8,7 @@ use App\Controllers\EvaluacionesController;
 use App\Core\Request;
 use App\Core\Response;
 use App\Database\Connection;
+use App\Repositories\AoatPeriodRepository;
 use App\Services\Auth;
 use PDO;
 
@@ -71,10 +72,25 @@ final class HomeController
         $scopeIsFullPlatform = $consolidatedNoFilter && $unrestrictedDashboard;
         $scopeTeamConsolidated = $consolidatedNoFilter && !$unrestrictedDashboard;
 
-        $aoatStates = $this->countAoatStates($pdo, $scopeKind, $scopeUserIds);
+        $periodRepo = new AoatPeriodRepository();
+        $periodOptions = $periodRepo->all();
+        $activePeriod = $periodRepo->active();
+        $periodFilter = $this->resolvePeriodFilter($request, $activePeriod);
+        $periodId = $periodFilter !== 'all' ? (int) $periodFilter : null;
+        $filterPeriodName = 'Todos';
+        if ($periodId !== null) {
+            foreach ($periodOptions as $period) {
+                if ((int) ($period['id'] ?? 0) === $periodId) {
+                    $filterPeriodName = (string) ($period['name'] ?? $periodFilter);
+                    break;
+                }
+            }
+        }
 
-        $aoatMetaSuma = $this->countAoatByPayloadActivityTypes($pdo, $scopeKind, $scopeUserIds, self::AOAT_META_ACTIVITY_TYPES);
-        $aoatTipoActividad = $this->countAoatByPayloadActivityTypes($pdo, $scopeKind, $scopeUserIds, [self::AOAT_ACTIVIDAD_TIPO]);
+        $aoatStates = $this->countAoatStates($pdo, $scopeKind, $scopeUserIds, $periodId);
+
+        $aoatMetaSuma = $this->countAoatByPayloadActivityTypes($pdo, $scopeKind, $scopeUserIds, self::AOAT_META_ACTIVITY_TYPES, $periodId);
+        $aoatTipoActividad = $this->countAoatByPayloadActivityTypes($pdo, $scopeKind, $scopeUserIds, [self::AOAT_ACTIVIDAD_TIPO], $periodId);
 
         $kpis = [
             'aoat_total' => $this->countScoped(
@@ -82,7 +98,8 @@ final class HomeController
                 'aoat_records',
                 'user_id',
                 $scopeKind,
-                $scopeUserIds
+                $scopeUserIds,
+                $periodId
             ),
             'aoat_meta_suma' => $aoatMetaSuma,
             'aoat_tipo_actividad' => $aoatTipoActividad,
@@ -111,14 +128,16 @@ final class HomeController
                 'entrenamiento_plans',
                 'user_id',
                 $scopeKind,
-                $scopeUserIds
+                $scopeUserIds,
+                $periodId
             ),
             'pic_total' => $this->countScoped(
                 $pdo,
                 'pic_records',
                 'user_id',
                 $scopeKind,
-                $scopeUserIds
+                $scopeUserIds,
+                $periodId
             ),
         ];
 
@@ -136,7 +155,7 @@ final class HomeController
             ['label' => 'PIC', 'value' => $kpis['pic_total']],
         ];
 
-        $recentActivities = $this->recentActivities($pdo, $scopeKind, $scopeUserIds);
+        $recentActivities = $this->recentActivities($pdo, $scopeKind, $scopeUserIds, $periodId);
 
         $filterProfessionalName = '';
         if ($filterUserId !== null) {
@@ -162,6 +181,9 @@ final class HomeController
                 'filter_professional_name' => $filterProfessionalName,
                 'professional_options' => $professionalOptions,
                 'consolidated_filter_label' => $unrestrictedDashboard ? 'Todos (consolidado)' : 'Todos (mi equipo)',
+                'period_options' => $periodOptions,
+                'filter_period' => $periodFilter,
+                'filter_period_name' => $filterPeriodName,
                 'kpis' => $kpis,
                 'aoat_completion_pct' => $aoatCompletionPct,
                 'evaluaciones_pre' => $evaluacionesPre,
@@ -234,7 +256,8 @@ final class HomeController
         PDO $pdo,
         string $scopeKind,
         ?array $scopeUserIds,
-        array $types
+        array $types,
+        ?int $periodId = null
     ): int {
         if ($types === []) {
             return 0;
@@ -255,13 +278,18 @@ final class HomeController
             $params = array_merge($params, $scopeUserIds);
         }
 
+        if ($periodId !== null && $periodId > 0) {
+            $sql .= ' AND period_id = ?';
+            $params[] = $periodId;
+        }
+
         return $this->scalar($pdo, $sql, $params);
     }
 
     /**
      * @return array{Asignada: int, Devuelta: int, Realizado: int, Aprobada: int}
      */
-    private function countAoatStates(PDO $pdo, string $scopeKind, ?array $scopeUserIds): array
+    private function countAoatStates(PDO $pdo, string $scopeKind, ?array $scopeUserIds, ?int $periodId = null): array
     {
         $out = [
             'Asignada' => 0,
@@ -272,14 +300,19 @@ final class HomeController
 
         $sql = 'SELECT state, COUNT(*) AS c FROM aoat_records';
         $params = [];
+        $wheres = [];
         if ($scopeKind === 'platform') {
-            // sin filtro
+            // sin filtro de usuario
         } elseif ($scopeUserIds === null || $scopeUserIds === []) {
             return $out;
         } else {
             $placeholders = implode(', ', array_fill(0, count($scopeUserIds), '?'));
-            $sql .= ' WHERE user_id IN (' . $placeholders . ')';
+            $wheres[] = 'user_id IN (' . $placeholders . ')';
             $params = $scopeUserIds;
+        }
+        $this->appendPeriodFilter($wheres, $params, $periodId);
+        if ($wheres !== []) {
+            $sql .= ' WHERE ' . implode(' AND ', $wheres);
         }
         $sql .= ' GROUP BY state';
 
@@ -300,23 +333,28 @@ final class HomeController
         string $table,
         string $userColumn,
         string $scopeKind,
-        ?array $scopeUserIds
+        ?array $scopeUserIds,
+        ?int $periodId = null
     ): int {
-        if ($scopeKind === 'platform') {
-            return $this->scalar($pdo, "SELECT COUNT(*) FROM {$table}", []);
+        $sql = "SELECT COUNT(*) FROM {$table}";
+        $params = [];
+        $wheres = [];
+
+        if ($scopeKind !== 'platform') {
+            if ($scopeUserIds === null || $scopeUserIds === []) {
+                return 0;
+            }
+            $placeholders = implode(', ', array_fill(0, count($scopeUserIds), '?'));
+            $wheres[] = "{$userColumn} IN ({$placeholders})";
+            $params = $scopeUserIds;
         }
 
-        if ($scopeUserIds === null || $scopeUserIds === []) {
-            return 0;
+        $this->appendPeriodFilter($wheres, $params, $periodId);
+        if ($wheres !== []) {
+            $sql .= ' WHERE ' . implode(' AND ', $wheres);
         }
 
-        $placeholders = implode(', ', array_fill(0, count($scopeUserIds), '?'));
-
-        return $this->scalar(
-            $pdo,
-            "SELECT COUNT(*) FROM {$table} WHERE {$userColumn} IN ({$placeholders})",
-            $scopeUserIds
-        );
+        return $this->scalar($pdo, $sql, $params);
     }
 
     private function countAsistentesRegistrados(PDO $pdo, string $scopeKind, ?array $scopeUserIds): int
@@ -416,16 +454,22 @@ final class HomeController
      * @param list<int>|null $scopeUserIds
      * @return array<int, array<string, string>>
      */
-    private function recentActivities(PDO $pdo, string $scopeKind, ?array $scopeUserIds): array
+    private function recentActivities(PDO $pdo, string $scopeKind, ?array $scopeUserIds, ?int $periodId = null): array
     {
         $items = [];
 
         if ($scopeKind === 'platform') {
             $sqlAoat = 'SELECT created_at, "AoAT registrada" AS event, municipality, subregion
-                        FROM aoat_records
-                        ORDER BY created_at DESC LIMIT 4';
+                        FROM aoat_records';
+            $aoatParams = [];
+            $aoatWheres = [];
+            $this->appendPeriodFilter($aoatWheres, $aoatParams, $periodId);
+            if ($aoatWheres !== []) {
+                $sqlAoat .= ' WHERE ' . implode(' AND ', $aoatWheres);
+            }
+            $sqlAoat .= ' ORDER BY created_at DESC LIMIT 4';
             $stmtAoat = $pdo->prepare($sqlAoat);
-            $stmtAoat->execute();
+            $stmtAoat->execute($aoatParams);
 
             $sqlTest = 'SELECT created_at, CONCAT("Test ", UPPER(phase), " · ", test_key) AS event, municipality, subregion
                         FROM test_responses
@@ -437,11 +481,13 @@ final class HomeController
         } else {
             $placeholders = implode(', ', array_fill(0, count($scopeUserIds), '?'));
             $sqlAoat = "SELECT created_at, \"AoAT registrada\" AS event, municipality, subregion
-                        FROM aoat_records
-                        WHERE user_id IN ({$placeholders})
-                        ORDER BY created_at DESC LIMIT 4";
+                        FROM aoat_records";
+            $aoatParams = $scopeUserIds;
+            $aoatWheres = ["user_id IN ({$placeholders})"];
+            $this->appendPeriodFilter($aoatWheres, $aoatParams, $periodId);
+            $sqlAoat .= ' WHERE ' . implode(' AND ', $aoatWheres) . ' ORDER BY created_at DESC LIMIT 4';
             $stmtAoat = $pdo->prepare($sqlAoat);
-            $stmtAoat->execute($scopeUserIds);
+            $stmtAoat->execute($aoatParams);
 
             $docs = $this->fetchNonEmptyDocumentsForUserIds($pdo, $scopeUserIds);
             if ($docs === []) {
@@ -480,5 +526,37 @@ final class HomeController
         });
 
         return array_slice($items, 0, 6);
+    }
+
+    /**
+     * @param list<string> $wheres
+     * @param list<mixed> $params
+     */
+    private function appendPeriodFilter(array &$wheres, array &$params, ?int $periodId): void
+    {
+        if ($periodId === null || $periodId <= 0) {
+            return;
+        }
+
+        $wheres[] = 'period_id = ?';
+        $params[] = $periodId;
+    }
+
+    /**
+     * @param array<string, mixed>|null $activePeriod
+     */
+    private function resolvePeriodFilter(Request $request, ?array $activePeriod): string
+    {
+        $raw = trim((string) $request->input('period_id', ''));
+        if ($raw === 'all') {
+            return 'all';
+        }
+        if ($raw !== '' && ctype_digit($raw) && (int) $raw > 0) {
+            return (string) (int) $raw;
+        }
+
+        $activeId = (int) ($activePeriod['id'] ?? 0);
+
+        return $activeId > 0 ? (string) $activeId : 'all';
     }
 }

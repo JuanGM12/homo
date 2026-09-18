@@ -18,7 +18,7 @@ import pymysql
 
 ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = ROOT / ".env"
-FORM_PATH = ROOT / "app" / "Views" / "entrenamiento" / "form.php"
+CATALOG_PATH = ROOT / "app" / "Data" / "QualificationStatements.php"
 DEFAULT_PATTERN = "Plan de Entrenamiento*.xlsx"
 
 
@@ -81,14 +81,34 @@ def parse_php_string_list(var_name: str, text: str) -> list[str]:
     return values
 
 
-def load_topic_options(form_path: Path) -> dict[str, list[str]]:
-    text = form_path.read_text(encoding="utf-8", errors="replace")
-    return {
-        "suicidio": parse_php_string_list("suicidioOptions", text),
-        "violencias": parse_php_string_list("violenciasOptions", text),
-        "adicciones": parse_php_string_list("adiccionesOptions", text),
-        "otros_temas_salud_mental": parse_php_string_list("otrosTemasOptions", text),
-    }
+def parse_option_calls(block: str) -> list[tuple[str, str]]:
+    options: list[tuple[str, str]] = []
+    for match in re.finditer(
+        r"\$option\(\s*'((?:\\'|[^'])*)'(?:\s*,\s*'((?:\\'|[^'])*)')?\s*\)",
+        block,
+    ):
+        value = match.group(1).replace("\\'", "'")
+        label = match.group(2)
+        if label is None:
+            label = value
+        else:
+            label = label.replace("\\'", "'")
+        options.append((value, label))
+    return options
+
+
+def load_topic_options(catalog_path: Path) -> dict[str, list[tuple[str, str]]]:
+    text = catalog_path.read_text(encoding="utf-8", errors="replace")
+    keys = ["prev_suicidio", "prev_violencias", "prev_adicciones", "salud_mental"]
+    out: dict[str, list[tuple[str, str]]] = {}
+    for key in keys:
+        key_match = re.search(rf"'key'\s*=>\s*'{re.escape(key)}'", text)
+        if not key_match:
+            out[key] = []
+            continue
+        options_match = re.search(r"'options'\s*=>\s*\[(.*?)\]\s*,", text[key_match.end() :], re.S)
+        out[key] = parse_option_calls(options_match.group(1)) if options_match else []
+    return out
 
 
 def find_column(headers: list[Any], prefix: str) -> int:
@@ -174,15 +194,15 @@ def resolve_user(
     return None, "missing"
 
 
-def extract_topics(cell_value: Any, allowed_topics: list[str]) -> list[str]:
+def extract_topics(cell_value: Any, allowed_topics: list[tuple[str, str]]) -> list[str]:
     text = normalize_text(cell_value)
     if text == "":
         return []
 
     hits: list[str] = []
-    for topic in allowed_topics:
-        if normalize_text(topic) in text:
-            hits.append(topic)
+    for value, label in allowed_topics:
+        if normalize_text(value) in text or normalize_text(label) in text:
+            hits.append(value)
 
     return hits
 
@@ -252,7 +272,7 @@ def main() -> int:
         return 1
 
     env = load_env(ENV_PATH)
-    topic_options = load_topic_options(FORM_PATH)
+    topic_options = load_topic_options(CATALOG_PATH)
     aliases = load_name_aliases(args.name_aliases)
 
     connection = pymysql.connect(
@@ -287,6 +307,7 @@ def main() -> int:
         insert_sql = """
             INSERT INTO entrenamiento_plans (
                 user_id,
+                period_id,
                 professional_name,
                 professional_email,
                 subregion,
@@ -295,8 +316,20 @@ def main() -> int:
                 payload,
                 created_at,
                 updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
+
+        historical_period_id = None
+        with connection.cursor() as cur:
+            cur.execute("SELECT id FROM aoat_periods WHERE name = '2026-1' LIMIT 1")
+            row = cur.fetchone()
+            if row:
+                historical_period_id = int(row[0])
+            if historical_period_id is None:
+                cur.execute("SELECT id FROM aoat_periods WHERE active = 1 ORDER BY id DESC LIMIT 1")
+                row = cur.fetchone()
+                if row:
+                    historical_period_id = int(row[0])
 
         with connection.cursor() as cur:
             for file_path in files:
@@ -355,10 +388,10 @@ def main() -> int:
                         unresolved.append(f"{filename} fila {row_number}: subregión o municipio vacíos.")
                         continue
 
-                    suicidio = extract_topics(get_cell(row, suicidio_col), topic_options["suicidio"])
-                    violencias = extract_topics(get_cell(row, violencias_col), topic_options["violencias"])
-                    adicciones = extract_topics(get_cell(row, adicciones_col), topic_options["adicciones"])
-                    otros = extract_topics(get_cell(row, otros_col), topic_options["otros_temas_salud_mental"])
+                    suicidio = extract_topics(get_cell(row, suicidio_col), topic_options["prev_suicidio"])
+                    violencias = extract_topics(get_cell(row, violencias_col), topic_options["prev_violencias"])
+                    adicciones = extract_topics(get_cell(row, adicciones_col), topic_options["prev_adicciones"])
+                    otros = extract_topics(get_cell(row, otros_col), topic_options["salud_mental"])
 
                     required_topic_sets = {
                         "SUICIDIO": (suicidio, get_cell(row, suicidio_col)),
@@ -390,10 +423,10 @@ def main() -> int:
                     created_at = timestamp_to_string(get_cell(row, 0), get_cell(row, 2))
 
                     payload = {
-                        "suicidio": suicidio,
-                        "violencias": violencias,
-                        "adicciones": adicciones,
-                        "otros_temas_salud_mental": otros,
+                        "prev_suicidio": suicidio,
+                        "prev_violencias": violencias,
+                        "prev_adicciones": adicciones,
+                        "salud_mental": otros,
                         "tema_propuesto_1": tema_1,
                         "tema_propuesto_2": tema_2,
                         "tema_propuesto_3": tema_3,
@@ -421,6 +454,7 @@ def main() -> int:
                         insert_sql,
                         (
                             int(user["id"]),
+                            historical_period_id,
                             str(user["name"]),
                             str(user["email"]),
                             subregion,

@@ -24,6 +24,8 @@ if (!is_array($filterMunicipalities)) {
 }
 $filterMunicipalities = array_values(array_filter(array_map('strval', $filterMunicipalities), static fn (string $m): bool => $m !== ''));
 $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$periodOptions = is_array($periodOptions ?? null) ? $periodOptions : [];
+$filterPeriod = (string) ($filterPeriod ?? ($_GET['period_id'] ?? ''));
 ?>
 
 <section class="mt-5 mb-4">
@@ -70,6 +72,23 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
                 placeholder="Profesional, correo..."
                 value="<?= htmlspecialchars((string) ($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
             >
+        </div>
+        <div class="col-lg-2">
+            <label class="form-label small text-muted">Periodo</label>
+            <select name="period_id" class="form-select">
+                <option value="all" <?= $filterPeriod === 'all' ? 'selected' : '' ?>>Todos</option>
+                <?php foreach ($periodOptions as $period): ?>
+                    <?php
+                    $periodId = (string) (int) ($period['id'] ?? 0);
+                    if ($periodId === '0') {
+                        continue;
+                    }
+                    ?>
+                    <option value="<?= htmlspecialchars($periodId, ENT_QUOTES, 'UTF-8') ?>" <?= $filterPeriod === $periodId ? 'selected' : '' ?>>
+                        <?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= !empty($period['active']) ? ' (activo)' : '' ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div class="col-lg-2">
             <label class="form-label small text-muted">Subregión</label>
