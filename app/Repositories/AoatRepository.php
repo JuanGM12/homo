@@ -222,6 +222,12 @@ final class AoatRepository
             }
         }
 
+        $periodId = (int) ($filters['period_id'] ?? 0);
+        if ($periodId > 0 && $this->supportsPeriodColumn()) {
+            $where[] = 'period_id = :period_id';
+            $params[':period_id'] = $periodId;
+        }
+
         if (!empty($filters['activity_type'])) {
             $where[] = "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.activity_type')) = :activity_type";
             $params[':activity_type'] = $filters['activity_type'];

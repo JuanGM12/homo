@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Controllers\AsistenciaController;
+use App\Repositories\AoatPeriodRepository;
 use App\Repositories\AoatRepository;
 use App\Repositories\AsistenciaRepository;
 use App\Repositories\UserRepository;
@@ -101,17 +101,23 @@ final class BoletinService
 
         $kpis = $this->buildAoatKpis($aoatRecords);
         $byRole = $this->countByRole($aoatRecords);
+        $byActivity = $this->buildActivityTypeSeries($kpis);
+        $byMonth = $this->buildByMonth($aoatRecords);
         $territory = $this->buildTerritoryTable($aoatRecords, $asistenciaActivities, $asistentes);
         $beneficiarios = $this->buildBeneficiarios($asistentes);
         $cutoff = $this->resolveCutoff($filters);
+        $periodRepo = new AoatPeriodRepository();
 
         return [
             'program_name' => self::PROGRAM_NAME,
             'program_short' => self::PROGRAM_SHORT,
-            'contrato' => AsistenciaController::FIPC_CONTRATO_NUMERO,
+            'contrato' => $this->resolveContrato($filters, $aoatRecords, $asistenciaActivities, $periodRepo),
             'cutoff_label' => $cutoff,
+            'period_options' => $periodRepo->all(),
             'kpis' => $kpis,
             'by_role' => $byRole,
+            'by_activity' => $byActivity,
+            'by_month' => $byMonth,
             'territory' => $territory,
             'beneficiarios' => $beneficiarios,
             'professionals' => $this->userRepo->findNonAdminAdvisors(),
@@ -136,6 +142,7 @@ final class BoletinService
             'from_date' => trim((string) ($filters['from_date'] ?? '')),
             'to_date' => trim((string) ($filters['to_date'] ?? '')),
             'professional_role' => strtolower(trim((string) ($filters['role'] ?? ''))),
+            'period_id' => (int) ($filters['period_id'] ?? 0),
         ];
 
         $activityType = trim((string) ($filters['activity_type'] ?? ''));
@@ -164,6 +171,7 @@ final class BoletinService
             'municipalities' => is_array($filters['municipalities'] ?? null) ? $filters['municipalities'] : [],
             'from_date' => trim((string) ($filters['from_date'] ?? '')),
             'to_date' => trim((string) ($filters['to_date'] ?? '')),
+            'period_id' => (int) ($filters['period_id'] ?? 0),
         ];
 
         $professionalId = (int) ($filters['professional_id'] ?? 0);
@@ -258,6 +266,67 @@ final class BoletinService
         }
 
         return array_values(array_filter($counts, static fn (array $row): bool => $row['value'] > 0 || isset(self::ROLE_OPTIONS[$row['key']])));
+    }
+
+    /**
+     * @param array<string, int> $kpis
+     * @return list<array{key:string,label:string,value:int,color:string}>
+     */
+    private function buildActivityTypeSeries(array $kpis): array
+    {
+        return [
+            ['key' => 'asesoria', 'label' => 'Total Asesoría', 'value' => (int) ($kpis['asesoria'] ?? 0), 'color' => '#0f766e'],
+            ['key' => 'at', 'label' => 'Total Asistencia técnica', 'value' => (int) ($kpis['at'] ?? 0), 'color' => '#d97706'],
+            ['key' => 'actividad', 'label' => 'Total Actividad', 'value' => (int) ($kpis['actividad'] ?? 0), 'color' => '#6d28d9'],
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $aoatRecords
+     * @return list<array{key:string,label:string,asesoria:int,at:int,actividad:int,total:int}>
+     */
+    private function buildByMonth(array $aoatRecords): array
+    {
+        $months = [];
+        foreach ($aoatRecords as $row) {
+            $date = trim((string) ($row['activity_date'] ?? ''));
+            if (preg_match('/^(\d{4})-(\d{2})/', $date, $m) !== 1) {
+                continue;
+            }
+            $key = $m[1] . '-' . $m[2];
+            if (!isset($months[$key])) {
+                $months[$key] = [
+                    'key' => $key,
+                    'label' => $this->monthLabel((int) $m[1], (int) $m[2]),
+                    'asesoria' => 0,
+                    'at' => 0,
+                    'actividad' => 0,
+                    'total' => 0,
+                ];
+            }
+            $type = $this->normalizeActivityType((string) ($row['activity_type'] ?? ''));
+            if ($type === 'Asesoría') {
+                $months[$key]['asesoria']++;
+            } elseif ($type === 'Asistencia técnica') {
+                $months[$key]['at']++;
+            } elseif ($type === 'Actividad') {
+                $months[$key]['actividad']++;
+            }
+            $months[$key]['total']++;
+        }
+        ksort($months);
+
+        return array_values($months);
+    }
+
+    private function monthLabel(int $year, int $month): string
+    {
+        $names = [
+            1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr', 5 => 'May', 6 => 'Jun',
+            7 => 'Jul', 8 => 'Ago', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
+        ];
+
+        return ($names[$month] ?? str_pad((string) $month, 2, '0', STR_PAD_LEFT)) . ' ' . $year;
     }
 
     /**
@@ -426,6 +495,33 @@ final class BoletinService
         }
 
         return $rows;
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @param list<array<string, mixed>> $aoatRecords
+     * @param list<array<string, mixed>> $asistenciaActivities
+     */
+    private function resolveContrato(
+        array $filters,
+        array $aoatRecords,
+        array $asistenciaActivities,
+        AoatPeriodRepository $periodRepo
+    ): string {
+        $periodId = (int) ($filters['period_id'] ?? 0);
+        if ($periodId > 0) {
+            return $periodRepo->contractNumberForPeriodId($periodId);
+        }
+
+        $ids = [];
+        foreach ($aoatRecords as $row) {
+            $ids[] = (int) ($row['period_id'] ?? 0);
+        }
+        foreach ($asistenciaActivities as $row) {
+            $ids[] = (int) ($row['period_id'] ?? 0);
+        }
+
+        return $periodRepo->formatContractsForPeriodIds($ids);
     }
 
     /**

@@ -2191,6 +2191,11 @@ final class AoatController
         $rowsHtml = '';
         foreach ($records as $row) {
             $payload = $this->decodeAoatPayload($row);
+            $role = QualificationCatalog::normalizeRole((string) ($row['professional_role'] ?? ''));
+            if ($role === '') {
+                $role = QualificationCatalog::inferRoleFromPayload($payload);
+            }
+            $payload = QualificationCatalog::hydrateLegacyPayload($payload, $role !== '' ? $role : 'psicologo');
             $professionalName = trim(((string) ($row['professional_name'] ?? '')) . ' ' . ((string) ($row['professional_last_name'] ?? '')));
             $aoatNumber = trim((string) ($payload['aoat_number'] ?? ''));
             $activityWith = trim((string) ($payload['activity_with'] ?? ''));
@@ -2211,7 +2216,7 @@ final class AoatController
                 . '<td>' . $esc($activityWith !== '' ? $activityWith : 'No registrado') . '</td>';
 
             foreach (array_keys($fieldLabels) as $fieldKey) {
-                $value = $this->formatAoatExportValue($payload[$fieldKey] ?? null);
+                $value = $this->formatAoatExportValue($payload[$fieldKey] ?? null, $role, $fieldKey);
                 $rowsHtml .= '<td>' . $esc($value ?? 'No aplica') . '</td>';
             }
 
@@ -2274,6 +2279,11 @@ final class AoatController
                 $payload = $decoded;
             }
         }
+        $exportRole = QualificationCatalog::normalizeRole((string) ($record['professional_role'] ?? ''));
+        if ($exportRole === '') {
+            $exportRole = QualificationCatalog::inferRoleFromPayload($payload);
+        }
+        $payload = QualificationCatalog::hydrateLegacyPayload($payload, $exportRole !== '' ? $exportRole : 'psicologo');
 
         $logoHomo = dirname(__DIR__, 2) . '/public/assets/img/logoHomo.png';
         $logoAntioquia = dirname(__DIR__, 2) . '/public/assets/img/logoAntioquia.png';
@@ -2324,7 +2334,7 @@ final class AoatController
                 continue;
             }
 
-            $formattedValue = $this->formatAoatExportValue($payload[$key]);
+            $formattedValue = $this->formatAoatExportValue($payload[$key], $exportRole, $key);
             if ($formattedValue === null) {
                 continue;
             }
@@ -2339,7 +2349,7 @@ final class AoatController
                 continue;
             }
 
-            $formattedValue = $this->formatAoatExportValue($value);
+            $formattedValue = $this->formatAoatExportValue($value, $exportRole, $key);
             if ($formattedValue === null) {
                 continue;
             }
@@ -2450,18 +2460,31 @@ final class AoatController
     /**
      * @param mixed $value
      */
-    private function formatAoatExportValue($value): ?string
+    private function formatAoatExportValue($value, string $role = '', string $key = ''): ?string
     {
+        $role = QualificationCatalog::normalizeRole($role);
+        $toLabel = static function (string $item) use ($role, $key): string {
+            $item = trim($item);
+            if ($item === '' || $role === '' || $key === '') {
+                return $item;
+            }
+
+            return QualificationCatalog::optionLabel($role, $key, $item);
+        };
+
         if (is_array($value)) {
-            $cleanValues = array_values(array_filter(
-                array_map(static fn ($item): string => trim((string) $item), $value),
-                static fn (string $item): bool => $item !== ''
-            ));
+            $cleanValues = [];
+            foreach ($value as $item) {
+                $label = $toLabel((string) $item);
+                if ($label !== '') {
+                    $cleanValues[] = $label;
+                }
+            }
 
             return $cleanValues === [] ? null : implode(', ', $cleanValues);
         }
 
-        $text = trim((string) $value);
+        $text = $toLabel((string) $value);
 
         return $text === '' ? null : $text;
     }

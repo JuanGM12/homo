@@ -131,6 +131,7 @@ final class BoletinController
             'professional_id' => (int) $request->input('professional_id', 0),
             'activity_type' => trim((string) $request->input('activity_type', '')),
             'tema' => trim((string) $request->input('tema', '')),
+            'period_id' => (int) $request->input('period_id', 0),
         ];
     }
 
@@ -177,7 +178,12 @@ final class BoletinController
             $filterBits[] = 'Municipio: ' . implode(', ', $munis);
         }
         if ($edition === null && (($filters['from_date'] ?? '') !== '' || ($filters['to_date'] ?? '') !== '')) {
-            $filterBits[] = 'Fechas: ' . (string) ($filters['from_date'] ?: '…') . ' a ' . (string) ($filters['to_date'] ?: '…');
+            $fromBit = (string) ($filters['from_date'] ?: '');
+            $toBit = (string) ($filters['to_date'] ?: '');
+            $filterBits[] = 'Fechas: '
+                . ($fromBit !== '' ? $formatLabel($fromBit) : '…')
+                . ' a '
+                . ($toBit !== '' ? $formatLabel($toBit) : '…');
         }
 
         $title = $edition !== null
@@ -204,27 +210,74 @@ final class BoletinController
             ? '<div class="sub">' . $esc(implode(' | ', $filterBits)) . '</div>'
             : '';
 
+        $byRole = is_array($dashboard['by_role'] ?? null) ? $dashboard['by_role'] : [];
+        $byActivity = is_array($dashboard['by_activity'] ?? null) ? $dashboard['by_activity'] : [];
+        $byMonth = is_array($dashboard['by_month'] ?? null) ? $dashboard['by_month'] : [];
         $kpiHtml = '';
         $kpiItems = [
-            ['AoAT', (int) ($kpis['aoat_total'] ?? 0)],
-            ['Asesoría', (int) ($kpis['asesoria'] ?? 0)],
-            ['AT', (int) ($kpis['at'] ?? 0)],
-            ['Actividad', (int) ($kpis['actividad'] ?? 0)],
-            ['Beneficiarios', (int) ($benef['total'] ?? 0)],
-            ['Personas únicas', (int) ($benef['unicos'] ?? 0)],
+            ['AoAT registradas', (int) ($kpis['aoat_total'] ?? 0), '#1f8a4c', ''],
+            ['Asesoría', (int) ($kpis['asesoria'] ?? 0), '#0f766e', ''],
+            ['Asistencia técnica (AT)', (int) ($kpis['at'] ?? 0), '#d97706', 'Cálculo: Nº de AoAT con tipo Asistencia técnica'],
+            ['Actividad', (int) ($kpis['actividad'] ?? 0), '#6d28d9', ''],
+            ['Beneficiarios', (int) ($benef['total'] ?? 0), '#1d4ed8', 'Listado de asistencia'],
+            ['Personas únicas', (int) ($benef['unicos'] ?? 0), '#b45309', ''],
         ];
-        foreach ($kpiItems as [$label, $value]) {
-            $kpiHtml .= '<td class="kpi"><div class="k-lab">' . $esc($label) . '</div><div class="k-val">' . $esc((string) $value) . '</div></td>';
+        foreach ($kpiItems as [$label, $value, $color, $hint]) {
+            $kpiHtml .= '<td class="kpi" style="background:' . $color . ';">'
+                . '<div class="k-lab">' . $esc($label) . '</div>'
+                . '<div class="k-val">' . $esc((string) $value) . '</div>'
+                . ($hint !== '' ? '<div class="k-hint">' . $esc($hint) . '</div>' : '')
+                . '</td>';
         }
 
-        $seriesHtml = static function (string $title, array $rows) use ($esc): string {
-            $html = '<h3>' . $esc($title) . '</h3><table class="mini">';
+        $seriesCard = static function (string $title, array $rows) use ($esc): string {
+            $html = '<table class="mini"><thead><tr><th>Concepto</th><th class="num">Total</th></tr></thead><tbody>';
+            $sum = 0;
+            if ($rows === []) {
+                $html .= '<tr><td colspan="2">Sin datos en este recorte.</td></tr>';
+            }
             foreach ($rows as $row) {
-                $html .= '<tr><td>' . $esc((string) ($row['label'] ?? '')) . '</td><td class="num">' . $esc((string) (int) ($row['value'] ?? 0)) . '</td></tr>';
+                $value = (int) ($row['value'] ?? 0);
+                $sum += $value;
+                $html .= '<tr><td>' . $esc((string) ($row['label'] ?? '')) . '</td><td class="num">' . $esc((string) $value) . '</td></tr>';
+            }
+            if ($rows !== []) {
+                $html .= '<tr><th>Total</th><th class="num">' . $esc((string) $sum) . '</th></tr>';
             }
 
-            return $html . '</table>';
+            return '<td class="card"><div class="card-title">' . $esc($title) . '</div>' . $html . '</tbody></table></td>';
         };
+
+        $activityRows = '';
+        $activitySum = 0;
+        foreach ($byActivity as $row) {
+            $value = (int) ($row['value'] ?? 0);
+            $activitySum += $value;
+            $activityRows .= '<tr><td>' . $esc((string) ($row['label'] ?? '')) . '</td><td class="num">' . $value . '</td></tr>';
+        }
+        if ($activityRows === '') {
+            $activityRows = '<tr><td colspan="2">Sin datos en este recorte.</td></tr>';
+        } else {
+            $activityRows .= '<tr><th>Total general</th><th class="num">' . $activitySum . '</th></tr>';
+        }
+
+        $monthRows = '';
+        $monthSum = 0;
+        foreach ($byMonth as $row) {
+            $monthSum += (int) ($row['total'] ?? 0);
+            $monthRows .= '<tr>'
+                . '<td>' . $esc((string) ($row['label'] ?? '')) . '</td>'
+                . '<td class="num">' . (int) ($row['asesoria'] ?? 0) . '</td>'
+                . '<td class="num">' . (int) ($row['at'] ?? 0) . '</td>'
+                . '<td class="num">' . (int) ($row['actividad'] ?? 0) . '</td>'
+                . '<td class="num">' . (int) ($row['total'] ?? 0) . '</td>'
+                . '</tr>';
+        }
+        if ($monthRows === '') {
+            $monthRows = '<tr><td colspan="5">Sin datos en este recorte.</td></tr>';
+        } else {
+            $monthRows .= '<tr><th>Total general</th><th colspan="3"></th><th class="num">' . $monthSum . '</th></tr>';
+        }
 
         $tableRows = '';
         foreach ($territory as $row) {
@@ -235,53 +288,80 @@ final class BoletinController
                 . '<td class="num">' . (int) ($row['asesoria'] ?? 0) . '</td>'
                 . '<td class="num">' . (int) ($row['at'] ?? 0) . '</td>'
                 . '<td class="num">' . (int) ($row['actividad'] ?? 0) . '</td>'
+                . '<td class="num">' . (int) ($row['listados'] ?? 0) . '</td>'
                 . '<td class="num">' . (int) ($row['beneficiarios'] ?? 0) . '</td>'
                 . '</tr>';
         }
         if ($tableRows === '') {
-            $tableRows = '<tr><td colspan="7">Sin registros en el alcance actual.</td></tr>';
+            $tableRows = '<tr><td colspan="8">Sin registros en el alcance actual.</td></tr>';
         }
 
         return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
             body{font-family:Arial,sans-serif;color:#203246;font-size:9px;margin:12px;}
             .head{width:100%;border-collapse:collapse;margin-bottom:8px;}
-            .title{font-size:16px;font-weight:700;color:#1f5c45;}
-            .range{font-size:13px;font-weight:700;color:#1f5c45;margin:3px 0;}
-            .sub{font-size:10px;color:#5b6d8f;}
-            .kpis{width:100%;border-collapse:separate;border-spacing:6px;margin:8px 0;}
-            .kpi{background:#f3f7f4;border:1px solid #d5e4db;padding:8px;text-align:center;}
-            .k-lab{font-size:8px;text-transform:uppercase;color:#5b6d8f;}
-            .k-val{font-size:16px;font-weight:700;color:#1f5c45;}
-            table.grid{width:100%;border-collapse:collapse;margin-top:8px;}
-            table.grid th{background:#1f5c45;color:#fff;padding:5px;text-align:left;}
-            table.grid td{border:1px solid #d7e1ec;padding:4px;}
-            table.mini{width:100%;border-collapse:collapse;margin-bottom:8px;}
-            table.mini td{border-bottom:1px solid #e6eef4;padding:3px 0;}
+            .title{font-size:16px;font-weight:700;color:#214f43;}
+            .range{font-size:13px;font-weight:700;color:#2f6b57;margin:3px 0;}
+            .sub{font-size:10px;color:#58708b;}
+            .meta{margin:0 0 8px;padding:7px 10px;background:#f4f8fc;border:1px solid #d8e3ef;}
+            .meta .sub{margin:0;}
+            .kpis{width:100%;border-collapse:separate;border-spacing:6px;margin:4px 0 10px;}
+            .kpi{border:1px solid #1f4a3c;padding:8px 6px;text-align:center;color:#fff;}
+            .k-lab{font-size:8px;text-transform:uppercase;letter-spacing:.03em;opacity:.92;}
+            .k-val{font-size:16px;font-weight:700;margin-top:2px;}
+            .k-hint{font-size:7px;margin-top:3px;opacity:.9;text-transform:none;letter-spacing:0;}
+            .cards{width:100%;border-collapse:separate;border-spacing:7px;margin:0 0 6px;}
+            .cards td.card{width:25%;vertical-align:top;background:#fff;border:1px solid #d7e1ec;padding:7px 8px;}
+            .cards-2 td.card{width:50%;}
+            .card-title{font-size:10px;font-weight:700;color:#214f43;margin:0 0 6px;}
+            table.mini{width:100%;border-collapse:collapse;}
+            table.mini th{background:#eef5f0;color:#1f2a24;border:1px solid #cfdad3;padding:3px 5px;text-align:left;font-size:8px;}
+            table.mini td{border:1px solid #d9e2dd;padding:3px 5px;}
+            .section-title{background:#2f6b57;color:#fff;font-weight:700;padding:5px 8px;font-size:10px;margin:8px 0 0;}
+            table.grid{width:100%;border-collapse:collapse;}
+            table.grid th{background:#2f6b57;color:#fff;border:1px solid #1f4a3c;padding:5px 6px;text-align:left;}
+            table.grid td{border:1px solid #d7e1ec;padding:4px 6px;vertical-align:top;}
+            table.grid tr:nth-child(even) td{background:#fbfdff;}
             .num{text-align:right;font-weight:700;}
-            .cols td{vertical-align:top;width:25%;padding-right:8px;}
+            .footer{margin-top:10px;font-size:8px;color:#64748b;text-align:right;}
         </style></head><body>
             <table class="head"><tr>
                 <td style="width:22%;">' . ($logoAntioquia !== '' ? '<img src="' . $esc($logoAntioquia) . '" style="height:36px;">' : '') . '</td>
                 <td style="text-align:center;">
                     <div class="title">' . $esc($title) . '</div>
                     ' . $rangeHtml . '
-                    <div class="sub">' . $metaLine . '</div>
-                    ' . $corteLine . $filtersLine . '
                 </td>
                 <td style="width:22%;text-align:right;">' . ($logoHomo !== '' ? '<img src="' . $esc($logoHomo) . '" style="height:36px;">' : '') . '</td>
             </tr></table>
+            <div class="meta">
+                <div class="sub">' . $metaLine . '</div>
+                ' . $corteLine . $filtersLine . '
+            </div>
             <table class="kpis"><tr>' . $kpiHtml . '</tr></table>
-            <table class="cols"><tr>
-                <td>' . $seriesHtml('Sexo', is_array($benef['sexo'] ?? null) ? $benef['sexo'] : []) . '</td>
-                <td>' . $seriesHtml('Edad', is_array($benef['edad'] ?? null) ? $benef['edad'] : []) . '</td>
-                <td>' . $seriesHtml('Etnia', is_array($benef['etnia'] ?? null) ? $benef['etnia'] : []) . '</td>
-                <td>' . $seriesHtml('Zona', is_array($benef['zona'] ?? null) ? $benef['zona'] : []) . '</td>
+            <table class="cards cards-2"><tr>
+                <td class="card">
+                    <div class="card-title">Totales por actividad realizada</div>
+                    <table class="mini"><thead><tr><th>Concepto</th><th class="num">Total</th></tr></thead><tbody>' . $activityRows . '</tbody></table>
+                </td>
+                <td class="card">
+                    <div class="card-title">Por mes según actividad que realizó</div>
+                    <table class="mini"><thead><tr><th>Mes</th><th class="num">Asesoría</th><th class="num">AT</th><th class="num">Actividad</th><th class="num">Total</th></tr></thead><tbody>' . $monthRows . '</tbody></table>
+                </td>
             </tr></table>
-            ' . $seriesHtml('Grupo poblacional', is_array($benef['grupo_poblacional'] ?? null) ? $benef['grupo_poblacional'] : []) . '
-            <h3>Tabla por subregión y municipio</h3>
+            <table class="cards"><tr>
+                ' . $seriesCard('Por rol profesional', $byRole) . '
+                ' . $seriesCard('Sexo', is_array($benef['sexo'] ?? null) ? $benef['sexo'] : []) . '
+                ' . $seriesCard('Zona', is_array($benef['zona'] ?? null) ? $benef['zona'] : []) . '
+                ' . $seriesCard('Etnia', is_array($benef['etnia'] ?? null) ? $benef['etnia'] : []) . '
+            </tr></table>
+            <table class="cards cards-2"><tr>
+                ' . $seriesCard('Total según edad', is_array($benef['edad'] ?? null) ? $benef['edad'] : []) . '
+                ' . $seriesCard('Grupo poblacional', is_array($benef['grupo_poblacional'] ?? null) ? $benef['grupo_poblacional'] : []) . '
+            </tr></table>
+            <div class="section-title">Tabla por subregión y municipio</div>
             <table class="grid"><thead><tr>
-                <th>Subregión</th><th>Municipio</th><th>AoAT</th><th>Asesoría</th><th>AT</th><th>Actividad</th><th>Beneficiarios</th>
+                <th>Subregión</th><th>Municipio</th><th>AoAT</th><th>Asesoría</th><th>AT</th><th>Actividad</th><th>Listados</th><th>Beneficiarios</th>
             </tr></thead><tbody>' . $tableRows . '</tbody></table>
+            <p class="footer">Documento generado automáticamente desde la plataforma Equipo de Promoción y Prevención.</p>
         </body></html>';
     }
 }

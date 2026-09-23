@@ -61,9 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const filterQuery = () => {
-        if (!canViewAll) {
-            return '';
-        }
         const parts = [];
         const sub = document.getElementById('calFiltroSubregion')?.value || '';
         const mun = document.getElementById('calFiltroMunicipio')?.value || '';
@@ -353,13 +350,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const setupFilters = () => {
-        if (!canViewAll) {
-            return;
-        }
         const selSub = document.getElementById('calFiltroSubregion');
         const selMun = document.getElementById('calFiltroMunicipio');
         const selRol = document.getElementById('calFiltroRol');
         const selUsuario = document.getElementById('calFiltroUsuario');
+        if (!selSub && !selMun && !selRol && !selUsuario) {
+            return;
+        }
 
         const syncUsuarios = () => {
             if (!selUsuario) {
@@ -382,16 +379,28 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         };
 
-        selSub?.addEventListener('change', () => {
-            fillFilterMunicipios(selSub.value);
-            cargarActividades();
-        });
-        selMun?.addEventListener('change', cargarActividades);
-        selRol?.addEventListener('change', () => {
-            syncUsuarios();
-            cargarActividades();
-        });
-        selUsuario?.addEventListener('change', cargarActividades);
+        if (selSub && selSub.dataset.filterBound !== '1') {
+            selSub.dataset.filterBound = '1';
+            selSub.addEventListener('change', () => {
+                fillFilterMunicipios(selSub.value);
+                cargarActividades();
+            });
+        }
+        if (selMun && selMun.dataset.filterBound !== '1') {
+            selMun.dataset.filterBound = '1';
+            selMun.addEventListener('change', cargarActividades);
+        }
+        if (selRol && selRol.dataset.filterBound !== '1') {
+            selRol.dataset.filterBound = '1';
+            selRol.addEventListener('change', () => {
+                syncUsuarios();
+                cargarActividades();
+            });
+        }
+        if (selUsuario && selUsuario.dataset.filterBound !== '1') {
+            selUsuario.dataset.filterBound = '1';
+            selUsuario.addEventListener('change', cargarActividades);
+        }
         syncUsuarios();
     };
 
@@ -444,6 +453,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const hoy = new Date();
     anoActual = String(hoy.getFullYear());
     mesActual = String(hoy.getMonth() + 1);
+
+    setupFilters();
 
     fetch('/assets/js/municipios.json')
         .then((r) => r.json())

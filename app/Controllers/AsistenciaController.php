@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\AoatPeriodRepository;
 use App\Repositories\AoatRepository;
 use App\Repositories\AsistenciaRepository;
 use App\Repositories\UserRepository;
@@ -31,7 +32,7 @@ final class AsistenciaController
     private const INDEX_PAGE_SIZE = 20;
     private const MIN_ALLOWED_DATE = '2026-01-01';
 
-    /** Contrato único para listados FIPC (cambiar solo aquí y en vistas vía datos pasados desde el controlador). */
+    /** Contrato de respaldo si el periodo no tiene número configurado. */
     public const FIPC_CONTRATO_NUMERO = '4600018640';
 
     private const FIPC_LISTADO_TITULO = 'LISTADO DE ASISTENCIA FIPC';
@@ -405,6 +406,8 @@ final class AsistenciaController
         }
 
         $code = $this->repo->generateUniqueCode();
+        $activePeriod = (new AoatPeriodRepository())->active();
+        $activePeriodId = (int) ($activePeriod['id'] ?? 0);
 
         $data = [
             'code' => $code,
@@ -418,16 +421,31 @@ final class AsistenciaController
             'actividad_tipos' => json_encode($actividadTipos, JSON_UNESCAPED_UNICODE),
             'status' => 'Pendiente',
         ];
+        if ($activePeriodId > 0) {
+            $data['period_id'] = $activePeriodId;
+        }
 
         try {
             $id = $this->repo->create($data);
         } catch (\PDOException $e) {
-            Flash::set([
-                'type' => 'error',
-                'title' => 'No se pudo crear',
-                'message' => 'Ocurrió un error al crear la actividad. Intenta de nuevo.',
-            ]);
-            return Response::redirect('/asistencia/nueva');
+            if (isset($data['period_id'])) {
+                unset($data['period_id']);
+                try {
+                    $id = $this->repo->create($data);
+                } catch (\PDOException) {
+                    $id = 0;
+                }
+            } else {
+                $id = 0;
+            }
+            if ($id <= 0) {
+                Flash::set([
+                    'type' => 'error',
+                    'title' => 'No se pudo crear',
+                    'message' => 'Ocurrió un error al crear la actividad. Intenta de nuevo.',
+                ]);
+                return Response::redirect('/asistencia/nueva');
+            }
         }
 
         Flash::set([
@@ -2024,7 +2042,7 @@ final class AsistenciaController
             'fipc' => [
                 'titulo' => self::FIPC_LISTADO_TITULO,
                 'proceso' => self::FIPC_PROCESO_LINE,
-                'contrato' => self::FIPC_CONTRATO_NUMERO,
+                'contrato' => $this->contratoForActividad($actividad),
             ],
         ]);
     }
@@ -2229,6 +2247,17 @@ final class AsistenciaController
     }
 
     /**
+     * @param array<string, mixed> $actividad
+     */
+    private function contratoForActividad(array $actividad): string
+    {
+        $periodId = (int) ($actividad['period_id'] ?? 0);
+        $contract = (new AoatPeriodRepository())->contractNumberForPeriodId($periodId > 0 ? $periodId : null);
+
+        return $contract !== '' ? $contract : self::FIPC_CONTRATO_NUMERO;
+    }
+
+    /**
      * Meta CSV alineado con cabecera FIPC y detalle operativo del listado.
      *
      * @return array<int, array{0: string, 1: string}>
@@ -2238,7 +2267,7 @@ final class AsistenciaController
         $rows = [
             [self::FIPC_LISTADO_TITULO, ''],
             [self::FIPC_PROCESO_LINE, ''],
-            ['Contrato No. ' . self::FIPC_CONTRATO_NUMERO, ''],
+            ['Contrato No. ' . $this->contratoForActividad($actividad), ''],
             ['Información del listado / actividad', ''],
             ['Código', (string) ($actividad['code'] ?? '')],
             ['Fecha', (string) ($actividad['activity_date'] ?? '')],
@@ -2551,7 +2580,7 @@ final class AsistenciaController
             ? '<img src="' . $esc($logoAntSrc) . '" alt="Gobernación de Antioquia" style="height:40px;width:auto;">'
             : '';
 
-        $contratoTxt = $esc(self::FIPC_CONTRATO_NUMERO);
+        $contratoTxt = $esc($this->contratoForActividad($actividad));
 
         $fipcCenter =
             '<div style="font-size:10px;line-height:1.25;color:#14324b;">'

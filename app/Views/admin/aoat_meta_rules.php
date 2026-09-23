@@ -33,7 +33,7 @@ $months = [
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
                 <div>
                     <h2 class="h5 fw-semibold mb-1">Periodos</h2>
-                    <p class="small text-muted mb-0">El periodo activo se asigna automaticamente a cada nuevo registro AoAT.</p>
+                    <p class="small text-muted mb-0">El periodo activo se asigna automaticamente a cada nuevo registro. El número de contrato se usa en boletines y listados FIPC.</p>
                 </div>
                 <?php
                 $activePeriodName = '';
@@ -52,30 +52,46 @@ $months = [
                     <thead>
                         <tr>
                             <th>Periodo</th>
+                            <th>No. contrato</th>
                             <th>Estado</th>
                             <th class="text-end">Accion</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($periods as $period): ?>
+                            <?php $periodId = (int) ($period['id'] ?? 0); ?>
                             <tr>
-                                <td class="fw-semibold"><?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td>
-                                    <span class="aoat-period-pill <?= !empty($period['active']) ? 'is-active' : '' ?>">
-                                        <?= !empty($period['active']) ? 'Activo' : 'Inactivo' ?>
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    <?php if (empty($period['active']) && (int) ($period['id'] ?? 0) > 0): ?>
-                                        <form method="post" action="/admin/aoat-periodos/activar" class="d-inline">
-                                            <input type="hidden" name="id" value="<?= (int) ($period['id'] ?? 0) ?>">
-                                            <button type="submit" class="btn btn-outline-primary btn-sm">
-                                                <i class="bi bi-check2-circle me-1"></i>Activar
-                                            </button>
-                                        </form>
-                                    <?php else: ?>
-                                        <span class="small text-muted">Sin accion</span>
-                                    <?php endif; ?>
+                                <td colspan="4" class="pt-3">
+                                    <form method="post" action="/admin/aoat-periodos/editar" class="row g-2 align-items-end">
+                                        <input type="hidden" name="id" value="<?= $periodId ?>">
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label small text-muted mb-1">Periodo</label>
+                                            <input type="text" name="name" class="form-control form-control-sm" value="<?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" maxlength="40" required <?= $periodId <= 0 ? 'readonly' : '' ?>>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small text-muted mb-1">Número de contrato</label>
+                                            <input type="text" name="contract_number" class="form-control form-control-sm" value="<?= htmlspecialchars((string) ($period['contract_number'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" maxlength="40" placeholder="Ej. 4600018640" <?= $periodId <= 0 ? 'readonly' : '' ?>>
+                                        </div>
+                                        <div class="col-12 col-md-2">
+                                            <span class="aoat-period-pill <?= !empty($period['active']) ? 'is-active' : '' ?>">
+                                                <?= !empty($period['active']) ? 'Activo' : 'Inactivo' ?>
+                                            </span>
+                                        </div>
+                                        <div class="col-12 col-md-3 text-md-end">
+                                            <?php if ($periodId > 0): ?>
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    <i class="bi bi-save me-1"></i>Guardar
+                                                </button>
+                                                <?php if (empty($period['active'])): ?>
+                                                    <button type="submit" formaction="/admin/aoat-periodos/activar" class="btn btn-outline-primary btn-sm">
+                                                        <i class="bi bi-check2-circle me-1"></i>Activar
+                                                    </button>
+                                                <?php endif; ?>
+                                            <?php else: ?>
+                                                <span class="small text-muted">Sin accion</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -84,9 +100,13 @@ $months = [
             </div>
 
             <form method="post" action="/admin/aoat-periodos" class="row g-2 align-items-end">
-                <div class="col-12 col-md-5">
+                <div class="col-12 col-md-3">
                     <label class="form-label small text-muted">Nuevo periodo</label>
                     <input type="text" name="name" class="form-control form-control-sm" placeholder="Ej. 2027-1" maxlength="40" required>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small text-muted">Número de contrato</label>
+                    <input type="text" name="contract_number" class="form-control form-control-sm" placeholder="Ej. 4600019278" maxlength="40" required>
                 </div>
                 <div class="col-12 col-md-3">
                     <div class="form-check mt-md-4">
@@ -94,9 +114,9 @@ $months = [
                         <label class="form-check-label small" for="aoat-period-active-new">Crear como activo</label>
                     </div>
                 </div>
-                <div class="col-12 col-md-4 text-md-end">
+                <div class="col-12 col-md-2 text-md-end">
                     <button type="submit" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-plus-circle me-1"></i>Crear periodo
+                        <i class="bi bi-plus-circle me-1"></i>Crear
                     </button>
                 </div>
             </form>

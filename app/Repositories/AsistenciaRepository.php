@@ -126,6 +126,12 @@ final class AsistenciaRepository
             $where[] = 'tipo = :tipo';
             $params[':tipo'] = $filters['tipo'];
         }
+        $periodId = (int) ($filters['period_id'] ?? 0);
+        if ($periodId > 0) {
+            $where[] = 'period_id = :period_id';
+            $params[':period_id'] = $periodId;
+        }
+
         if (!empty($filters['from_date'])) {
             $where[] = 'activity_date >= :from_date';
             $params[':from_date'] = $filters['from_date'];

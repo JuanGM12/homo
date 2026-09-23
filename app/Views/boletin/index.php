@@ -40,6 +40,19 @@ $municipalitiesJson = htmlspecialchars(json_encode($filterMunicipalities, JSON_U
     <form class="boletin-filters" method="get" action="/boletin" data-boletin-filters data-territory-filter>
         <div class="boletin-filter-grid">
             <div>
+                <label>Periodo</label>
+                <select name="period_id" class="form-select form-select-sm">
+                    <option value="0">Todos</option>
+                    <?php foreach (($dashboard['period_options'] ?? []) as $period): ?>
+                        <?php $periodId = (int) ($period['id'] ?? 0); ?>
+                        <?php if ($periodId <= 0) { continue; } ?>
+                        <option value="<?= $periodId ?>" <?= (int) ($filters['period_id'] ?? 0) === $periodId ? 'selected' : '' ?>>
+                            <?= htmlspecialchars((string) ($period['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= !empty($period['active']) ? ' (activo)' : '' ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div>
                 <label>Subregión</label>
                 <select name="subregion" class="form-select form-select-sm" data-subregion-select data-current-value="<?= htmlspecialchars($filterSubregion, ENT_QUOTES, 'UTF-8') ?>">
                     <option value="">Todas</option>

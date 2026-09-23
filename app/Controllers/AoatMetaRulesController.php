@@ -28,11 +28,12 @@ final class AoatMetaRulesController
     public function createPeriod(Request $request): Response
     {
         $name = trim((string) $request->input('name', ''));
+        $contractNumber = trim((string) $request->input('contract_number', ''));
         $active = (string) $request->input('active', '') === '1';
         $repo = new AoatPeriodRepository();
 
         try {
-            $repo->create($name, $active);
+            $repo->create($name, $active, $contractNumber);
         } catch (\Throwable) {
             Flash::set([
                 'type' => 'error',
@@ -47,6 +48,33 @@ final class AoatMetaRulesController
             'type' => 'success',
             'title' => 'Periodo creado',
             'message' => $active ? 'El periodo quedo creado y activo para nuevos registros AoAT.' : 'El periodo quedo disponible en la configuracion.',
+        ]);
+
+        return Response::redirect('/admin/aoat-metas');
+    }
+
+    public function updatePeriod(Request $request): Response
+    {
+        $id = (int) $request->input('id', 0);
+        $name = trim((string) $request->input('name', ''));
+        $contractNumber = trim((string) $request->input('contract_number', ''));
+
+        try {
+            (new AoatPeriodRepository())->update($id, $name, $contractNumber);
+        } catch (\Throwable) {
+            Flash::set([
+                'type' => 'error',
+                'title' => 'No fue posible actualizar',
+                'message' => 'Verifica el nombre, el número de contrato e intenta nuevamente.',
+            ]);
+
+            return Response::redirect('/admin/aoat-metas');
+        }
+
+        Flash::set([
+            'type' => 'success',
+            'title' => 'Periodo actualizado',
+            'message' => 'El nombre y el número de contrato quedaron guardados.',
         ]);
 
         return Response::redirect('/admin/aoat-metas');

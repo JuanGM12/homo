@@ -25,7 +25,13 @@ foreach ($allowedMunicipalities as $row) {
     $allowedTerritories[$subregion][] = $municipality;
 }
 $allowedTerritoriesJson = htmlspecialchars(json_encode($allowedTerritories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
-$professionalsJson = htmlspecialchars(json_encode($professionals, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$professionalsJson = json_encode(
+    $professionals,
+    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS
+);
+if (!is_string($professionalsJson) || $professionalsJson === '') {
+    $professionalsJson = '[]';
+}
 ?>
 
 <section class="cronograma-page mt-4 mb-5">

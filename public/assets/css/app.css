@@ -4766,7 +4766,7 @@ select.homo-muni-native.visually-hidden {
     border-radius: 1rem;
     padding: 0.95rem 1rem;
     color: #fff;
-    min-height: 6.2rem;
+    min-height: 7.2rem;
 }
 .boletin-kpi p {
     margin: 0;
@@ -4783,9 +4783,12 @@ select.homo-muni-native.visually-hidden {
 }
 .boletin-kpi span {
     display: block;
-    margin-top: 0.35rem;
-    font-size: 0.75rem;
-    opacity: 0.85;
+    margin-top: 0.45rem;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    opacity: 0.92;
+    text-transform: none;
+    letter-spacing: 0;
 }
 .boletin-kpi.is-green { background: #1f8a4c; }
 .boletin-kpi.is-teal { background: #0f766e; }
@@ -4795,12 +4798,12 @@ select.homo-muni-native.visually-hidden {
 .boletin-kpi.is-gold { background: #b45309; }
 .boletin-panels {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 0.85rem;
     margin-bottom: 0.85rem;
 }
 .boletin-panels-2 {
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 }
 .boletin-card {
     background: #fff;
@@ -4808,6 +4811,8 @@ select.homo-muni-native.visually-hidden {
     border-radius: 1rem;
     padding: 1rem 1.05rem 0.85rem;
     box-shadow: var(--app-shadow-sm);
+    min-width: 0;
+    overflow: hidden;
 }
 .boletin-card h2 {
     font-size: 0.95rem;
@@ -4817,24 +4822,32 @@ select.homo-muni-native.visually-hidden {
 }
 .boletin-bar-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) 2.4rem;
-    gap: 0.45rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "label label"
+        "track value";
+    column-gap: 0.55rem;
+    row-gap: 0.2rem;
     align-items: center;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.7rem;
 }
 .boletin-bar-label {
+    grid-area: label;
     font-size: 0.78rem;
     color: #355064;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.3;
+    word-break: break-word;
 }
 .boletin-bar-track {
+    grid-area: track;
     display: block;
     height: 0.55rem;
     border-radius: 999px;
     background: #e7f0ea;
     overflow: hidden;
+    min-width: 0;
 }
 .boletin-bar-fill {
     display: block;
@@ -4844,9 +4857,128 @@ select.homo-muni-native.visually-hidden {
     min-width: 0;
 }
 .boletin-bar-value {
+    grid-area: value;
     font-size: 0.8rem;
     font-weight: 700;
     text-align: right;
+    color: #1f5c45;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.boletin-chart-total {
+    margin-top: 0.55rem;
+    padding-top: 0.45rem;
+    border-top: 1px dashed #d5e3dc;
+    font-size: 0.82rem;
+    color: #355064;
+}
+.boletin-chart-total strong {
+    color: #1f5c45;
+}
+.boletin-col-chart-bars {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 0.75rem;
+    min-height: 210px;
+}
+.boletin-col {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    gap: 0.35rem;
+}
+.boletin-col-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1f5c45;
+}
+.boletin-col-plot {
+    width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.boletin-col-bar {
+    width: 42px;
+    max-width: 70%;
+    border-radius: 0.5rem 0.5rem 0.2rem 0.2rem;
+    min-height: 0;
+}
+.boletin-col-label {
+    font-size: 0.78rem;
+    line-height: 1.25;
+    text-align: center;
+    color: #355064;
+}
+.boletin-month-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem 1rem;
+    margin-bottom: 0.65rem;
+    font-size: 0.75rem;
+    color: #355064;
+}
+.boletin-month-legend i {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 0.2rem;
+    margin-right: 0.3rem;
+    vertical-align: -0.1rem;
+}
+.boletin-month-legend .is-asesoria,
+.boletin-month-bar.is-asesoria { background: #0f766e; }
+.boletin-month-legend .is-at,
+.boletin-month-bar.is-at { background: #d97706; }
+.boletin-month-legend .is-actividad,
+.boletin-month-bar.is-actividad { background: #6d28d9; }
+.boletin-month-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.7rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+}
+.boletin-month-item {
+    flex: 0 0 auto;
+    width: 5.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.22rem;
+}
+.boletin-month-group {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0.18rem;
+    height: 150px;
+    width: 100%;
+}
+.boletin-month-bar {
+    width: 13px;
+    border-radius: 4px 4px 0 0;
+    min-height: 0;
+}
+.boletin-month-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #1f5c45;
+    text-align: center;
+}
+.boletin-month-values,
+.boletin-month-total {
+    font-size: 0.68rem;
+    color: #58708b;
+    text-align: center;
+    line-height: 1.2;
+}
+.boletin-month-total {
+    font-weight: 700;
     color: #1f5c45;
 }
 .boletin-empty {
