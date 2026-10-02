@@ -32,6 +32,7 @@ final class AoatActivityWithOptionRepository
         'Jóvenes',
         'Juntas comunales',
         'Médicos',
+        'ESE Municipales',
         'Padres de familia',
         'Policía Nacional',
         'Profesionales Psicosociales',

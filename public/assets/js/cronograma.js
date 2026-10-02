@@ -20,6 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const pad = (n) => String(n).padStart(2, '0');
     const getMesParam = () => `${anoActual}-${pad(mesActual)}`;
 
+    const bogotaHoy = () => {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Bogota',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).formatToParts(new Date());
+        const n = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
+        return { year: n('year'), month: n('month'), day: n('day') };
+    };
+
     const timeToMinutes = (value) => {
         const m = /^(\d{1,2}):(\d{2})/.exec(String(value || ''));
         if (!m) {
@@ -103,8 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             inicioSemana = 6;
         }
         const ultimoDia = new Date(year, month + 1, 0).getDate();
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+        const hoyBogota = bogotaHoy();
 
         let html = '';
         const totalCeldas = inicioSemana + ultimoDia;
@@ -115,7 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const d = new Date(year, month, dia);
             const fechaStr = `${year}-${pad(month + 1)}-${pad(d.getDate())}`;
             const esOtroMes = d.getMonth() !== month;
-            const esHoy = d.getTime() === hoy.getTime();
+            const esHoy = !esOtroMes
+                && d.getFullYear() === hoyBogota.year
+                && (d.getMonth() + 1) === hoyBogota.month
+                && d.getDate() === hoyBogota.day;
             const eventos = esOtroMes ? [] : (actividadesMap[fechaStr] || []);
             html += `<div class="calendario-celda${esOtroMes ? ' otro-mes' : ''}${esHoy ? ' hoy' : ''}" data-fecha="${esOtroMes ? '' : fechaStr}">`;
             html += `<div class="dia-num">${esOtroMes ? '' : d.getDate()}</div>`;
@@ -450,9 +463,9 @@ document.addEventListener('DOMContentLoaded', () => {
     bindExportLink('btnDescargarPdf', 'pdf');
     bindExportLink('btnDescargarCsv', 'csv');
 
-    const hoy = new Date();
-    anoActual = String(hoy.getFullYear());
-    mesActual = String(hoy.getMonth() + 1);
+    const hoy = bogotaHoy();
+    anoActual = String(hoy.year);
+    mesActual = String(hoy.month);
 
     setupFilters();
 

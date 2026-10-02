@@ -2220,13 +2220,18 @@ final class AoatController
                 $rowsHtml .= '<td>' . $esc($value ?? 'No aplica') . '</td>';
             }
 
-            $rowsHtml .= '</tr>';
+            $rowsHtml .= '<td></td><td></td><td></td><td></td></tr>';
         }
 
+        $signatureHeaders = ['FECHA', 'NOMBRE FUNCIONARIO QUE CERTIFICA', 'CARGO', 'FIRMA'];
         $headerHtml = '<th>ID</th><th>Periodo</th><th>Fecha actividad</th><th>Profesional</th><th>Rol</th><th>Subregión</th><th>Municipio</th><th>Actividad</th><th>Estado AoAT</th><th>Motivo auditoría</th><th>Observación auditoría</th><th>Número AoAT</th><th>Con quién realizó</th>';
         foreach ($fieldLabels as $fieldLabel) {
             $headerHtml .= '<th>' . $esc($fieldLabel) . '</th>';
         }
+        foreach ($signatureHeaders as $signatureHeader) {
+            $headerHtml .= '<th>' . $esc($signatureHeader) . '</th>';
+        }
+        $exportColumnCount = 13 + count($fieldLabels) + count($signatureHeaders);
 
         return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Registro AoAT</title>'
             . '<style>'
@@ -2261,7 +2266,7 @@ final class AoatController
             . '<table><thead><tr>'
             . $headerHtml
             . '</tr></thead><tbody>'
-            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="24">Sin registros.</td></tr>')
+            . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="' . $exportColumnCount . '">Sin registros.</td></tr>')
             . '</tbody></table>'
             . '<p class="footer">Documento generado automáticamente desde la plataforma Equipo de Promoción y Prevención.</p>'
             . '</div></div></body></html>';

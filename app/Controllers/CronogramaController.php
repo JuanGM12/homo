@@ -439,9 +439,8 @@ final class CronogramaController
             $errors[] = 'Indica la población atendida.';
         }
 
-        $allowedTemas = array_column($this->topicOptionsForUserId($userId, $payload['professional_role']), 'value');
-        $allowedTemas[] = 'Otro';
-        if ($payload['tema'] !== '' && !in_array($payload['tema'], $allowedTemas, true)) {
+        if ($payload['tema'] !== '' && $payload['tema'] !== 'Otro'
+            && !QualificationCatalog::topicValueAllowed((string) $payload['professional_role'], $payload['tema'])) {
             $errors[] = 'El tema seleccionado no es válido para tu rol.';
         }
 

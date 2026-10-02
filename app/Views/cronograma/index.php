@@ -167,10 +167,25 @@ if (!is_string($professionalsJson) || $professionalsJson === '') {
                             <label class="form-label small" for="actTema">Tema <span class="text-danger">*</span></label>
                             <select name="tema" id="actTema" class="form-select form-select-sm" required>
                                 <option value="">Seleccione el tema</option>
-                                <?php foreach ($topicOptions as $topic): ?>
-                                    <option value="<?= htmlspecialchars((string) $topic['value'], ENT_QUOTES, 'UTF-8') ?>">
-                                        <?= htmlspecialchars((string) $topic['label'], ENT_QUOTES, 'UTF-8') ?>
-                                    </option>
+                                <?php
+                                $topicGroups = [];
+                                foreach ($topicOptions as $topic) {
+                                    $group = trim((string) ($topic['group'] ?? ''));
+                                    $topicGroups[$group][] = $topic;
+                                }
+                                ?>
+                                <?php foreach ($topicGroups as $group => $topics): ?>
+                                    <?php if ($group !== ''): ?>
+                                        <optgroup label="<?= htmlspecialchars($group, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php endif; ?>
+                                    <?php foreach ($topics as $topic): ?>
+                                        <option value="<?= htmlspecialchars((string) $topic['value'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars((string) $topic['label'], ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                    <?php if ($group !== ''): ?>
+                                        </optgroup>
+                                    <?php endif; ?>
                                 <?php endforeach; ?>
                                 <option value="Otro">Otro</option>
                             </select>

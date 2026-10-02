@@ -330,14 +330,63 @@ final class QualificationCatalog
     }
 
     /**
-     * Temas planos del catálogo de un rol (para Cronograma). Omite «No aplica».
+     * Temas del catálogo de un rol (para Cronograma), agrupados por sección.
+     * Omite «No aplica». El valor guardado es el enunciado completo: «Módulo 1»
+     * se repite en varias secciones y no puede usarse solo.
      *
-     * @return list<array{value: string, label: string}>
+     * @return list<array{value: string, label: string, group: string}>
      */
     public static function topicOptionsForRole(string $role): array
     {
         $seen = [];
         $out = [];
+        foreach (self::sectionsForRole($role) as $section) {
+            $group = trim((string) ($section['title'] ?? ''));
+            foreach ((array) ($section['options'] ?? []) as $option) {
+                if (!is_array($option)) {
+                    continue;
+                }
+                $value = trim((string) ($option['value'] ?? ''));
+                $label = trim((string) ($option['label'] ?? $value));
+                if (
+                    $value === ''
+                    || strcasecmp($value, 'No aplica') === 0
+                    || strcasecmp($label, 'No aplica') === 0
+                ) {
+                    continue;
+                }
+                $display = $label !== '' ? $label : $value;
+                if (isset($seen[$display])) {
+                    continue;
+                }
+                $seen[$display] = true;
+                $out[] = [
+                    'value' => $display,
+                    'label' => $display,
+                    'group' => $group,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Acepta el enunciado completo y también el valor corto histórico (p. ej. «Módulo 1»).
+     */
+    public static function topicValueAllowed(string $role, string $stored): bool
+    {
+        $stored = trim($stored);
+        if ($stored === '' || strcasecmp($stored, 'Otro') === 0) {
+            return $stored !== '';
+        }
+
+        foreach (self::topicOptionsForRole($role) as $option) {
+            if ($stored === $option['value'] || $stored === $option['label']) {
+                return true;
+            }
+        }
+
         foreach (self::sectionsForRole($role) as $section) {
             foreach ((array) ($section['options'] ?? []) as $option) {
                 if (!is_array($option)) {
@@ -345,21 +394,13 @@ final class QualificationCatalog
                 }
                 $value = trim((string) ($option['value'] ?? ''));
                 $label = trim((string) ($option['label'] ?? $value));
-                if ($value === '' || strcasecmp($value, 'No aplica') === 0) {
-                    continue;
+                if ($stored === $value || $stored === $label) {
+                    return strcasecmp($value, 'No aplica') !== 0;
                 }
-                if (isset($seen[$value])) {
-                    continue;
-                }
-                $seen[$value] = true;
-                $out[] = [
-                    'value' => $value,
-                    'label' => $label !== '' ? $label : $value,
-                ];
             }
         }
 
-        return $out;
+        return false;
     }
 
     /**
