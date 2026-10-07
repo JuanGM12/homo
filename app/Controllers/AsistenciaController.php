@@ -154,7 +154,7 @@ final class AsistenciaController
         $filters = $context['filters'];
         $advisors = $context['advisors'];
 
-        $records = $this->repo->findActivitiesForInforme(array_filter($filters, static function (mixed $v): bool {
+        $records = $this->repo->findWithFilters(array_filter($filters, static function (mixed $v): bool {
             if (is_array($v)) {
                 return $v !== [];
             }
