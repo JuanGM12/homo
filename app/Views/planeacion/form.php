@@ -82,6 +82,26 @@ $formReadOnly = !empty($formReadOnly);
                             <input type="text" class="form-control" value="<?= htmlspecialchars((string) $role, ENT_QUOTES, 'UTF-8') ?>" disabled>
                         </div>
                     </div>
+                    <?php
+                    $editorName = trim((string) ($professional['name'] ?? ''));
+                    $storedOriginal = is_array($plan ?? null) ? trim((string) ($plan['original_professional_name'] ?? '')) : '';
+                    $storedCurrent = is_array($plan ?? null) ? trim((string) ($plan['professional_name'] ?? '')) : '';
+                    $originalProfessional = '';
+                    if ($storedOriginal !== '' && strcasecmp($storedOriginal, $editorName) !== 0) {
+                        $originalProfessional = $storedOriginal;
+                    } elseif ($storedCurrent !== '' && strcasecmp($storedCurrent, $editorName) !== 0) {
+                        $originalProfessional = $storedCurrent;
+                    }
+                    $willTakeOwnership = $originalProfessional !== '' && strcasecmp($storedCurrent, $editorName) !== 0;
+                    ?>
+                    <?php if ($originalProfessional !== ''): ?>
+                        <div class="alert alert-light border small mb-0 mt-3">
+                            Profesional original: <strong><?= htmlspecialchars($originalProfessional, ENT_QUOTES, 'UTF-8') ?></strong>.
+                            <?php if ($willTakeOwnership && empty($formReadOnly)): ?>
+                                Al guardar, el plan queda a tu nombre y ese dato se conserva en el detalle.
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                         <div class="app-form-section mb-4">

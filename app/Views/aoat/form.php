@@ -31,6 +31,7 @@ $numberOnlyEdit = $isEdit && in_array($currentState, ['Aprobada', 'Realizado'], 
 $periodReadOnly = !empty($readOnly);
 $formReadOnly = $numberOnlyEdit || $periodReadOnly;
 $lockNonNumberFields = $formReadOnly;
+$activityDateMax = (new DateTimeImmutable('now', new DateTimeZone('America/Bogota')))->format('Y-m-d');
 ?>
 
 <section class="mb-4">
@@ -121,10 +122,15 @@ $lockNonNumberFields = $formReadOnly;
                                     name="activity_date"
                                     class="form-control"
                                     min="2026-01-01"
+                                    max="<?= htmlspecialchars($activityDateMax, ENT_QUOTES, 'UTF-8') ?>"
                                     value="<?= htmlspecialchars((string) ($oldPayload['activity_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     required
                                     aria-describedby="activity-date-help"
+                                    <?= $lockNonNumberFields ? 'disabled' : '' ?>
                                 >
+                                <div class="form-text" id="activity-date-help">
+                                    No puede ser posterior a hoy (<?= htmlspecialchars((new DateTimeImmutable($activityDateMax))->format('d/m/Y'), ENT_QUOTES, 'UTF-8') ?>).
+                                </div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Actividad que realizó <span class="text-danger">*</span></label>

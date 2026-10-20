@@ -1535,6 +1535,7 @@
     const buildPlanDetailHtml = (plan) => {
         const year = plan.year || '';
         const professional = plan.professional || '';
+        const originalProfessional = plan.original_professional || '';
         const professionalRole = plan.professional_role || '';
         const subregion = plan.subregion || '';
         const municipality = plan.municipality || '';
@@ -1552,6 +1553,9 @@
             <div class="plan-detail-header">
                 <p class="plan-detail-meta"><strong>Año:</strong> ${escapeHtml(year)}</p>
                 <p class="plan-detail-meta"><strong>Asesor:</strong> ${escapeHtml(professional || 'Sin nombre')}</p>
+                ${originalProfessional && String(originalProfessional).trim() !== '' && String(originalProfessional).trim().toLowerCase() !== String(professional || '').trim().toLowerCase()
+                    ? `<p class="plan-detail-meta"><strong>Profesional original:</strong> ${escapeHtml(originalProfessional)}</p>`
+                    : ''}
                 <p class="plan-detail-meta"><strong>Subregion:</strong> ${escapeHtml(subregion)}</p>
                 <p class="plan-detail-meta"><strong>Rol:</strong> ${escapeHtml(professionalRole || 'Sin rol')}</p>
                 <p class="plan-detail-meta"><strong>Municipio:</strong> ${escapeHtml(municipality)}</p>
@@ -1653,6 +1657,9 @@
         let html = `<div class="training-detail-shell">
             <div class="training-detail-header">
                 <p class="training-detail-meta"><strong>Profesional:</strong> ${escapeHtml(data.professional || 'Sin nombre')}</p>
+                ${data.original_professional && String(data.original_professional).trim() !== '' && String(data.original_professional).trim().toLowerCase() !== String(data.professional || '').trim().toLowerCase()
+                    ? `<p class="training-detail-meta"><strong>Profesional original:</strong> ${escapeHtml(data.original_professional)}</p>`
+                    : ''}
                 <p class="training-detail-meta"><strong>Correo:</strong> ${escapeHtml(data.email || 'Sin correo')}</p>
                 <p class="training-detail-meta"><strong>Periodo:</strong> ${escapeHtml(data.period || 'Sin periodo')}</p>
                 <p class="training-detail-meta"><strong>Subregion:</strong> ${escapeHtml(data.subregion || '')}</p>

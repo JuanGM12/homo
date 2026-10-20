@@ -58,19 +58,74 @@ final class EntrenamientoPlanRepository
     {
         $pdo = Connection::getPdo();
 
-        $sql = 'UPDATE entrenamiento_plans
-                SET subregion = :subregion,
-                    municipality = :municipality,
-                    payload = :payload
-                WHERE id = :id';
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
+        $assignments = [
+            'subregion = :subregion',
+            'municipality = :municipality',
+            'payload = :payload',
+        ];
+        $params = [
             ':subregion' => $data['subregion'],
             ':municipality' => $data['municipality'],
             ':payload' => $data['payload'],
             ':id' => $id,
-        ]);
+        ];
+
+        foreach ([
+            'user_id',
+            'professional_name',
+            'professional_email',
+            'original_user_id',
+            'original_professional_name',
+            'original_professional_email',
+        ] as $column) {
+            if (!array_key_exists($column, $data)) {
+                continue;
+            }
+            $assignments[] = $column . ' = :' . $column;
+            $params[':' . $column] = $data[$column];
+        }
+
+        $sql = 'UPDATE entrenamiento_plans SET ' . implode(', ', $assignments) . ' WHERE id = :id';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    /**
+     * Planes propios más los de los municipios actualmente asignados.
+     *
+     * @param array<int, array{subregion?:string, municipality?:string}> $territories
+     * @return array<int, array<string, mixed>>
+     */
+    public function findForUserAndAssignedMunicipalities(int $userId, array $territories): array
+    {
+        $pdo = Connection::getPdo();
+        $params = [':user_id' => $userId];
+        $territoryClauses = [];
+
+        foreach ($territories as $index => $row) {
+            $subregion = trim((string) ($row['subregion'] ?? ''));
+            $municipality = trim((string) ($row['municipality'] ?? ''));
+            if ($subregion === '' || $municipality === '') {
+                continue;
+            }
+
+            $subKey = ':sub' . $index;
+            $munKey = ':mun' . $index;
+            $territoryClauses[] = '(ep.subregion = ' . $subKey . ' AND ep.municipality = ' . $munKey . ')';
+            $params[$subKey] = $subregion;
+            $params[$munKey] = $municipality;
+        }
+
+        $where = 'WHERE ep.user_id = :user_id';
+        if ($territoryClauses !== []) {
+            $where .= ' OR (' . implode(' OR ', $territoryClauses) . ')';
+        }
+        $where .= ' ORDER BY ep.created_at DESC';
+
+        $stmt = $pdo->prepare($this->selectSql($where));
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function findForUser(int $userId): array

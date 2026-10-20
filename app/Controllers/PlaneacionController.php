@@ -289,6 +289,7 @@ final class PlaneacionController
         $lines[] = implode(';', [
             'Año',
             'Profesional',
+            'Profesional original',
             'Rol',
             'Subregión',
             'Municipio',
@@ -301,6 +302,7 @@ final class PlaneacionController
             $row = [
                 (string) ($exportRow['year'] ?? ''),
                 (string) ($exportRow['professional'] ?? ''),
+                (string) ($exportRow['original'] ?? ''),
                 (string) ($exportRow['role'] ?? ''),
                 (string) ($exportRow['subregion'] ?? ''),
                 (string) ($exportRow['municipality'] ?? ''),
@@ -426,7 +428,7 @@ final class PlaneacionController
 
                 $rowsHtml .= '<tr>'
                     . '<td>' . $esc((string) ($plan['plan_year'] ?? '')) . '</td>'
-                    . '<td>' . $esc((string) ($plan['professional_name'] ?? '')) . '</td>'
+                    . '<td>' . $this->professionalExportCell($esc, (string) ($plan['professional_name'] ?? ''), (string) ($plan['original_professional_name'] ?? '')) . '</td>'
                     . '<td>' . $esc((string) ($plan['professional_role'] ?? '')) . '</td>'
                     . '<td>' . $esc((string) ($plan['subregion'] ?? '')) . '</td>'
                     . '<td>' . $esc((string) ($plan['municipality'] ?? '')) . '</td>'
@@ -503,6 +505,7 @@ final class PlaneacionController
                 $groupedRows[$groupKey] = [
                     'year' => (string) ($row['year'] ?? ''),
                     'professional' => (string) ($row['professional'] ?? ''),
+                    'original' => (string) ($row['original'] ?? ''),
                     'role' => (string) ($row['role'] ?? ''),
                     'subregion' => (string) ($row['subregion'] ?? ''),
                     'municipality' => (string) ($row['municipality'] ?? ''),
@@ -535,6 +538,9 @@ final class PlaneacionController
                 . ' | <strong>Rol:</strong> ' . $esc((string) $group['role'])
                 . ' | <strong>Subregión:</strong> ' . $esc((string) $group['subregion'])
                 . ' | <strong>Municipio:</strong> ' . $esc((string) $group['municipality'])
+                . ((string) ($group['original'] ?? '') !== ''
+                    ? ' | <strong>Profesional original:</strong> ' . $esc((string) $group['original'])
+                    : '')
                 . '</div>'
                 . $monthsHtml
                 . '</div>';
@@ -602,6 +608,7 @@ final class PlaneacionController
                 $rows[] = [
                     'year' => (string) ($plan['plan_year'] ?? ''),
                     'professional' => (string) ($plan['professional_name'] ?? ''),
+                    'original' => $this->originalProfessionalLabel($plan),
                     'role' => (string) ($plan['professional_role'] ?? ''),
                     'subregion' => (string) ($plan['subregion'] ?? ''),
                     'municipality' => (string) ($plan['municipality'] ?? ''),
@@ -649,7 +656,7 @@ final class PlaneacionController
         foreach ($exportRows as $row) {
             $rowsHtml .= '<tr>'
                 . '<td>' . $esc((string) ($row['year'] ?? '')) . '</td>'
-                . '<td>' . $esc((string) ($row['professional'] ?? '')) . '</td>'
+                . '<td>' . $this->professionalExportCell($esc, (string) ($row['professional'] ?? ''), (string) ($row['original'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['role'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['subregion'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($row['municipality'] ?? '')) . '</td>'
@@ -720,6 +727,7 @@ final class PlaneacionController
         }
 
         $isCoordinator = $this->userIsCoordinator($user);
+        $isCurrentOwner = (int) ($plan['user_id'] ?? 0) === (int) $user['id'];
         $formReadOnly = $isCoordinator;
         if (!$isCoordinator) {
             if (!$this->userCanCreateOwnRecord($user) || !$this->userCanEditPlan($user, $plan)) {
@@ -743,13 +751,22 @@ final class PlaneacionController
             }
         }
 
-        $professional = [
-            'id' => $plan['user_id'] ?? $user['id'],
-            'name' => (string) (($plan['professional_name'] ?? '') !== '' ? $plan['professional_name'] : $user['name']),
-            'email' => (string) (($plan['professional_email'] ?? '') !== '' ? $plan['professional_email'] : $user['email']),
-        ];
+        $takingOwnership = !$formReadOnly && !$isCurrentOwner;
+        $professional = $takingOwnership
+            ? [
+                'id' => $user['id'],
+                'name' => (string) $user['name'],
+                'email' => (string) $user['email'],
+            ]
+            : [
+                'id' => $plan['user_id'] ?? $user['id'],
+                'name' => (string) (($plan['professional_name'] ?? '') !== '' ? $plan['professional_name'] : $user['name']),
+                'email' => (string) (($plan['professional_email'] ?? '') !== '' ? $plan['professional_email'] : $user['email']),
+            ];
         $oldInput = $this->consumeOldInput('edit', $id);
-        $planRole = trim((string) ($plan['professional_role'] ?? ''));
+        $planRole = $takingOwnership
+            ? (string) (($user['roles'] ?? [])[0] ?? ($user['role'] ?? ''))
+            : trim((string) ($plan['professional_role'] ?? ''));
 
         return Response::view('planeacion/form', [
             'pageTitle' => $formReadOnly ? 'Consultar planeación anual' : 'Editar planeación anual',
@@ -834,17 +851,20 @@ final class PlaneacionController
             return Response::redirect('/planeacion/editar?id=' . $id);
         }
 
-        $this->repository->update($id, [
+        $ownership = $this->ownershipTransferFields($user, $plan);
+        $this->repository->update($id, array_merge([
             'subregion' => $subregion,
             'municipality' => $municipality,
             'plan_year' => $planYear,
             'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
-        ]);
+        ], $ownership));
 
         Flash::set([
             'type' => 'success',
             'title' => 'Planeación actualizada',
-            'message' => 'La planeación anual de capacitaciones se ha actualizado correctamente.',
+            'message' => $ownership === []
+                ? 'La planeación anual de capacitaciones se ha actualizado correctamente.'
+                : 'La planeación quedó a tu nombre. El profesional que la registró se conserva en el detalle.',
         ]);
         $this->clearOldInput();
 
@@ -1067,6 +1087,7 @@ final class PlaneacionController
 
             $haystack = implode(' ', [
                 (string) ($row['professional_name'] ?? ''),
+                (string) ($row['original_professional_name'] ?? ''),
                 (string) ($row['professional_role'] ?? ''),
                 (string) ($row['subregion'] ?? ''),
                 (string) ($row['municipality'] ?? ''),
@@ -1205,6 +1226,67 @@ final class PlaneacionController
     /**
      * @return array<int, array{subregion:string, municipality:string}>
      */
+    /**
+     * Si quien guarda no es el profesional del registro, el plan pasa a su nombre
+     * y el anterior queda como profesional original (solo la primera vez).
+     *
+     * @param array<string, mixed> $user
+     * @param array<string, mixed> $plan
+     * @return array<string, mixed>
+     */
+    private function ownershipTransferFields(array $user, array $plan): array
+    {
+        $editorId = (int) ($user['id'] ?? 0);
+        $ownerId = (int) ($plan['user_id'] ?? 0);
+        if ($editorId <= 0 || $editorId === $ownerId) {
+            return [];
+        }
+
+        $fields = [
+            'user_id' => $editorId,
+            'professional_name' => (string) ($user['name'] ?? ''),
+            'professional_email' => (string) ($user['email'] ?? ''),
+            'professional_role' => (string) (($user['roles'] ?? [])[0] ?? ($user['role'] ?? '')),
+        ];
+
+        if ((int) ($plan['original_user_id'] ?? 0) <= 0) {
+            $fields['original_user_id'] = $ownerId > 0 ? $ownerId : null;
+            $fields['original_professional_name'] = (string) ($plan['professional_name'] ?? '');
+            $fields['original_professional_email'] = (string) ($plan['professional_email'] ?? '');
+            $fields['original_professional_role'] = (string) ($plan['professional_role'] ?? '');
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @param array<string, mixed> $plan
+     */
+    private function originalProfessionalLabel(array $plan): string
+    {
+        $original = trim((string) ($plan['original_professional_name'] ?? ''));
+        $current = trim((string) ($plan['professional_name'] ?? ''));
+        if ($original === '' || strcasecmp($original, $current) === 0) {
+            return '';
+        }
+
+        return $original;
+    }
+
+    /**
+     * @param callable(string): string $esc
+     */
+    private function professionalExportCell(callable $esc, string $current, string $original): string
+    {
+        $html = $esc($current);
+        $original = trim($original);
+        if ($original !== '' && strcasecmp($original, trim($current)) !== 0) {
+            $html .= '<br><span style="color:#58708b;">Original: ' . $esc($original) . '</span>';
+        }
+
+        return $html;
+    }
+
     private function municipalitiesAssignedToUser(int $userId): array
     {
         return UserMunicipalities::assignedTo($userId);

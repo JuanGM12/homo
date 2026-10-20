@@ -57,14 +57,17 @@ final class EntrenamientoController
         $sort = trim((string) $request->input('sort', 'created_at'));
         $dir = strtolower(trim((string) $request->input('dir', 'desc')));
         $currentPage = max(1, (int) $request->input('page', 1));
+        $assignedMunicipalities = UserMunicipalities::assignedTo((int) $user['id']);
 
         if ($isAuditView) {
             $records = $this->repository->findForAudit($this->resolveAuditRoles($user));
-        } else {
+        } elseif ($assignedMunicipalities === []) {
             $records = $this->repository->findForUser((int) $user['id']);
+        } else {
+            $records = $this->repository->findForUserAndAssignedMunicipalities((int) $user['id'], $assignedMunicipalities);
         }
 
-        if (!$canViewAll) {
+        if (!$canViewAll && $assignedMunicipalities === []) {
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
@@ -74,7 +77,7 @@ final class EntrenamientoController
         $paginatedRecords = $pagination['items'];
 
         if ((string) $request->input('partial', '') === 'results') {
-            $html = $this->renderResultsPartial($paginatedRecords, $pagination, $isAuditView, $user);
+            $html = $this->renderResultsPartial($paginatedRecords, $pagination, $isAuditView, $user, $assignedMunicipalities);
 
             return Response::json(['html' => $html]);
         }
@@ -85,6 +88,7 @@ final class EntrenamientoController
             'pagination' => $pagination,
             'isAuditView' => $isAuditView,
             'canCreateOwnRecord' => $this->userCanCreateOwnRecord($user),
+            'assignedMunicipalities' => $assignedMunicipalities,
             'periodOptions' => $periodOptions,
             'activePeriod' => $activePeriod,
             'filterPeriod' => $periodFilter,
@@ -181,9 +185,8 @@ final class EntrenamientoController
             return Response::redirect('/entrenamiento');
         }
 
-        $isOwner = (int) ($plan['user_id'] ?? 0) === (int) $user['id'];
         $isCoordinator = $this->userIsCoordinator($user);
-        if (!$isOwner && !$isCoordinator) {
+        if (!$this->userCanViewPlan($user, $plan)) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
@@ -192,10 +195,10 @@ final class EntrenamientoController
             return Response::redirect('/entrenamiento');
         }
 
-        $readOnly = $isCoordinator || empty($plan['editable']) || !$this->isRecordInActivePeriod($plan);
-        $professional = $isOwner && !$isCoordinator
-            ? $this->professionalFromUser($user)
-            : $this->professionalFromPlan($plan, $user);
+        $readOnly = $isCoordinator || empty($plan['editable']) || !$this->isRecordInActivePeriod($plan) || !$this->userCanEditPlan($user, $plan);
+        $professional = $readOnly
+            ? $this->professionalFromPlan($plan, $user)
+            : $this->professionalFromUser($user);
 
         return Response::view('entrenamiento/form', [
             'pageTitle' => $readOnly ? 'Consultar plan de entrenamiento' : 'Editar plan de entrenamiento',
@@ -223,7 +226,7 @@ final class EntrenamientoController
         }
 
         $plan = $this->repository->findById($id);
-        if (!$plan || (int) $plan['user_id'] !== (int) $user['id']) {
+        if (!$plan || !$this->userCanEditPlan($user, $plan)) {
             Flash::set([
                 'type' => 'error',
                 'title' => 'No autorizado',
@@ -264,16 +267,19 @@ final class EntrenamientoController
             return Response::redirect('/entrenamiento/editar?id=' . $id);
         }
 
-        $this->repository->update($id, [
+        $ownership = $this->ownershipTransferFields($user, $plan);
+        $this->repository->update($id, array_merge([
             'subregion' => $subregion,
             'municipality' => $municipality,
             'payload' => json_encode($this->buildPlanPayload($request, $role), JSON_UNESCAPED_UNICODE),
-        ]);
+        ], $ownership));
 
         Flash::set([
             'type' => 'success',
             'title' => 'Plan actualizado',
-            'message' => 'El plan de entrenamiento se ha actualizado correctamente.',
+            'message' => $ownership === []
+                ? 'El plan de entrenamiento se ha actualizado correctamente.'
+                : 'El plan quedó a tu nombre. El profesional que lo registró se conserva en el detalle.',
         ]);
         return Response::redirect('/entrenamiento');
     }
@@ -304,6 +310,7 @@ final class EntrenamientoController
             'Fecha registro',
             'Periodo',
             'Nombre',
+            'Profesional original',
             'Subregión',
             'Municipio',
             'Cualificación',
@@ -337,6 +344,7 @@ final class EntrenamientoController
                 (string) ($plan['created_at'] ?? ''),
                 (string) ($plan['period_name'] ?? ''),
                 (string) ($plan['professional_name'] ?? ''),
+                $this->originalProfessionalLabel($plan),
                 (string) ($plan['subregion'] ?? ''),
                 (string) ($plan['municipality'] ?? ''),
                 implode(' || ', $qualificationParts),
@@ -457,14 +465,17 @@ final class EntrenamientoController
     {
         $canViewAll = Auth::canViewAllModuleRecords($user);
         $isAuditView = $canViewAll;
+        $assignedMunicipalities = UserMunicipalities::assignedTo((int) $user['id']);
 
         if ($isAuditView) {
             $records = $this->repository->findForAudit($this->resolveAuditRoles($user));
-        } else {
+        } elseif ($assignedMunicipalities === []) {
             $records = $this->repository->findForUser((int) $user['id']);
+        } else {
+            $records = $this->repository->findForUserAndAssignedMunicipalities((int) $user['id'], $assignedMunicipalities);
         }
 
-        if (!$canViewAll) {
+        if (!$canViewAll && $assignedMunicipalities === []) {
             $records = Auth::scopeRowsToOwnerUser($records, (int) $user['id']);
         }
 
@@ -547,12 +558,15 @@ final class EntrenamientoController
 
             $name = (string) ($plan['professional_name'] ?? '');
             $email = (string) ($plan['professional_email'] ?? '');
+            $original = $this->originalProfessionalLabel($plan);
             $stateLabel = !empty($plan['editable']) ? 'Editable' : 'Aprobado';
 
             $rows .= '<tr>'
                 . '<td>' . $esc($createdFmt) . '</td>'
                 . '<td>' . $esc((string) ($plan['period_name'] ?? 'Sin periodo')) . '</td>'
-                . '<td><strong>' . $esc($name) . '</strong><br><span class="sub">' . $esc($email) . '</span></td>'
+                . '<td><strong>' . $esc($name) . '</strong><br><span class="sub">' . $esc($email) . '</span>'
+                . ($original !== '' ? '<br><span class="sub">Original: ' . $esc($original) . '</span>' : '')
+                . '</td>'
                 . '<td>' . $esc((string) ($plan['subregion'] ?? '')) . '</td>'
                 . '<td>' . $esc((string) ($plan['municipality'] ?? '')) . '</td>'
                 . '<td>' . $esc($stateLabel) . '</td>'
@@ -608,6 +622,107 @@ final class EntrenamientoController
             . $rows
             . '</tbody></table>'
             . '</body></html>';
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @param array<string, mixed> $plan
+     */
+    private function userCanViewPlan(array $user, array $plan): bool
+    {
+        if ($this->userIsCoordinator($user) || Auth::canViewAllModuleRecords($user)) {
+            return true;
+        }
+
+        if ((int) ($plan['user_id'] ?? 0) === (int) ($user['id'] ?? 0)) {
+            return true;
+        }
+
+        return $this->userHasAssignedMunicipality(
+            (int) ($user['id'] ?? 0),
+            (string) ($plan['subregion'] ?? ''),
+            (string) ($plan['municipality'] ?? '')
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @param array<string, mixed> $plan
+     */
+    private function userCanEditPlan(array $user, array $plan): bool
+    {
+        if (!$this->userCanCreateOwnRecord($user)) {
+            return false;
+        }
+
+        if ((int) ($plan['user_id'] ?? 0) === (int) ($user['id'] ?? 0)) {
+            return true;
+        }
+
+        return $this->userHasAssignedMunicipality(
+            (int) ($user['id'] ?? 0),
+            (string) ($plan['subregion'] ?? ''),
+            (string) ($plan['municipality'] ?? '')
+        );
+    }
+
+    private function userHasAssignedMunicipality(int $userId, string $subregion, string $municipality): bool
+    {
+        $subregion = trim($subregion);
+        $municipality = trim($municipality);
+        if ($subregion === '' || $municipality === '') {
+            return false;
+        }
+
+        foreach (UserMunicipalities::assignedTo($userId) as $row) {
+            if ($row['subregion'] === $subregion && $row['municipality'] === $municipality) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @param array<string, mixed> $plan
+     * @return array<string, mixed>
+     */
+    private function ownershipTransferFields(array $user, array $plan): array
+    {
+        $editorId = (int) ($user['id'] ?? 0);
+        $ownerId = (int) ($plan['user_id'] ?? 0);
+        if ($editorId <= 0 || $editorId === $ownerId) {
+            return [];
+        }
+
+        $fields = [
+            'user_id' => $editorId,
+            'professional_name' => (string) ($user['name'] ?? ''),
+            'professional_email' => (string) ($user['email'] ?? ''),
+        ];
+
+        if ((int) ($plan['original_user_id'] ?? 0) <= 0) {
+            $fields['original_user_id'] = $ownerId > 0 ? $ownerId : null;
+            $fields['original_professional_name'] = (string) ($plan['professional_name'] ?? '');
+            $fields['original_professional_email'] = (string) ($plan['professional_email'] ?? '');
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @param array<string, mixed> $plan
+     */
+    private function originalProfessionalLabel(array $plan): string
+    {
+        $original = trim((string) ($plan['original_professional_name'] ?? ''));
+        $current = trim((string) ($plan['professional_name'] ?? ''));
+        if ($original === '' || strcasecmp($original, $current) === 0) {
+            return '';
+        }
+
+        return $original;
     }
 
     private function userIsCoordinator(array $user): bool
@@ -791,6 +906,7 @@ final class EntrenamientoController
 
             $haystack = implode(' ', [
                 (string) ($row['professional_name'] ?? ''),
+                (string) ($row['original_professional_name'] ?? ''),
                 (string) ($row['subregion'] ?? ''),
                 (string) ($row['municipality'] ?? ''),
                 (string) ($row['professional_email'] ?? ''),
@@ -805,10 +921,11 @@ final class EntrenamientoController
      * @param array<string, mixed> $pagination
      * @param array<string, mixed> $user
      */
-    private function renderResultsPartial(array $records, array $pagination, bool $isAuditView, array $user): string
+    private function renderResultsPartial(array $records, array $pagination, bool $isAuditView, array $user, array $assignedMunicipalities = []): string
     {
         $isAuditViewLocal = $isAuditView;
         $currentUser = $user;
+        $canCreateOwnRecord = $this->userCanCreateOwnRecord($user);
 
         ob_start();
         require dirname(__DIR__) . '/Views/entrenamiento/_results.php';

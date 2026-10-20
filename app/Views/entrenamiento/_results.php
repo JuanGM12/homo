@@ -12,6 +12,27 @@ $to = (int) ($pagination['to'] ?? 0);
 $currentSort = (string) ($_GET['sort'] ?? 'created_at');
 $currentDir = strtolower((string) ($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 $userId = (int) ($currentUser['id'] ?? 0);
+$canCreateOwnRecord = (bool) ($canCreateOwnRecord ?? false);
+$assignedMunicipalities = is_array($assignedMunicipalities ?? null) ? $assignedMunicipalities : [];
+$planBelongsToAssignedMunicipality = static function (array $plan) use ($assignedMunicipalities): bool {
+    $subregion = trim((string) ($plan['subregion'] ?? ''));
+    $municipality = trim((string) ($plan['municipality'] ?? ''));
+    if ($subregion === '' || $municipality === '') {
+        return false;
+    }
+
+    foreach ($assignedMunicipalities as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        if (trim((string) ($row['subregion'] ?? '')) === $subregion
+            && trim((string) ($row['municipality'] ?? '')) === $municipality) {
+            return true;
+        }
+    }
+
+    return false;
+};
 $isAdmin = in_array('admin', $currentUser['roles'] ?? [], true);
 $isCoordinator = in_array('coordinador', $currentUser['roles'] ?? [], true)
     || in_array('coordinadora', $currentUser['roles'] ?? [], true);
@@ -133,6 +154,7 @@ if ($totalPages <= 7) {
 
                     $trainingDetail = [
                         'professional' => (string) ($plan['professional_name'] ?? ''),
+                        'original_professional' => (string) ($plan['original_professional_name'] ?? ''),
                         'email' => (string) ($plan['professional_email'] ?? ''),
                         'period' => (string) ($plan['period_name'] ?? 'Sin periodo'),
                         'subregion' => (string) ($plan['subregion'] ?? ''),
@@ -181,6 +203,13 @@ if ($totalPages <= 7) {
                                         <?= htmlspecialchars((string) $plan['professional_email'], ENT_QUOTES, 'UTF-8') ?>
                                     </span>
                                 <?php endif; ?>
+                                <?php
+                                $originalProfessional = trim((string) ($plan['original_professional_name'] ?? ''));
+                                $currentProfessional = trim((string) ($plan['professional_name'] ?? ''));
+                                ?>
+                                <?php if ($originalProfessional !== '' && strcasecmp($originalProfessional, $currentProfessional) !== 0): ?>
+                                    <span class="entrenamiento-professional-role">Original: <?= htmlspecialchars($originalProfessional, ENT_QUOTES, 'UTF-8') ?></span>
+                                <?php endif; ?>
                             </div>
                         </td>
                         <td class="entrenamiento-cell-strong"><?= htmlspecialchars((string) ($plan['subregion'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
@@ -203,7 +232,11 @@ if ($totalPages <= 7) {
                                 </button>
                                 <?php
                                 $inActivePeriod = !empty($plan['period_active']);
-                                $canEditPlan = !empty($plan['editable']) && $isOwner && $inActivePeriod && !$isCoordinator;
+                                $canEditPlan = !empty($plan['editable'])
+                                    && $inActivePeriod
+                                    && !$isCoordinator
+                                    && $canCreateOwnRecord
+                                    && ($isOwner || $planBelongsToAssignedMunicipality($plan));
                                 $canViewPlan = ($isOwner && !$canEditPlan) || $isCoordinator;
                                 ?>
                                 <?php if ($canEditPlan): ?>

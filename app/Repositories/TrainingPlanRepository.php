@@ -55,21 +55,40 @@ final class TrainingPlanRepository
     {
         $pdo = Connection::getPdo();
 
-        $sql = 'UPDATE training_plans
-                SET subregion = :subregion,
-                    municipality = :municipality,
-                    plan_year = :plan_year,
-                    payload = :payload
-                WHERE id = :id';
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
+        $assignments = [
+            'subregion = :subregion',
+            'municipality = :municipality',
+            'plan_year = :plan_year',
+            'payload = :payload',
+        ];
+        $params = [
             ':subregion' => $data['subregion'],
             ':municipality' => $data['municipality'],
             ':plan_year' => $data['plan_year'],
             ':payload' => $data['payload'],
             ':id' => $id,
-        ]);
+        ];
+
+        foreach ([
+            'user_id',
+            'professional_name',
+            'professional_email',
+            'professional_role',
+            'original_user_id',
+            'original_professional_name',
+            'original_professional_email',
+            'original_professional_role',
+        ] as $column) {
+            if (!array_key_exists($column, $data)) {
+                continue;
+            }
+            $assignments[] = $column . ' = :' . $column;
+            $params[':' . $column] = $data[$column];
+        }
+
+        $sql = 'UPDATE training_plans SET ' . implode(', ', $assignments) . ' WHERE id = :id';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
     }
 
     public function findForUser(int $userId): array

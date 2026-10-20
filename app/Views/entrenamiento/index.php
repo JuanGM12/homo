@@ -37,7 +37,7 @@ $filterPeriod = (string) ($filterPeriod ?? ($_GET['period_id'] ?? ''));
             <p class="section-subtitle mb-0">
                 <?= $isAudit
                     ? 'Consulta los planes de entrenamiento registrados por los profesionales a tu cargo.'
-                    : 'Registra y consulta tus planes de entrenamiento.'
+                    : 'Registra tus planes y consulta los de los municipios que tienes asignados, aunque los haya registrado otro profesional.'
                 ?>
             </p>
         </div>

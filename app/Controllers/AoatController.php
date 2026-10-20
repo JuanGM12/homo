@@ -263,12 +263,13 @@ final class AoatController
             return Response::redirect('/aoat/nueva');
         }
 
-        if (!$this->isActivityDateYear2026OrLater($activityDate)) {
+        $activityDateError = $this->activityDateError($activityDate);
+        if ($activityDateError !== null) {
             $this->flashOldInput('create', 0, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Fecha de la actividad no válida',
-                'message' => 'La fecha de la actividad no puede ser anterior al 1 de enero de 2026.',
+                'message' => $activityDateError,
             ]);
 
             return Response::redirect('/aoat/nueva');
@@ -874,12 +875,13 @@ final class AoatController
             return Response::redirect('/aoat/editar?id=' . $id);
         }
 
-        if (!$this->isActivityDateYear2026OrLater($activityDate)) {
+        $activityDateError = $this->activityDateError($activityDate);
+        if ($activityDateError !== null) {
             $this->flashOldInput('edit', $id, $request);
             Flash::set([
                 'type' => 'error',
                 'title' => 'Fecha de la actividad no válida',
-                'message' => 'La fecha de la actividad no puede ser anterior al 1 de enero de 2026.',
+                'message' => $activityDateError,
             ]);
 
             return Response::redirect('/aoat/editar?id=' . $id);
@@ -1443,15 +1445,24 @@ final class AoatController
     }
 
     /**
-     * Seguimiento AoAT: la fecha de la actividad no puede ser anterior a 2026.
+     * La fecha de la actividad va del 1 de enero de 2026 hasta hoy en Colombia.
      */
-    private function isActivityDateYear2026OrLater(string $dateYmd): bool
+    private function activityDateError(string $dateYmd): ?string
     {
         if ($dateYmd === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateYmd)) {
-            return false;
+            return 'La fecha de la actividad no es válida.';
         }
 
-        return $dateYmd >= '2026-01-01';
+        if ($dateYmd < '2026-01-01') {
+            return 'La fecha de la actividad no puede ser anterior al 1 de enero de 2026.';
+        }
+
+        $today = (new \DateTimeImmutable('now', new \DateTimeZone('America/Bogota')))->format('Y-m-d');
+        if ($dateYmd > $today) {
+            return 'La fecha de la actividad no puede ser posterior a hoy (' . $this->formatExportDate($today) . ').';
+        }
+
+        return null;
     }
 
     /**

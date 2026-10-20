@@ -199,6 +199,7 @@ if ($totalPages <= 7) {
                     $planForJs = [
                         'year' => (int) ($plan['plan_year'] ?? date('Y')),
                         'professional' => (string) ($plan['professional_name'] ?? ''),
+                        'original_professional' => (string) ($plan['original_professional_name'] ?? ''),
                         'professional_role' => (string) ($plan['professional_role'] ?? ''),
                         'subregion' => (string) ($plan['subregion'] ?? ''),
                         'municipality' => (string) ($plan['municipality'] ?? ''),
@@ -225,6 +226,13 @@ if ($totalPages <= 7) {
                                     <span class="planeacion-professional-role">
                                         <?= htmlspecialchars((string) $plan['professional_role'], ENT_QUOTES, 'UTF-8') ?>
                                     </span>
+                                <?php endif; ?>
+                                <?php
+                                $originalProfessional = trim((string) ($plan['original_professional_name'] ?? ''));
+                                $currentProfessional = trim((string) ($plan['professional_name'] ?? ''));
+                                ?>
+                                <?php if ($originalProfessional !== '' && strcasecmp($originalProfessional, $currentProfessional) !== 0): ?>
+                                    <span class="planeacion-professional-role">Original: <?= htmlspecialchars($originalProfessional, ENT_QUOTES, 'UTF-8') ?></span>
                                 <?php endif; ?>
                             </div>
                         </td>
