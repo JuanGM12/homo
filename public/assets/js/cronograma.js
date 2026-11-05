@@ -179,7 +179,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('actId').value = '';
         document.getElementById('actHoraInicio').value = '';
         fillHoraFin('', '');
-        document.getElementById('actTema').value = '';
+        const tema = document.getElementById('actTema');
+        if (tema) {
+            tema.value = '';
+            tema.dispatchEvent(new Event('change'));
+        }
+        document.getElementById('actTemaPanel')?.classList.add('d-none');
+        document.getElementById('actTemaToggle')?.setAttribute('aria-expanded', 'false');
+        const temaBuscar = document.getElementById('actTemaBuscar');
+        if (temaBuscar) {
+            temaBuscar.value = '';
+        }
         document.getElementById('actTemaOtro').value = '';
         document.getElementById('wrapTemaOtro').classList.add('d-none');
         document.getElementById('actPoblacion').value = '';
@@ -293,6 +303,154 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('wrapTemaOtro').classList.toggle('d-none', this.value !== 'Otro');
     });
 
+    const setupTemaPicker = () => {
+        const select = document.getElementById('actTema');
+        const toggle = document.getElementById('actTemaToggle');
+        const label = document.getElementById('actTemaLabel');
+        const panel = document.getElementById('actTemaPanel');
+        const list = document.getElementById('actTemaList');
+        const search = document.getElementById('actTemaBuscar');
+        if (!select || !toggle || !panel || !list) {
+            return;
+        }
+
+        const groups = [];
+        let bucket = { label: '', options: [] };
+        const pushBucket = () => {
+            if (bucket.options.length) {
+                groups.push(bucket);
+            }
+            bucket = { label: '', options: [] };
+        };
+        Array.from(select.children).forEach((node) => {
+            if (node.tagName === 'OPTGROUP') {
+                pushBucket();
+                const grouped = { label: node.getAttribute('label') || '', options: [] };
+                Array.from(node.querySelectorAll('option')).forEach((opt) => {
+                    if (!opt.value) {
+                        return;
+                    }
+                    grouped.options.push({ value: opt.value, label: (opt.textContent || '').trim() });
+                });
+                if (grouped.options.length) {
+                    groups.push(grouped);
+                }
+                return;
+            }
+            if (node.tagName === 'OPTION' && node.value) {
+                bucket.options.push({ value: node.value, label: (node.textContent || '').trim() });
+            }
+        });
+        pushBucket();
+
+        const syncLabel = () => {
+            const selected = select.options[select.selectedIndex];
+            const text = select.value && selected ? (selected.textContent || '').trim() : 'Seleccione el tema';
+            if (label) {
+                label.textContent = text;
+            }
+            list.querySelectorAll('.tema-picker-option').forEach((btn) => {
+                btn.classList.toggle('is-active', btn.dataset.value === select.value);
+                if (btn.dataset.value === select.value) {
+                    btn.setAttribute('aria-selected', 'true');
+                } else {
+                    btn.removeAttribute('aria-selected');
+                }
+            });
+        };
+
+        const render = (query) => {
+            const q = String(query || '').trim().toLowerCase();
+            list.innerHTML = '';
+            let any = false;
+            groups.forEach((group) => {
+                const options = group.options.filter((opt) => {
+                    if (!q) {
+                        return true;
+                    }
+                    return opt.label.toLowerCase().includes(q) || group.label.toLowerCase().includes(q);
+                });
+                if (!options.length) {
+                    return;
+                }
+                any = true;
+                if (group.label) {
+                    const heading = document.createElement('div');
+                    heading.className = 'tema-picker-group';
+                    heading.textContent = group.label;
+                    list.appendChild(heading);
+                }
+                options.forEach((opt) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'tema-picker-option';
+                    btn.setAttribute('role', 'option');
+                    btn.dataset.value = opt.value;
+                    btn.textContent = opt.label;
+                    if (opt.value === select.value) {
+                        btn.classList.add('is-active');
+                        btn.setAttribute('aria-selected', 'true');
+                    }
+                    btn.addEventListener('click', () => {
+                        select.value = opt.value;
+                        select.dispatchEvent(new Event('change'));
+                        closePanel();
+                    });
+                    list.appendChild(btn);
+                });
+            });
+            if (!any) {
+                const empty = document.createElement('p');
+                empty.className = 'small text-muted mb-0 px-1 py-1';
+                empty.textContent = 'Ningún tema coincide con la búsqueda.';
+                list.appendChild(empty);
+            }
+        };
+
+        const openPanel = () => {
+            panel.classList.remove('d-none');
+            toggle.setAttribute('aria-expanded', 'true');
+            render(search ? search.value : '');
+            search?.focus();
+        };
+        const closePanel = () => {
+            panel.classList.add('d-none');
+            toggle.setAttribute('aria-expanded', 'false');
+        };
+
+        toggle.addEventListener('click', () => {
+            if (panel.classList.contains('d-none')) {
+                openPanel();
+            } else {
+                closePanel();
+            }
+        });
+        search?.addEventListener('input', () => render(search.value));
+        search?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closePanel();
+                toggle.focus();
+            }
+        });
+        document.addEventListener('click', (event) => {
+            if (!panel.classList.contains('d-none') && !event.target.closest('#temaPicker')) {
+                closePanel();
+            }
+        });
+        list.addEventListener('wheel', (event) => {
+            event.stopPropagation();
+        }, { passive: true });
+
+        select.addEventListener('change', syncLabel);
+        render('');
+        syncLabel();
+    };
+    setupTemaPicker();
+
     document.getElementById('formActividad')?.addEventListener('submit', function (e) {
         e.preventDefault();
         const start = document.getElementById('actHoraInicio').value;
@@ -371,6 +529,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const roleLabels = {
+            psicologo: 'Psicólogo',
+            medico: 'Médico',
+            abogado: 'Abogado',
+            politologo: 'Politólogo',
+            'profesional social': 'Profesional social',
+            especialista: 'Especialista',
+            admin: 'Administrador',
+            coordinador: 'Coordinador',
+            coordinadora: 'Coordinadora',
+        };
+
         const syncUsuarios = () => {
             if (!selUsuario) {
                 return;
@@ -378,13 +548,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const rol = selRol?.value || '';
             const current = selUsuario.value;
             selUsuario.innerHTML = '<option value="">Todos los profesionales</option>';
+            const me = professionals.find((u) => Number(u.id) === currentUserId);
+            if (me && currentUserId > 0 && (!rol || (me.role || '') === rol)) {
+                const opt = document.createElement('option');
+                opt.value = String(me.id);
+                opt.textContent = me.name ? `Mi cronograma — ${me.name}` : 'Mi cronograma';
+                if (String(me.id) === current) {
+                    opt.selected = true;
+                }
+                selUsuario.appendChild(opt);
+            }
             professionals.forEach((u) => {
+                if (Number(u.id) === currentUserId) {
+                    return;
+                }
                 if (rol && (u.role || '') !== rol) {
                     return;
                 }
                 const opt = document.createElement('option');
                 opt.value = String(u.id);
-                opt.textContent = u.role ? `${u.name} — ${u.role}` : u.name;
+                const roleLabel = roleLabels[u.role] || u.role || '';
+                opt.textContent = roleLabel ? `${u.name} — ${roleLabel}` : u.name;
                 if (String(u.id) === current) {
                     opt.selected = true;
                 }

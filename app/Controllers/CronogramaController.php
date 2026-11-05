@@ -61,6 +61,7 @@ final class CronogramaController
         $professionals = [];
         if ($canViewAll) {
             $professionals = $this->loadProfessionals(Auth::dashboardProfessionalRoleScope($user));
+            $professionals = $this->ensureCurrentUserInProfessionals($professionals, $user);
         }
 
         return Response::view('cronograma/index', [
@@ -603,6 +604,35 @@ final class CronogramaController
         }
 
         return $out;
+    }
+
+    /**
+     * Quien ve el cronograma global (admin, coordinación) también registra actividades propias.
+     * Si su rol no es de campo, no entra en el listado y no puede exportar solo lo suyo.
+     *
+     * @param array<int, array<string, mixed>> $professionals
+     * @param array<string, mixed> $user
+     * @return array<int, array<string, mixed>>
+     */
+    private function ensureCurrentUserInProfessionals(array $professionals, array $user): array
+    {
+        $id = (int) ($user['id'] ?? 0);
+        if ($id <= 0) {
+            return $professionals;
+        }
+        foreach ($professionals as $row) {
+            if ((int) ($row['id'] ?? 0) === $id) {
+                return $professionals;
+            }
+        }
+
+        array_unshift($professionals, [
+            'id' => $id,
+            'name' => (string) ($user['name'] ?? ''),
+            'role' => $this->qualificationRoleForUser($user),
+        ]);
+
+        return $professionals;
     }
 
     /**

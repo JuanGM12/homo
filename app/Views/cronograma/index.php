@@ -57,6 +57,9 @@ if (!is_string($professionalsJson) || $professionalsJson === '') {
                     <option value="abogado">Abogado</option>
                     <option value="politologo">Politólogo</option>
                     <option value="profesional social">Profesional social</option>
+                    <option value="admin">Administrador</option>
+                    <option value="coordinador">Coordinador</option>
+                    <option value="coordinadora">Coordinadora</option>
                 </select>
                 <select id="calFiltroUsuario" class="form-select form-select-sm">
                     <option value="">Todos los profesionales</option>
@@ -94,7 +97,7 @@ if (!is_string($professionalsJson) || $professionalsJson === '') {
 </section>
 
 <div class="modal fade" id="modalDia" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="bi bi-calendar-event me-2"></i><span id="modalDiaFechaTexto">—</span></h5>
@@ -164,8 +167,9 @@ if (!is_string($professionalsJson) || $professionalsJson === '') {
                             </div>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label small" for="actTema">Tema <span class="text-danger">*</span></label>
-                            <select name="tema" id="actTema" class="form-select form-select-sm" required>
+                            <label class="form-label small" for="actTemaToggle">Tema <span class="text-danger">*</span></label>
+                            <div class="tema-picker" id="temaPicker">
+                            <select name="tema" id="actTema" class="tema-picker-native" required tabindex="-1" aria-hidden="true">
                                 <option value="">Seleccione el tema</option>
                                 <?php
                                 $topicGroups = [];
@@ -189,6 +193,14 @@ if (!is_string($professionalsJson) || $professionalsJson === '') {
                                 <?php endforeach; ?>
                                 <option value="Otro">Otro</option>
                             </select>
+                            <button type="button" class="form-select form-select-sm text-start tema-picker-toggle" id="actTemaToggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="actTemaList">
+                                <span id="actTemaLabel">Seleccione el tema</span>
+                            </button>
+                            <div class="tema-picker-panel d-none" id="actTemaPanel">
+                                <input type="search" class="form-control form-control-sm" id="actTemaBuscar" placeholder="Buscar tema" autocomplete="off" aria-label="Buscar tema">
+                                <div class="tema-picker-list" id="actTemaList" role="listbox"></div>
+                            </div>
+                            </div>
                         </div>
                         <div class="mb-2 d-none" id="wrapTemaOtro">
                             <label class="form-label small" for="actTemaOtro">Otro tema <span class="text-danger">*</span></label>
@@ -245,7 +257,7 @@ if (!is_string($professionalsJson) || $professionalsJson === '') {
                         <input class="form-check-input" type="radio" name="exportarTipo" id="exportarMesActual" value="mes" checked>
                         <label class="form-check-label" for="exportarMesActual">Exportar mes actual</label>
                     </div>
-                    <p class="small text-muted ms-4 mb-0">Descarga todo el mes que estás viendo.</p>
+                    <p class="small text-muted ms-4 mb-0">Descarga el mes que estás viendo, con los filtros de la barra (incluido «Mi cronograma»).</p>
                 </div>
                 <div class="mb-3">
                     <div class="form-check">
